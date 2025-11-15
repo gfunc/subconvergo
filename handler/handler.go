@@ -92,9 +92,27 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		}
 	}
 
-	// Parse subscription URLs (support multiple URLs separated by |)
-	var allProxies []parser.Proxy
+	// Load external config if specified
+	proxyGroups := config.Global.ProxyGroups.CustomProxyGroups
+	rulesets := config.Global.Rulesets.Rulesets
 
+	if configParam != "" {
+		// Load external config (can be URL or file path)
+		extConfig, err := h.loadExternalConfig(configParam)
+		if err == nil {
+			// Merge external config
+			if len(extConfig.ProxyGroups) > 0 {
+				proxyGroups = extConfig.ProxyGroups
+			}
+			if len(extConfig.Rulesets) > 0 {
+				rulesets = extConfig.Rulesets
+			}
+		}
+	}
+
+	// Parse subscription URLs (support multiple URLs separated by |)
+	var allProxies []parser.ProxyInterface
+	var otherProxyGroups []config.ProxyGroupConfig
 	for _, url := range urlsToProcess {
 		url = strings.TrimSpace(url)
 		if url == "" {
@@ -102,7 +120,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		}
 		if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
 			// Parse subscription
-			proxies, err := parser.ParseSubscription(url, config.Global.Common.ProxySubscription)
+			proxies, groups, err := parser.ParseSubscription(url, config.Global.Common.ProxySubscription)
 			if err != nil {
 				if !config.Global.Advanced.SkipFailedLinks {
 					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription: %v", err))
@@ -111,9 +129,12 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 				continue
 			}
 			allProxies = append(allProxies, proxies...)
+			if groups != nil {
+				otherProxyGroups = append(otherProxyGroups, groups...)
+			}
 		} else if strings.HasPrefix(url, "file://") {
 			// Parse subscription file
-			proxies, err := parser.ParseSubscriptionFile(url, config.Global.Common.ProxySubscription)
+			proxies, groups, err := parser.ParseSubscriptionFile(url)
 			if err != nil {
 				if !config.Global.Advanced.SkipFailedLinks {
 					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription file: %v", err))
@@ -122,6 +143,9 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 				continue
 			}
 			allProxies = append(allProxies, proxies...)
+			if groups != nil {
+				otherProxyGroups = append(otherProxyGroups, groups...)
+			}
 		} else {
 			parserProxy, err := parser.ParseProxyLine(url)
 			if err != nil {
@@ -160,7 +184,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	// Append proxy type if configured
 	if config.Global.Common.AppendProxyType {
 		for i := range allProxies {
-			allProxies[i].Remark = fmt.Sprintf("%s [%s]", allProxies[i].Remark, allProxies[i].Type)
+			allProxies[i].SetRemark(fmt.Sprintf("%s [%s]", allProxies[i].GetRemark(), allProxies[i].GetType()))
 		}
 	}
 
@@ -171,22 +195,8 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		}
 	}
 
-	// Load external config if specified
-	proxyGroups := config.Global.ProxyGroups.CustomProxyGroups
-	rulesets := config.Global.Rulesets.Rulesets
-
-	if configParam != "" {
-		// Load external config (can be URL or file path)
-		extConfig, err := h.loadExternalConfig(configParam)
-		if err == nil {
-			// Merge external config
-			if len(extConfig.ProxyGroups) > 0 {
-				proxyGroups = extConfig.ProxyGroups
-			}
-			if len(extConfig.Rulesets) > 0 {
-				rulesets = extConfig.Rulesets
-			}
-		}
+	if len(otherProxyGroups) > 0 {
+		proxyGroups = append(proxyGroups, otherProxyGroups...)
 	}
 
 	// Prepare generator options
@@ -293,7 +303,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	c.Data(http.StatusOK, contentType, []byte(output))
 }
 
-func (h *SubHandler) applyFilters(proxies []parser.Proxy, c *gin.Context) []parser.Proxy {
+func (h *SubHandler) applyFilters(proxies []parser.ProxyInterface, c *gin.Context) []parser.ProxyInterface {
 	// Get filter params
 	include := c.Query("include")
 	exclude := c.Query("exclude")
@@ -313,12 +323,12 @@ func (h *SubHandler) applyFilters(proxies []parser.Proxy, c *gin.Context) []pars
 	return proxies
 }
 
-func filterProxies(proxies []parser.Proxy, patterns []string, include bool) []parser.Proxy {
+func filterProxies(proxies []parser.ProxyInterface, patterns []string, include bool) []parser.ProxyInterface {
 	if len(patterns) == 0 {
 		return proxies
 	}
 
-	var result []parser.Proxy
+	var result []parser.ProxyInterface
 	for _, proxy := range proxies {
 		match := false
 		for _, pattern := range patterns {
@@ -327,7 +337,7 @@ func filterProxies(proxies []parser.Proxy, patterns []string, include bool) []pa
 			}
 			// Simple substring match for now
 			// TODO: Implement regex matching
-			if strings.Contains(proxy.Remark, pattern) {
+			if strings.Contains(proxy.GetRemark(), pattern) {
 				match = true
 				break
 			}
@@ -395,13 +405,13 @@ func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]stri
 }
 
 // applyRenameRules applies rename rules to proxy remarks
-func (h *SubHandler) applyRenameRules(proxies []parser.Proxy) []parser.Proxy {
+func (h *SubHandler) applyRenameRules(proxies []parser.ProxyInterface) []parser.ProxyInterface {
 	if len(config.Global.NodePref.RenameNodes) == 0 {
 		return proxies
 	}
 
 	for i := range proxies {
-		originalRemark := proxies[i].Remark
+		originalRemark := proxies[i].GetRemark()
 
 		for _, rule := range config.Global.NodePref.RenameNodes {
 			// Skip if no match pattern or both match and replace are empty
@@ -424,14 +434,14 @@ func (h *SubHandler) applyRenameRules(proxies []parser.Proxy) []parser.Proxy {
 					if err != nil {
 						continue
 					}
-					proxies[i].Remark = re.ReplaceAllString(proxies[i].Remark, rule.Replace)
+					proxies[i].SetRemark(re.ReplaceAllString(proxies[i].GetRemark(), rule.Replace))
 				}
 			}
 		}
 
 		// If remark is empty after processing, restore original
-		if proxies[i].Remark == "" {
-			proxies[i].Remark = originalRemark
+		if proxies[i].GetRemark() == "" {
+			proxies[i].SetRemark(originalRemark)
 		}
 	}
 
@@ -439,7 +449,7 @@ func (h *SubHandler) applyRenameRules(proxies []parser.Proxy) []parser.Proxy {
 }
 
 // applyMatcherForRename applies special matchers for rename rules
-func (h *SubHandler) applyMatcherForRename(rule string, proxy parser.Proxy) (bool, string) {
+func (h *SubHandler) applyMatcherForRename(rule string, proxy parser.ProxyInterface) (bool, string) {
 	// Similar to generator's applyMatcher but for rename context
 
 	// Handle !!GROUP= matcher
@@ -451,7 +461,7 @@ func (h *SubHandler) applyMatcherForRename(rule string, proxy parser.Proxy) (boo
 			if len(parts) > 2 {
 				realRule = parts[2]
 			}
-			matched, _ := regexp.MatchString(groupPattern, proxy.Group)
+			matched, _ := regexp.MatchString(groupPattern, proxy.GetGroup())
 			return matched, realRule
 		}
 	}
@@ -465,7 +475,7 @@ func (h *SubHandler) applyMatcherForRename(rule string, proxy parser.Proxy) (boo
 			if len(parts) > 2 {
 				realRule = parts[2]
 			}
-			proxyType := strings.ToUpper(proxy.Type)
+			proxyType := strings.ToUpper(proxy.GetType())
 			matched, _ := regexp.MatchString("(?i)^("+typePattern+")$", proxyType)
 			return matched, realRule
 		}
@@ -480,7 +490,7 @@ func (h *SubHandler) applyMatcherForRename(rule string, proxy parser.Proxy) (boo
 			if len(parts) > 2 {
 				realRule = parts[2]
 			}
-			matched := h.matchRange(portPattern, proxy.Port)
+			matched := h.matchRange(portPattern, proxy.GetPort())
 			return matched, realRule
 		}
 	}
@@ -494,7 +504,7 @@ func (h *SubHandler) applyMatcherForRename(rule string, proxy parser.Proxy) (boo
 			if len(parts) > 2 {
 				realRule = parts[2]
 			}
-			matched, _ := regexp.MatchString(serverPattern, proxy.Server)
+			matched, _ := regexp.MatchString(serverPattern, proxy.GetServer())
 			return matched, realRule
 		}
 	}
@@ -546,7 +556,7 @@ func (h *SubHandler) matchRange(pattern string, value int) bool {
 }
 
 // applyEmojiRules applies emoji rules to proxy remarks
-func (h *SubHandler) applyEmojiRules(proxies []parser.Proxy) []parser.Proxy {
+func (h *SubHandler) applyEmojiRules(proxies []parser.ProxyInterface) []parser.ProxyInterface {
 	if len(config.Global.Emojis.Rules) == 0 {
 		return proxies
 	}
@@ -554,7 +564,7 @@ func (h *SubHandler) applyEmojiRules(proxies []parser.Proxy) []parser.Proxy {
 	for i := range proxies {
 		// Remove old emoji first if configured
 		if config.Global.Emojis.RemoveOldEmoji {
-			proxies[i].Remark = removeEmoji(proxies[i].Remark)
+			proxies[i].SetRemark(removeEmoji(proxies[i].GetRemark()))
 		}
 
 		// Add new emoji based on rules
@@ -574,14 +584,14 @@ func (h *SubHandler) applyEmojiRules(proxies []parser.Proxy) []parser.Proxy {
 
 				// If there's a real regex rule after the matcher, check if remark matches
 				if realRule != "" {
-					matched, err := regexp.MatchString(realRule, proxies[i].Remark)
+					matched, err := regexp.MatchString(realRule, proxies[i].GetRemark())
 					if err != nil || !matched {
 						continue
 					}
 				}
 
 				// Add emoji and break (only first matching rule)
-				proxies[i].Remark = rule.Emoji + " " + proxies[i].Remark
+				proxies[i].SetRemark(rule.Emoji + " " + proxies[i].GetRemark())
 				break
 			}
 		}
@@ -602,11 +612,11 @@ func removeEmoji(s string) string {
 }
 
 // sortProxies sorts proxies based on configuration
-func (h *SubHandler) sortProxies(proxies []parser.Proxy) []parser.Proxy {
+func (h *SubHandler) sortProxies(proxies []parser.ProxyInterface) []parser.ProxyInterface {
 	// Simple alphabetical sort by remark
 	// TODO: Implement script-based sorting if sortScript is provided
 	sort.Slice(proxies, func(i, j int) bool {
-		return proxies[i].Remark < proxies[j].Remark
+		return proxies[i].GetRemark() < proxies[j].GetRemark()
 	})
 
 	return proxies

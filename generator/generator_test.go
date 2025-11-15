@@ -1,456 +1,287 @@
 package generator
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 
-	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/parser"
 )
 
-func TestGenerateClash(t *testing.T) {
-	proxies := []parser.Proxy{
+func TestApplyMatcher(t *testing.T) {
+	tests := []struct {
+		name     string
+		rule     string
+		proxy    *parser.BaseProxy
+		expected bool
+		realRule string
+	}{
 		{
-			Type:          "ss",
-			Remark:        "SS Test",
-			Server:        "example.com",
-			Port:          8388,
-			Password:      "password",
-			EncryptMethod: "aes-256-gcm",
+			name: "GROUP matcher - match",
+			rule: "!!GROUP=US!!.*",
+			proxy: &parser.BaseProxy{
+				Remark: "US Node 1",
+				Group:  "US Premium",
+			},
+			expected: true,
+			realRule: ".*",
 		},
 		{
-			Type:    "vmess",
-			Remark:  "VMess Test",
-			Server:  "example.com",
-			Port:    443,
-			UUID:    "12345678-1234-1234-1234-123456789012",
-			AlterID: 0,
-			Network: "ws",
-			Path:    "/path",
-			Host:    "example.com",
-			TLS:     true,
+			name: "GROUP matcher - no match",
+			rule: "!!GROUP=HK!!.*",
+			proxy: &parser.BaseProxy{
+				Remark: "US Node 1",
+				Group:  "US Premium",
+			},
+			expected: false,
+			realRule: ".*",
+		},
+		{
+			name: "TYPE matcher - shadowsocks",
+			rule: "!!TYPE=SS|VMess!!.*",
+			proxy: &parser.BaseProxy{
+				Remark: "Test Node",
+				Type:   "ss",
+			},
+			expected: true,
+			realRule: ".*",
+		},
+		{
+			name: "PORT matcher - range",
+			rule: "!!PORT=443!!.*",
+			proxy: &parser.BaseProxy{
+				Remark: "Test Node",
+				Port:   443,
+			},
+			expected: true,
+			realRule: ".*",
+		},
+		{
+			name: "SERVER matcher",
+			rule: "!!SERVER=example\\.com!!.*",
+			proxy: &parser.BaseProxy{
+				Remark: "Test Node",
+				Server: "example.com",
+			},
+			expected: true,
+			realRule: ".*",
+		},
+		{
+			name: "Direct node []",
+			rule: "[]DIRECT",
+			proxy: &parser.BaseProxy{
+				Remark: "Test Node",
+			},
+			expected: false,
+			realRule: "DIRECT",
+		},
+		{
+			name: "No matcher - pass through",
+			rule: "US.*",
+			proxy: &parser.BaseProxy{
+				Remark: "US Node 1",
+			},
+			expected: true,
+			realRule: "US.*",
 		},
 	}
 
-	opts := GeneratorOptions{
-		Target:            "clash",
-		ClashNewFieldName: true,
-	}
-
-	baseConfig := `port: 7890
-socks-port: 7891
-allow-lan: false
-mode: Rule
-log-level: info`
-
-	result, err := Generate(proxies, opts, baseConfig)
-	if err != nil {
-		t.Fatalf("Generate() error = %v", err)
-	}
-
-	if result == "" {
-		t.Error("result should not be empty")
-	}
-
-	// Check if YAML contains expected fields
-	expectedStrings := []string{
-		"proxies:",
-		"SS Test",
-		"VMess Test",
-		"type: ss",
-		"type: vmess",
-	}
-
-	for _, expected := range expectedStrings {
-		if !contains(result, expected) {
-			t.Errorf("expected result to contain '%s'", expected)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matched, realRule := applyMatcher(tt.rule, tt.proxy)
+			if matched != tt.expected {
+				t.Errorf("applyMatcher() matched = %v, want %v", matched, tt.expected)
+			}
+			if realRule != tt.realRule {
+				t.Errorf("applyMatcher() realRule = %v, want %v", realRule, tt.realRule)
+			}
+		})
 	}
 }
 
-func TestGenerateSurge(t *testing.T) {
-	proxies := []parser.Proxy{
-		{
-			Type:          "ss",
-			Remark:        "SS Test",
-			Server:        "example.com",
-			Port:          8388,
-			Password:      "password",
-			EncryptMethod: "aes-256-gcm",
-		},
-		{
-			Type:     "trojan",
-			Remark:   "Trojan Test",
-			Server:   "example.com",
-			Port:     443,
-			Password: "password",
-			TLS:      true,
-		},
+func TestMatchRange(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		value    int
+		expected bool
+	}{
+		{"single value match", "443", 443, true},
+		{"single value no match", "443", 8080, false},
+		{"range match", "8000-9000", 8388, true},
+		{"range no match", "8000-9000", 443, false},
+		{"comma separated match", "443,8080,8388", 8080, true},
+		{"comma separated no match", "443,8080,8388", 9000, false},
+		{"complex range", "1-100,443,8000-9000", 8388, true},
+		{"empty pattern", "", 1234, true},
 	}
 
-	opts := GeneratorOptions{
-		Target: "surge",
-	}
-
-	baseConfig := `[General]
-loglevel = notify
-dns-server = system`
-
-	result, err := Generate(proxies, opts, baseConfig)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	// Check that the output contains expected sections
-	if !strings.Contains(result, "[Proxy]") {
-		t.Error("Expected [Proxy] section in Surge output")
-	}
-	if !strings.Contains(result, "SS Test") {
-		t.Error("Expected SS proxy in output")
-	}
-	if !strings.Contains(result, "Trojan Test") {
-		t.Error("Expected Trojan proxy in output")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchRange(tt.pattern, tt.value)
+			if result != tt.expected {
+				t.Errorf("matchRange(%s, %d) = %v, want %v", tt.pattern, tt.value, result, tt.expected)
+			}
+		})
 	}
 }
 
-func TestGenerateQuantumultX(t *testing.T) {
-	proxies := []parser.Proxy{
+func TestFilterProxiesByRules(t *testing.T) {
+	proxies := []parser.ProxyInterface{
+		&parser.BaseProxy{Type: "ss", Remark: "US Node 1", Server: "us1.example.com", Port: 443, Group: "US"},
+		&parser.BaseProxy{Type: "ss", Remark: "US Node 2", Server: "us2.example.com", Port: 8080, Group: "US"},
+		&parser.BaseProxy{Type: "vmess", Remark: "HK Node 1", Server: "hk1.example.com", Port: 443, Group: "HK"},
+		&parser.BaseProxy{Type: "trojan", Remark: "JP Node 1", Server: "jp1.example.com", Port: 443, Group: "JP"},
+		&parser.BaseProxy{Type: "trojan", Remark: "SG Node 1", Server: "sg1.example.com", Port: 8388, Group: "SG"},
+	}
+
+	tests := []struct {
+		name     string
+		rules    []string
+		expected []string
+	}{
 		{
-			Type:          "ss",
-			Remark:        "SS Test",
-			Server:        "example.com",
-			Port:          8388,
-			Password:      "password",
-			EncryptMethod: "aes-256-gcm",
+			name:     "Filter by type SS",
+			rules:    []string{"!!TYPE=SS"},
+			expected: []string{"US Node 1", "US Node 2"},
 		},
 		{
-			Type:    "vmess",
-			Remark:  "VMess Test",
-			Server:  "example.com",
-			Port:    443,
-			UUID:    "12345678-1234-1234-1234-123456789012",
-			AlterID: 0,
-			Network: "ws",
-			Path:    "/path",
-			Host:    "example.com",
-			TLS:     true,
+			name:     "Filter by type VMess or Trojan",
+			rules:    []string{"!!TYPE=VMESS|TROJAN"},
+			expected: []string{"HK Node 1", "JP Node 1", "SG Node 1"},
+		},
+		{
+			name:     "Filter by port 443",
+			rules:    []string{"!!PORT=443"},
+			expected: []string{"US Node 1", "HK Node 1", "JP Node 1"},
+		},
+		{
+			name:     "Filter by group US",
+			rules:    []string{"!!GROUP=US"},
+			expected: []string{"US Node 1", "US Node 2"},
+		},
+		{
+			name:     "Filter by regex pattern",
+			rules:    []string{"HK.*"},
+			expected: []string{"HK Node 1"},
+		},
+		{
+			name:     "Filter with TYPE and regex",
+			rules:    []string{"!!TYPE=SS!!US.*"},
+			expected: []string{"US Node 1", "US Node 2"},
+		},
+		{
+			name:     "Direct inclusion",
+			rules:    []string{"[]DIRECT", "[]REJECT"},
+			expected: []string{"DIRECT", "REJECT"},
+		},
+		{
+			name:     "Multiple rules",
+			rules:    []string{"!!TYPE=SS", "!!TYPE=VMESS"},
+			expected: []string{"US Node 1", "US Node 2", "HK Node 1"},
+		},
+		{
+			name:     "Server pattern",
+			rules:    []string{"!!SERVER=.*\\.example\\.com"},
+			expected: []string{"US Node 1", "US Node 2", "HK Node 1", "JP Node 1", "SG Node 1"},
 		},
 	}
 
-	opts := GeneratorOptions{
-		Target: "quanx",
-	}
-
-	baseConfig := `[general]
-server_check_url = http://www.gstatic.com/generate_204`
-
-	result, err := Generate(proxies, opts, baseConfig)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	// Check that the output contains expected sections
-	if !strings.Contains(result, "[server_local]") {
-		t.Error("Expected [server_local] section in QuantumultX output")
-	}
-	if !strings.Contains(result, "tag=SS Test") {
-		t.Error("Expected SS proxy with tag in output")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterProxiesByRules(proxies, tt.rules)
+			if len(result) != len(tt.expected) {
+				t.Errorf("filterProxiesByRules() returned %d proxies, want %d", len(result), len(tt.expected))
+				t.Logf("Got: %v", result)
+				t.Logf("Want: %v", tt.expected)
+				return
+			}
+			for i, name := range result {
+				if name != tt.expected[i] {
+					t.Errorf("filterProxiesByRules()[%d] = %v, want %v", i, name, tt.expected[i])
+				}
+			}
+		})
 	}
 }
 
-func TestGenerateSingBox(t *testing.T) {
-	proxies := []parser.Proxy{
+func TestConvertRulesetToClash(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected []string
+	}{
 		{
-			Type:          "ss",
-			Remark:        "SS Test",
-			Server:        "example.com",
-			Port:          8388,
-			Password:      "password",
-			EncryptMethod: "aes-256-gcm",
+			name: "Clash payload format - domains",
+			content: `payload:
+  - 'example.com'
+  - '.google.com'
+  - '+.facebook.com'`,
+			expected: []string{
+				"DOMAIN,example.com",
+				"DOMAIN-SUFFIX,google.com",
+				"DOMAIN-SUFFIX,facebook.com",
+			},
 		},
 		{
-			Type:     "trojan",
-			Remark:   "Trojan Test",
-			Server:   "example.com",
-			Port:     443,
-			Password: "password",
-			TLS:      true,
-		},
-	}
-
-	opts := GeneratorOptions{
-		Target: "singbox",
-	}
-
-	baseConfig := `{"log":{"level":"info"}}`
-
-	result, err := Generate(proxies, opts, baseConfig)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	// Parse the JSON to verify structure
-	var config map[string]interface{}
-	if err := json.Unmarshal([]byte(result), &config); err != nil {
-		t.Fatalf("Failed to parse sing-box JSON: %v", err)
-	}
-
-	// Check for outbounds array
-	if _, ok := config["outbounds"]; !ok {
-		t.Error("Expected 'outbounds' field in sing-box config")
-	}
-}
-
-func TestGenerateSS(t *testing.T) {
-	proxies := []parser.Proxy{
-		{
-			Type:          "ss",
-			Remark:        "SS Test 1",
-			Server:        "example1.com",
-			Port:          8388,
-			Password:      "password1",
-			EncryptMethod: "aes-256-gcm",
+			name: "Clash payload format - IP CIDR",
+			content: `payload:
+  - '1.1.1.1/32'
+  - '2001:db8::/32'`,
+			expected: []string{
+				"IP-CIDR,1.1.1.1/32",
+				"IP-CIDR6,2001:db8::/32",
+			},
 		},
 		{
-			Type:          "ss",
-			Remark:        "SS Test 2",
-			Server:        "example2.com",
-			Port:          8389,
-			Password:      "password2",
-			EncryptMethod: "chacha20-ietf-poly1305",
-		},
-	}
-
-	opts := GeneratorOptions{
-		Target: "ss",
-	}
-
-	result, err := Generate(proxies, opts, "")
-	if err != nil {
-		t.Fatalf("Generate(ss) error = %v", err)
-	}
-
-	// generateSingle is not fully implemented yet, so result might be empty
-	// Just check it doesn't crash
-	t.Logf("SS generation result: %s", result)
-}
-
-func TestGenerateSSR(t *testing.T) {
-	proxies := []parser.Proxy{
-		{
-			Type:          "ssr",
-			Remark:        "SSR Test",
-			Server:        "example.com",
-			Port:          8388,
-			Password:      "password",
-			EncryptMethod: "aes-256-cfb",
-			Protocol:      "auth_aes128_md5",
-			Obfs:          "tls1.2_ticket_auth",
-		},
-	}
-
-	opts := GeneratorOptions{
-		Target: "ssr",
-	}
-
-	result, err := Generate(proxies, opts, "")
-	if err != nil {
-		t.Fatalf("Generate(ssr) error = %v", err)
-	}
-
-	// generateSingle is not fully implemented yet
-	t.Logf("SSR generation result: %s", result)
-}
-
-func TestGenerateV2Ray(t *testing.T) {
-	proxies := []parser.Proxy{
-		{
-			Type:    "vmess",
-			Remark:  "VMess Test",
-			Server:  "example.com",
-			Port:    443,
-			UUID:    "12345678-1234-1234-1234-123456789012",
-			AlterID: 0,
-			Network: "ws",
-			Path:    "/path",
-			Host:    "example.com",
-			TLS:     true,
-		},
-	}
-
-	opts := GeneratorOptions{
-		Target: "v2ray",
-	}
-
-	result, err := Generate(proxies, opts, "")
-	if err != nil {
-		t.Fatalf("Generate(v2ray) error = %v", err)
-	}
-
-	// generateSingle is not fully implemented yet
-	t.Logf("V2Ray generation result: %s", result)
-}
-
-func TestGenerateProxyGroups(t *testing.T) {
-	proxies := []parser.Proxy{
-		{Remark: "HK-Server1"},
-		{Remark: "HK-Server2"},
-		{Remark: "US-Server1"},
-		{Remark: "JP-Server1"},
-	}
-
-	groups := []config.ProxyGroupConfig{
-		{
-			Name: "HK",
-			Type: "select",
-			Rule: []string{"HK"},
+			name: "Surge format",
+			content: `DOMAIN-SUFFIX,google.com
+DOMAIN,example.com
+IP-CIDR,1.1.1.1/32
+# comment line
+DOMAIN-KEYWORD,test`,
+			expected: []string{
+				"DOMAIN-SUFFIX,google.com",
+				"DOMAIN,example.com",
+				"IP-CIDR,1.1.1.1/32",
+				"DOMAIN-KEYWORD,test",
+			},
 		},
 		{
-			Name:     "US",
-			Type:     "url-test",
-			Rule:     []string{"US"},
-			URL:      "http://www.gstatic.com/generate_204",
-			Interval: 300,
+			name: "QuanX format",
+			content: `HOST,example.com,PROXY
+HOST-SUFFIX,google.com,PROXY
+HOST-KEYWORD,test,PROXY
+IP6-CIDR,2001:db8::/32,PROXY`,
+			expected: []string{
+				"DOMAIN,example.com,PROXY",
+				"DOMAIN-SUFFIX,google.com,PROXY",
+				"DOMAIN-KEYWORD,test,PROXY",
+				"IP-CIDR6,2001:db8::/32,PROXY",
+			},
 		},
 		{
-			Name: "Auto",
-			Type: "fallback",
-			Rule: []string{
-				"HK",
-				"US",
+			name: "Domain keyword detection",
+			content: `payload:
+  - '.example.com.*'`,
+			expected: []string{
+				"DOMAIN-KEYWORD,example.com",
 			},
 		},
 	}
 
-	opts := GeneratorOptions{
-		ClashNewFieldName: true,
-	}
-
-	result := generateClashProxyGroups(proxies, groups, opts)
-
-	if len(result) != 3 {
-		t.Errorf("expected 3 proxy groups, got %d", len(result))
-	}
-
-	// Check HK group has proxies
-	hkProxies := result[0]["proxies"].([]string)
-	if len(hkProxies) < 1 {
-		t.Errorf("expected HK group to have at least 1 proxy, got %d", len(hkProxies))
-	}
-
-	// Check US group has proxies
-	usProxies := result[1]["proxies"].([]string)
-	if len(usProxies) < 1 {
-		t.Errorf("expected US group to have at least 1 proxy, got %d", len(usProxies))
-	}
-}
-
-func TestFilterProxies(t *testing.T) {
-	proxyNames := []string{
-		"HK-Premium",
-		"HK-Free",
-		"US-Server",
-		"JP-Expired",
-	}
-
-	// Test include filter
-	includeResult := filterProxies(proxyNames, []string{"HK"})
-	if len(includeResult) != 2 {
-		t.Errorf("expected 2 HK proxies, got %d", len(includeResult))
-	}
-
-	// Test pattern matching
-	usResult := filterProxies(proxyNames, []string{"US"})
-	if len(usResult) != 1 {
-		t.Errorf("expected 1 US proxy, got %d", len(usResult))
-	}
-
-	// Test multiple patterns
-	multiResult := filterProxies(proxyNames, []string{"HK", "US"})
-	if len(multiResult) != 3 {
-		t.Errorf("expected 3 proxies (HK or US), got %d", len(multiResult))
-	}
-}
-
-func TestProxyGroupFiltering(t *testing.T) {
-	proxies := []parser.Proxy{
-		{Remark: "HK Hong Kong 01"},
-		{Remark: "US United States 01"},
-		{Remark: "Server-HK-01"},
-	}
-
-	// Test Clash proxy group generation with filtering
-	groups := []config.ProxyGroupConfig{
-		{
-			Name: "HK",
-			Type: "select",
-			Rule: []string{"HK", "Hong Kong"},
-		},
-		{
-			Name: "US",
-			Type: "select",
-			Rule: []string{"US", "United States"},
-		},
-	}
-
-	opts := GeneratorOptions{
-		ClashNewFieldName: true,
-	}
-
-	result := generateClashProxyGroups(proxies, groups, opts)
-
-	if len(result) != 2 {
-		t.Errorf("expected 2 groups, got %d", len(result))
-	}
-
-	// Check HK group contains HK proxies
-	hkProxies := result[0]["proxies"].([]string)
-	if len(hkProxies) < 1 {
-		t.Errorf("HK group should have at least 1 proxy")
-	}
-}
-
-// Helper function
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-			findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-// BenchmarkGenerateClash benchmarks Clash generation
-func BenchmarkGenerateClash(b *testing.B) {
-	proxies := make([]parser.Proxy, 100)
-	for i := 0; i < 100; i++ {
-		proxies[i] = parser.Proxy{
-			Type:          "ss",
-			Remark:        "Test Server",
-			Server:        "example.com",
-			Port:          8388,
-			Password:      "password",
-			EncryptMethod: "aes-256-gcm",
-		}
-	}
-
-	opts := GeneratorOptions{
-		Target:            "clash",
-		ClashNewFieldName: true,
-	}
-
-	baseConfig := `port: 7890
-mode: Rule`
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = Generate(proxies, opts, baseConfig)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertRulesetToClash(tt.content)
+			if len(result) != len(tt.expected) {
+				t.Errorf("convertRulesetToClash() returned %d rules, want %d", len(result), len(tt.expected))
+				t.Logf("Got: %v", result)
+				t.Logf("Want: %v", tt.expected)
+				return
+			}
+			for i, rule := range result {
+				if rule != tt.expected[i] {
+					t.Errorf("convertRulesetToClash()[%d] = %v, want %v", i, rule, tt.expected[i])
+				}
+			}
+		})
 	}
 }

@@ -164,6 +164,7 @@ type ProxyGroupConfig struct {
 	DisableUDP *bool    `yaml:"disable_udp,omitempty" toml:"disable_udp" ini:"disable_udp"`
 	Import     string   `yaml:"import,omitempty" toml:"import" ini:"import"`
 	Script     string   `yaml:"script,omitempty" toml:"script" ini:"script"`
+	Proxies    []string `yaml:"-" toml:"-" ini:"-" json:"proxies"` // helper fileld for mihomo clash meta config convertion
 }
 
 // TemplateConfig represents the [template] section

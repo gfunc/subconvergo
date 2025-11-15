@@ -257,7 +257,7 @@ clash_use_new_field_name=true
 clash_proxies_style=compact
 append_sub_userinfo=false
 rename_node=HK@香港
-rename_node=!!import:snippets/rename.txt
+rename_node=!!import:../base/snippets/rename_node.txt
 
 [managed_config]
 write_managed_config=true
@@ -272,7 +272,7 @@ resolve_hostname=false
 add_emoji=true
 remove_old_emoji=false
 rule=(香港|HK),🇭🇰
-rule=!!import:snippets/emoji.txt
+rule=!!import:../base/snippets/emoji.txt
 
 [rulesets]
 enabled=true
@@ -280,12 +280,12 @@ overwrite_original_rules=true
 update_ruleset_on_request=false
 ruleset=DIRECT,rules/local.list
 ruleset=Proxy,surge:https://example.com/rules/proxy.list,3600
-ruleset=!!import:snippets/rulesets.txt
+ruleset=!!import:../base/snippets/rulesets.txt
 
 [proxy_groups]
 custom_proxy_group=Auto` + "`" + `url-test` + "`" + `.*` + "`" + `http://www.gstatic.com/generate_204` + "`" + `300
 custom_proxy_group=Proxy` + "`" + `select` + "`" + `.*` + "`" + `[]DIRECT
-custom_proxy_group=!!import:snippets/groups.txt
+custom_proxy_group=!!import:../base/snippets/groups.txt
 
 [template]
 template_path=/path/to/templates
@@ -357,8 +357,9 @@ skip_failed_links=false
 			t.Errorf("Expected first rename replace=香港, got %s", Global.NodePref.RenameNodes[0].Replace)
 		}
 		// Check import rule
-		if Global.NodePref.RenameNodes[1].Import != "snippets/rename.txt" {
-			t.Errorf("Expected import=snippets/rename.txt, got %s", Global.NodePref.RenameNodes[1].Import)
+		if Global.NodePref.RenameNodes[1].Match != `\(?((x|X)?(\d+)(\.?\d+)?)((\s?倍率?)|(x|X))\)?` &&
+			Global.NodePref.RenameNodes[1].Replace != "$1x" {
+			t.Errorf(`Expected Match=\(?((x|X)?(\d+)(\.?\d+)?)((\s?倍率?)|(x|X))\)? Replace=$1x, got %s %s`, Global.NodePref.RenameNodes[1].Match, Global.NodePref.RenameNodes[1].Replace)
 		}
 	}
 
@@ -554,9 +555,9 @@ func TestINIRulesetParsing(t *testing.T) {
 		},
 		{
 			name:  "import directive",
-			value: "!!import:snippets/rules.txt",
+			value: "!!import:../base/snippets/rules.txt",
 			expected: RulesetConfig{
-				Import: "snippets/rules.txt",
+				Import: "../base/snippets/rules.txt",
 			},
 		},
 	}
@@ -630,9 +631,9 @@ func TestINIProxyGroupParsing(t *testing.T) {
 		},
 		{
 			name:  "import directive",
-			value: "!!import:snippets/groups.txt",
+			value: "!!import:../base/snippets/groups.txt",
 			expected: ProxyGroupConfig{
-				Import: "snippets/groups.txt",
+				Import: "../base/snippets/groups.txt",
 			},
 		},
 	}

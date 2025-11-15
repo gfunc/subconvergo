@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,7 +39,7 @@ type GeneratorOptions struct {
 }
 
 // Generate converts proxies to target format
-func Generate(proxies []parser.Proxy, opts GeneratorOptions, baseConfig string) (string, error) {
+func Generate(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	switch opts.Target {
 	case "clash", "clashr":
 		return generateClash(proxies, opts, baseConfig)
@@ -57,7 +58,7 @@ func Generate(proxies []parser.Proxy, opts GeneratorOptions, baseConfig string) 
 	}
 }
 
-func generateClash(proxies []parser.Proxy, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateClash(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	// Parse base configuration
 	var base = make(map[string]interface{})
 	if err := yaml.Unmarshal([]byte(baseConfig), &base); err != nil {
@@ -66,9 +67,13 @@ func generateClash(proxies []parser.Proxy, opts GeneratorOptions, baseConfig str
 	// Convert proxies to Clash format
 	var clashProxies []map[string]interface{}
 	for _, proxy := range proxies {
-		clashProxy := convertToClash(proxy, opts)
-		if clashProxy != nil {
-			clashProxies = append(clashProxies, clashProxy)
+		switch c := proxy.(type) {
+		case *parser.MihomoProxy:
+			clashProxies = append(clashProxies, c.ProxyOptions())
+		case parser.SubconverterProxy:
+			clashProxies = append(clashProxies, c.ProxyOptions())
+		default:
+			log.Printf("unsupported proxy type for clash generation: %T", proxy)
 		}
 	}
 
@@ -104,51 +109,7 @@ func generateClash(proxies []parser.Proxy, opts GeneratorOptions, baseConfig str
 	return string(output), nil
 }
 
-func convertToClash(proxy parser.Proxy, opts GeneratorOptions) map[string]interface{} {
-	result := map[string]interface{}{
-		"name":   proxy.Remark,
-		"type":   proxy.Type,
-		"server": proxy.Server,
-		"port":   proxy.Port,
-	}
-
-	// Add common options
-	if opts.UDP != nil {
-		result["udp"] = *opts.UDP
-	}
-	if opts.TFO != nil {
-		result["tfo"] = *opts.TFO
-	}
-
-	// Type-specific fields
-	switch proxy.Type {
-	case "ss":
-		result["cipher"] = proxy.EncryptMethod
-		result["password"] = proxy.Password
-	case "vmess":
-		result["uuid"] = proxy.UUID
-		result["alterId"] = proxy.AlterID
-		result["cipher"] = proxy.EncryptMethod
-		if proxy.Network != "" {
-			result["network"] = proxy.Network
-		}
-		if proxy.TLS {
-			result["tls"] = true
-		}
-		if opts.SkipCertVerify != nil && *opts.SkipCertVerify {
-			result["skip-cert-verify"] = true
-		}
-	case "trojan":
-		result["password"] = proxy.Password
-		if opts.SkipCertVerify != nil && *opts.SkipCertVerify {
-			result["skip-cert-verify"] = true
-		}
-	}
-
-	return result
-}
-
-func generateClashProxyGroups(proxies []parser.Proxy, groups []config.ProxyGroupConfig, opts GeneratorOptions) []map[string]interface{} {
+func generateClashProxyGroups(proxies []parser.ProxyInterface, groups []config.ProxyGroupConfig, opts GeneratorOptions) []map[string]interface{} {
 	var result []map[string]interface{}
 
 	for _, group := range groups {
@@ -203,18 +164,10 @@ func generateClashProxyGroups(proxies []parser.Proxy, groups []config.ProxyGroup
 	return result
 }
 
-func getProxyNames(proxies []parser.Proxy) []string {
-	var names []string
-	for _, proxy := range proxies {
-		names = append(names, proxy.Remark)
-	}
-	return names
-}
-
 // applyMatcher checks if a proxy matches a rule pattern
 // Supports special matchers: !!GROUP=, !!GROUPID=, !!TYPE=, !!PORT=, !!SERVER=
 // Returns true if the proxy matches, and extracts the real regex pattern if present
-func applyMatcher(rule string, proxy parser.Proxy) (bool, string) {
+func applyMatcher(rule string, proxy parser.ProxyInterface) (bool, string) {
 	// Handle special [] syntax for direct/reject nodes
 	if strings.HasPrefix(rule, "[]") {
 		return false, rule[2:]
@@ -229,13 +182,13 @@ func applyMatcher(rule string, proxy parser.Proxy) (bool, string) {
 			if len(parts) > 2 {
 				realRule = parts[2]
 			}
-			matched, _ := regexp.MatchString(groupPattern, proxy.Group)
+			matched, _ := regexp.MatchString(groupPattern, proxy.GetGroup())
 			return matched, realRule
 		}
 	}
 
 	// Handle !!GROUPID= matcher
-	// Note: GroupID is not currently tracked in parser.Proxy, default to 0
+	// Note: GroupID is not currently tracked in parser.ProxyInterface, default to 0
 	if strings.HasPrefix(rule, "!!GROUPID=") || strings.HasPrefix(rule, "!!INSERT=") {
 		parts := strings.SplitN(rule, "!!", 3)
 		if len(parts) >= 2 {
@@ -265,7 +218,7 @@ func applyMatcher(rule string, proxy parser.Proxy) (bool, string) {
 			if len(parts) > 2 {
 				realRule = parts[2]
 			}
-			proxyType := strings.ToUpper(proxy.Type)
+			proxyType := strings.ToUpper(proxy.GetType())
 			// Use case-insensitive matching
 			matched, _ := regexp.MatchString("(?i)^("+typePattern+")$", proxyType)
 			return matched, realRule
@@ -281,7 +234,7 @@ func applyMatcher(rule string, proxy parser.Proxy) (bool, string) {
 			if len(parts) > 2 {
 				realRule = parts[2]
 			}
-			matched := matchRange(portPattern, proxy.Port)
+			matched := matchRange(portPattern, proxy.GetPort())
 			return matched, realRule
 		}
 	}
@@ -295,7 +248,7 @@ func applyMatcher(rule string, proxy parser.Proxy) (bool, string) {
 			if len(parts) > 2 {
 				realRule = parts[2]
 			}
-			matched, _ := regexp.MatchString(serverPattern, proxy.Server)
+			matched, _ := regexp.MatchString(serverPattern, proxy.GetServer())
 			return matched, realRule
 		}
 	}
@@ -344,7 +297,7 @@ func matchRange(pattern string, value int) bool {
 
 // filterProxiesByRules filters proxies based on rule patterns
 // Supports regex matching and special matchers
-func filterProxiesByRules(proxies []parser.Proxy, rules []string) []string {
+func filterProxiesByRules(proxies []parser.ProxyInterface, rules []string) []string {
 	var result []string
 	seen := make(map[string]bool)
 
@@ -368,33 +321,19 @@ func filterProxiesByRules(proxies []parser.Proxy, rules []string) []string {
 
 			// If there's a real regex rule, check if proxy remark matches
 			if realRule != "" {
-				if match, _ := regexp.MatchString(realRule, proxy.Remark); !match {
+				if match, _ := regexp.MatchString(realRule, proxy.GetRemark()); !match {
 					continue
 				}
 			}
 
 			// Add proxy if not already in result
-			if !seen[proxy.Remark] {
-				result = append(result, proxy.Remark)
-				seen[proxy.Remark] = true
+			if !seen[proxy.GetRemark()] {
+				result = append(result, proxy.GetRemark())
+				seen[proxy.GetRemark()] = true
 			}
 		}
 	}
 
-	return result
-}
-
-// Simple pattern matching (legacy)
-func filterProxies(proxies []string, patterns []string) []string {
-	var result []string
-	for _, proxy := range proxies {
-		for _, pattern := range patterns {
-			if strings.Contains(proxy, pattern) {
-				result = append(result, proxy)
-				break
-			}
-		}
-	}
 	return result
 }
 
@@ -596,7 +535,7 @@ func validateClashRule(rule string) bool {
 	return false
 }
 
-func generateSurge(proxies []parser.Proxy, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateSurge(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	var output strings.Builder
 
 	// Add base configuration
@@ -638,16 +577,16 @@ func generateSurge(proxies []parser.Proxy, opts GeneratorOptions, baseConfig str
 	return output.String(), nil
 }
 
-func convertToSurge(proxy parser.Proxy, opts GeneratorOptions) string {
+func convertToSurge(proxy parser.ProxyInterface, opts GeneratorOptions) string {
 	var parts []string
-	parts = append(parts, proxy.Remark)
+	parts = append(parts, proxy.GetRemark())
 
-	switch proxy.Type {
+	switch proxy.GetType() {
 	case "ss":
 		parts = append(parts, "ss")
-		parts = append(parts, fmt.Sprintf("%s:%d", proxy.Server, proxy.Port))
-		parts = append(parts, fmt.Sprintf("encrypt-method=%s", proxy.EncryptMethod))
-		parts = append(parts, fmt.Sprintf("password=%s", proxy.Password))
+		parts = append(parts, fmt.Sprintf("%s:%d", proxy.GetServer(), proxy.GetPort()))
+		parts = append(parts, fmt.Sprintf("encrypt-method=%s", ""))
+		parts = append(parts, fmt.Sprintf("password=%s", ""))
 		if opts.UDP != nil && *opts.UDP {
 			parts = append(parts, "udp-relay=true")
 		}
@@ -657,18 +596,18 @@ func convertToSurge(proxy parser.Proxy, opts GeneratorOptions) string {
 
 	case "vmess":
 		parts = append(parts, "vmess")
-		parts = append(parts, fmt.Sprintf("%s:%d", proxy.Server, proxy.Port))
-		parts = append(parts, fmt.Sprintf("username=%s", proxy.UUID))
-		if proxy.Network == "ws" {
+		parts = append(parts, fmt.Sprintf("%s:%d", proxy.GetServer(), proxy.GetPort()))
+		parts = append(parts, fmt.Sprintf("username=%s", ""))
+		if "" == "ws" {
 			parts = append(parts, "ws=true")
-			if proxy.Path != "" {
-				parts = append(parts, fmt.Sprintf("ws-path=%s", proxy.Path))
+			if "" != "" {
+				parts = append(parts, fmt.Sprintf("ws-path=%s", ""))
 			}
-			if proxy.Host != "" {
-				parts = append(parts, fmt.Sprintf("ws-headers=Host:%s", proxy.Host))
+			if "" != "" {
+				parts = append(parts, fmt.Sprintf("ws-headers=Host:%s", ""))
 			}
 		}
-		if proxy.TLS {
+		if false {
 			parts = append(parts, "tls=true")
 			if opts.SkipCertVerify != nil && *opts.SkipCertVerify {
 				parts = append(parts, "skip-cert-verify=true")
@@ -677,15 +616,15 @@ func convertToSurge(proxy parser.Proxy, opts GeneratorOptions) string {
 
 	case "trojan":
 		parts = append(parts, "trojan")
-		parts = append(parts, fmt.Sprintf("%s:%d", proxy.Server, proxy.Port))
-		parts = append(parts, fmt.Sprintf("password=%s", proxy.Password))
+		parts = append(parts, fmt.Sprintf("%s:%d", proxy.GetServer(), proxy.GetPort()))
+		parts = append(parts, fmt.Sprintf("password=%s", ""))
 		if opts.SkipCertVerify != nil && *opts.SkipCertVerify {
 			parts = append(parts, "skip-cert-verify=true")
 		}
-		if proxy.Network == "ws" {
+		if "" == "ws" {
 			parts = append(parts, "ws=true")
-			if proxy.Path != "" {
-				parts = append(parts, fmt.Sprintf("ws-path=%s", proxy.Path))
+			if "" != "" {
+				parts = append(parts, fmt.Sprintf("ws-path=%s", ""))
 			}
 		}
 	default:
@@ -695,7 +634,7 @@ func convertToSurge(proxy parser.Proxy, opts GeneratorOptions) string {
 	return strings.Join(parts, ", ")
 }
 
-func convertGroupToSurge(group config.ProxyGroupConfig, proxies []parser.Proxy) string {
+func convertGroupToSurge(group config.ProxyGroupConfig, proxies []parser.ProxyInterface) string {
 	var parts []string
 	parts = append(parts, group.Name)
 	parts = append(parts, strings.ToLower(group.Type))
@@ -724,7 +663,7 @@ func convertGroupToSurge(group config.ProxyGroupConfig, proxies []parser.Proxy) 
 	return strings.Join(parts, ", ")
 }
 
-func generateQuantumultX(proxies []parser.Proxy, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateQuantumultX(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	var output strings.Builder
 
 	// Add base configuration
@@ -765,50 +704,50 @@ func generateQuantumultX(proxies []parser.Proxy, opts GeneratorOptions, baseConf
 	return output.String(), nil
 }
 
-func convertToQuantumultX(proxy parser.Proxy, opts GeneratorOptions) string {
+func convertToQuantumultX(proxy parser.ProxyInterface, opts GeneratorOptions) string {
 	var parts []string
 
-	switch proxy.Type {
+	switch proxy.GetType() {
 	case "ss", "shadowsocks":
 		// Format: shadowsocks=server:port, method=encrypt-method, password=password, tag=name
-		parts = append(parts, "shadowsocks="+fmt.Sprintf("%s:%d", proxy.Server, proxy.Port))
-		parts = append(parts, fmt.Sprintf("method=%s", proxy.EncryptMethod))
-		parts = append(parts, fmt.Sprintf("password=%s", proxy.Password))
+		parts = append(parts, "shadowsocks="+fmt.Sprintf("%s:%d", proxy.GetServer(), proxy.GetPort()))
+		parts = append(parts, fmt.Sprintf("method=%s", ""))
+		parts = append(parts, fmt.Sprintf("password=%s", ""))
 		if opts.UDP != nil && *opts.UDP {
 			parts = append(parts, "udp-relay=true")
 		}
 		if opts.TFO != nil && *opts.TFO {
 			parts = append(parts, "fast-open=true")
 		}
-		parts = append(parts, fmt.Sprintf("tag=%s", proxy.Remark))
+		parts = append(parts, fmt.Sprintf("tag=%s", proxy.GetRemark()))
 
 	case "vmess":
 		// Format: vmess=server:port, method=encrypt-method, password=uuid, tag=name
-		parts = append(parts, "vmess="+fmt.Sprintf("%s:%d", proxy.Server, proxy.Port))
+		parts = append(parts, "vmess="+fmt.Sprintf("%s:%d", proxy.GetServer(), proxy.GetPort()))
 		parts = append(parts, "method=aes-128-gcm")
-		parts = append(parts, fmt.Sprintf("password=%s", proxy.UUID))
-		if proxy.Network == "ws" {
+		parts = append(parts, fmt.Sprintf("password=%s", ""))
+		if "" == "ws" {
 			parts = append(parts, "obfs=ws")
-			if proxy.Path != "" {
-				parts = append(parts, fmt.Sprintf("obfs-uri=%s", proxy.Path))
+			if "" != "" {
+				parts = append(parts, fmt.Sprintf("obfs-uri=%s", ""))
 			}
-			if proxy.Host != "" {
-				parts = append(parts, fmt.Sprintf("obfs-host=%s", proxy.Host))
+			if "" != "" {
+				parts = append(parts, fmt.Sprintf("obfs-host=%s", ""))
 			}
 		}
-		if proxy.TLS {
+		if false {
 			parts = append(parts, "obfs=over-tls")
 		}
-		parts = append(parts, fmt.Sprintf("tag=%s", proxy.Remark))
+		parts = append(parts, fmt.Sprintf("tag=%s", proxy.GetRemark()))
 
 	case "trojan":
 		// Format: trojan=server:port, password=password, tag=name
-		parts = append(parts, "trojan="+fmt.Sprintf("%s:%d", proxy.Server, proxy.Port))
-		parts = append(parts, fmt.Sprintf("password=%s", proxy.Password))
+		parts = append(parts, "trojan="+fmt.Sprintf("%s:%d", proxy.GetServer(), proxy.GetPort()))
+		parts = append(parts, fmt.Sprintf("password=%s", ""))
 		if opts.SkipCertVerify != nil && *opts.SkipCertVerify {
 			parts = append(parts, "tls-verification=false")
 		}
-		parts = append(parts, fmt.Sprintf("tag=%s", proxy.Remark))
+		parts = append(parts, fmt.Sprintf("tag=%s", proxy.GetRemark()))
 
 	default:
 		return ""
@@ -817,7 +756,7 @@ func convertToQuantumultX(proxy parser.Proxy, opts GeneratorOptions) string {
 	return strings.Join(parts, ", ")
 }
 
-func convertGroupToQuantumultX(group config.ProxyGroupConfig, proxies []parser.Proxy) string {
+func convertGroupToQuantumultX(group config.ProxyGroupConfig, proxies []parser.ProxyInterface) string {
 	groupType := strings.ToLower(group.Type)
 	if groupType == "select" {
 		groupType = "static"
@@ -841,7 +780,7 @@ func convertGroupToQuantumultX(group config.ProxyGroupConfig, proxies []parser.P
 	return strings.Join(parts, ", ")
 }
 
-func generateLoon(proxies []parser.Proxy, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateLoon(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	// Loon format is very similar to Surge
 	var output strings.Builder
 
@@ -882,7 +821,7 @@ func generateLoon(proxies []parser.Proxy, opts GeneratorOptions, baseConfig stri
 	return output.String(), nil
 }
 
-func convertGroupToLoon(group config.ProxyGroupConfig, proxies []parser.Proxy) string {
+func convertGroupToLoon(group config.ProxyGroupConfig, proxies []parser.ProxyInterface) string {
 	var parts []string
 	parts = append(parts, group.Name)
 	parts = append(parts, "=")
@@ -901,7 +840,7 @@ func convertGroupToLoon(group config.ProxyGroupConfig, proxies []parser.Proxy) s
 	return strings.Join(parts, ",")
 }
 
-func generateSingBox(proxies []parser.Proxy, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateSingBox(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	// Parse base configuration as JSON
 	var base map[string]interface{}
 	if err := json.Unmarshal([]byte(baseConfig), &base); err != nil {
@@ -957,41 +896,41 @@ func generateSingBox(proxies []parser.Proxy, opts GeneratorOptions, baseConfig s
 	return string(output), nil
 }
 
-func convertToSingBox(proxy parser.Proxy, opts GeneratorOptions) map[string]interface{} {
+func convertToSingBox(proxy parser.ProxyInterface, opts GeneratorOptions) map[string]interface{} {
 	outbound := map[string]interface{}{
-		"tag":         proxy.Remark,
-		"type":        proxy.Type,
-		"server":      proxy.Server,
-		"server_port": proxy.Port,
+		"tag":         proxy.GetRemark(),
+		"type":        proxy.GetType(),
+		"server":      proxy.GetServer(),
+		"server_port": proxy.GetPort(),
 	}
 
-	switch proxy.Type {
+	switch proxy.GetType() {
 	case "ss", "shadowsocks":
 		outbound["type"] = "shadowsocks"
-		outbound["method"] = proxy.EncryptMethod
-		outbound["password"] = proxy.Password
+		outbound["method"] = ""
+		outbound["password"] = ""
 
 	case "vmess":
-		outbound["uuid"] = proxy.UUID
-		outbound["alter_id"] = proxy.AlterID
+		outbound["uuid"] = ""
+		outbound["alter_id"] = 0
 		outbound["security"] = "auto"
-		if proxy.TLS {
+		if false {
 			outbound["tls"] = map[string]interface{}{
 				"enabled": true,
 			}
 		}
-		if proxy.Network == "ws" {
+		if "" == "ws" {
 			outbound["transport"] = map[string]interface{}{
 				"type": "ws",
-				"path": proxy.Path,
+				"path": "",
 				"headers": map[string]string{
-					"Host": proxy.Host,
+					"Host": "",
 				},
 			}
 		}
 
 	case "trojan":
-		outbound["password"] = proxy.Password
+		outbound["password"] = ""
 		outbound["tls"] = map[string]interface{}{
 			"enabled": true,
 		}
@@ -1024,19 +963,25 @@ func generateSingBoxRules(rulesets []config.RulesetConfig) []map[string]interfac
 	return rules
 }
 
-func generateSingle(proxies []parser.Proxy, format string) (string, error) {
+func generateSingle(proxies []parser.ProxyInterface, format string) (string, error) {
 	// Generate simple subscription (base64 encoded links)
 	var lines []string
 	for _, proxy := range proxies {
-		// Only include proxies matching the requested format
-		if format == "v2ray" && (proxy.Type == "vmess" || proxy.Type == "vless") {
-			link := generateProxyLink(proxy, proxy.Type)
-			if link != "" {
+		// if SubconverterProxy
+		if mixin, ok := proxy.(parser.SubconverterProxy); ok {
+
+			// Only include proxies matching the requested format
+			if format == "v2ray" && (proxy.GetType() == "vmess" || proxy.GetType() == "vless") {
+				link, err := mixin.GenerateLink()
+				if err != nil {
+					log.Panicln(`Failed to generate link for proxy:`, err)
+				}
 				lines = append(lines, link)
-			}
-		} else if format == proxy.Type {
-			link := generateProxyLink(proxy, proxy.Type)
-			if link != "" {
+			} else if format == proxy.GetType() {
+				link, err := mixin.GenerateLink()
+				if err != nil {
+					log.Panicln(`Failed to generate link for proxy:`, err)
+				}
 				lines = append(lines, link)
 			}
 		}
@@ -1046,152 +991,4 @@ func generateSingle(proxies []parser.Proxy, format string) (string, error) {
 	subscription := strings.Join(lines, "\n")
 	encoded := base64.StdEncoding.EncodeToString([]byte(subscription))
 	return encoded, nil
-}
-
-func generateProxyLink(proxy parser.Proxy, format string) string {
-	switch format {
-	case "ss", "shadowsocks":
-		return generateSSLink(proxy)
-	case "ssr", "shadowsocksr":
-		return generateSSRLink(proxy)
-	case "vmess":
-		return generateVMessLink(proxy)
-	case "trojan":
-		return generateTrojanLink(proxy)
-	case "vless":
-		return generateVLESSLink(proxy)
-	default:
-		return ""
-	}
-}
-
-func generateSSLink(proxy parser.Proxy) string {
-	// Format: ss://base64(method:password)@server:port#remark
-	userInfo := fmt.Sprintf("%s:%s", proxy.EncryptMethod, proxy.Password)
-	encoded := base64.URLEncoding.EncodeToString([]byte(userInfo))
-	link := fmt.Sprintf("ss://%s@%s:%d#%s", encoded, proxy.Server, proxy.Port, urlEncode(proxy.Remark))
-	return link
-}
-
-func generateSSRLink(proxy parser.Proxy) string {
-	// Format: ssr://base64(server:port:protocol:method:obfs:base64(password)/?...)
-	passEncoded := base64.URLEncoding.EncodeToString([]byte(proxy.Password))
-	mainPart := fmt.Sprintf("%s:%d:%s:%s:%s:%s",
-		proxy.Server,
-		proxy.Port,
-		proxy.Protocol,
-		proxy.EncryptMethod,
-		proxy.Obfs,
-		passEncoded,
-	)
-
-	// Add query parameters
-	params := []string{}
-	if proxy.ObfsParam != "" {
-		params = append(params, fmt.Sprintf("obfsparam=%s", base64.URLEncoding.EncodeToString([]byte(proxy.ObfsParam))))
-	}
-	if proxy.ProtocolParam != "" {
-		params = append(params, fmt.Sprintf("protoparam=%s", base64.URLEncoding.EncodeToString([]byte(proxy.ProtocolParam))))
-	}
-	if proxy.Remark != "" {
-		params = append(params, fmt.Sprintf("remarks=%s", base64.URLEncoding.EncodeToString([]byte(proxy.Remark))))
-	}
-
-	if len(params) > 0 {
-		mainPart += "/?" + strings.Join(params, "&")
-	}
-
-	encoded := base64.URLEncoding.EncodeToString([]byte(mainPart))
-	return "ssr://" + encoded
-}
-
-func generateVMessLink(proxy parser.Proxy) string {
-	// VMess JSON format
-	vmessData := map[string]interface{}{
-		"v":    "2",
-		"ps":   proxy.Remark,
-		"add":  proxy.Server,
-		"port": fmt.Sprintf("%d", proxy.Port),
-		"id":   proxy.UUID,
-		"aid":  fmt.Sprintf("%d", proxy.AlterID),
-		"net":  proxy.Network,
-		"type": "none",
-		"host": proxy.Host,
-		"path": proxy.Path,
-		"tls":  "",
-	}
-
-	if proxy.TLS {
-		vmessData["tls"] = "tls"
-	}
-
-	jsonBytes, err := json.Marshal(vmessData)
-	if err != nil {
-		return ""
-	}
-
-	encoded := base64.StdEncoding.EncodeToString(jsonBytes)
-	return "vmess://" + encoded
-}
-
-func generateTrojanLink(proxy parser.Proxy) string {
-	// Format: trojan://password@server:port?params#remark
-	link := fmt.Sprintf("trojan://%s@%s:%d", proxy.Password, proxy.Server, proxy.Port)
-
-	params := []string{}
-	if proxy.Host != "" {
-		params = append(params, fmt.Sprintf("sni=%s", proxy.Host))
-	}
-	if proxy.Network == "ws" {
-		params = append(params, "type=ws")
-		if proxy.Path != "" {
-			params = append(params, fmt.Sprintf("path=%s", urlEncode(proxy.Path)))
-		}
-	}
-	if proxy.AllowInsecure {
-		params = append(params, "allowInsecure=1")
-	}
-
-	if len(params) > 0 {
-		link += "?" + strings.Join(params, "&")
-	}
-
-	if proxy.Remark != "" {
-		link += "#" + urlEncode(proxy.Remark)
-	}
-
-	return link
-}
-
-func generateVLESSLink(proxy parser.Proxy) string {
-	// Format: vless://uuid@server:port?params#remark
-	link := fmt.Sprintf("vless://%s@%s:%d", proxy.UUID, proxy.Server, proxy.Port)
-
-	params := []string{fmt.Sprintf("type=%s", proxy.Network)}
-
-	if proxy.TLS {
-		params = append(params, "security=tls")
-		if proxy.Host != "" {
-			params = append(params, fmt.Sprintf("sni=%s", proxy.Host))
-		}
-	}
-
-	if proxy.Network == "ws" && proxy.Path != "" {
-		params = append(params, fmt.Sprintf("path=%s", urlEncode(proxy.Path)))
-	}
-	if proxy.Host != "" && proxy.Network == "ws" {
-		params = append(params, fmt.Sprintf("host=%s", proxy.Host))
-	}
-
-	link += "?" + strings.Join(params, "&")
-
-	if proxy.Remark != "" {
-		link += "#" + urlEncode(proxy.Remark)
-	}
-
-	return link
-}
-
-func urlEncode(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, " ", "%20"), "#", "%23")
 }

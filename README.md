@@ -8,6 +8,12 @@ A high-performance Go reimplementation of [subconverter](https://github.com/tind
 
 **Module**: `github.com/gfunc/subconvergo`
 
+
+## 📢 Announcement
+This is an early release of the Go implementation of subconverter.<br>
+Bootstrapped with the help of GitHub Copilot. <br>
+Only **Clash** format has been tested so far. Other formats may have issues.
+
 ---
 
 ## 🚀 Quick Start
