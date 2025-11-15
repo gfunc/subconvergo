@@ -1,0 +1,287 @@
+package generator
+
+import (
+	"testing"
+
+	"github.com/gfunc/subconvergo/parser"
+)
+
+func TestApplyMatcher(t *testing.T) {
+	tests := []struct {
+		name     string
+		rule     string
+		proxy    parser.Proxy
+		expected bool
+		realRule string
+	}{
+		{
+			name: "GROUP matcher - match",
+			rule: "!!GROUP=US!!.*",
+			proxy: parser.Proxy{
+				Remark: "US Node 1",
+				Group:  "US Premium",
+			},
+			expected: true,
+			realRule: ".*",
+		},
+		{
+			name: "GROUP matcher - no match",
+			rule: "!!GROUP=HK!!.*",
+			proxy: parser.Proxy{
+				Remark: "US Node 1",
+				Group:  "US Premium",
+			},
+			expected: false,
+			realRule: ".*",
+		},
+		{
+			name: "TYPE matcher - shadowsocks",
+			rule: "!!TYPE=SS|VMess!!.*",
+			proxy: parser.Proxy{
+				Remark: "Test Node",
+				Type:   "ss",
+			},
+			expected: true,
+			realRule: ".*",
+		},
+		{
+			name: "PORT matcher - range",
+			rule: "!!PORT=443!!.*",
+			proxy: parser.Proxy{
+				Remark: "Test Node",
+				Port:   443,
+			},
+			expected: true,
+			realRule: ".*",
+		},
+		{
+			name: "SERVER matcher",
+			rule: "!!SERVER=example\\.com!!.*",
+			proxy: parser.Proxy{
+				Remark: "Test Node",
+				Server: "example.com",
+			},
+			expected: true,
+			realRule: ".*",
+		},
+		{
+			name: "Direct node []",
+			rule: "[]DIRECT",
+			proxy: parser.Proxy{
+				Remark: "Test Node",
+			},
+			expected: false,
+			realRule: "DIRECT",
+		},
+		{
+			name: "No matcher - pass through",
+			rule: "US.*",
+			proxy: parser.Proxy{
+				Remark: "US Node 1",
+			},
+			expected: true,
+			realRule: "US.*",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matched, realRule := applyMatcher(tt.rule, tt.proxy)
+			if matched != tt.expected {
+				t.Errorf("applyMatcher() matched = %v, want %v", matched, tt.expected)
+			}
+			if realRule != tt.realRule {
+				t.Errorf("applyMatcher() realRule = %v, want %v", realRule, tt.realRule)
+			}
+		})
+	}
+}
+
+func TestMatchRange(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		value    int
+		expected bool
+	}{
+		{"single value match", "443", 443, true},
+		{"single value no match", "443", 8080, false},
+		{"range match", "8000-9000", 8388, true},
+		{"range no match", "8000-9000", 443, false},
+		{"comma separated match", "443,8080,8388", 8080, true},
+		{"comma separated no match", "443,8080,8388", 9000, false},
+		{"complex range", "1-100,443,8000-9000", 8388, true},
+		{"empty pattern", "", 1234, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchRange(tt.pattern, tt.value)
+			if result != tt.expected {
+				t.Errorf("matchRange(%s, %d) = %v, want %v", tt.pattern, tt.value, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFilterProxiesByRules(t *testing.T) {
+	proxies := []parser.Proxy{
+		{Type: "ss", Remark: "US Node 1", Server: "us1.example.com", Port: 443, Group: "US"},
+		{Type: "ss", Remark: "US Node 2", Server: "us2.example.com", Port: 8080, Group: "US"},
+		{Type: "vmess", Remark: "HK Node 1", Server: "hk1.example.com", Port: 443, Group: "HK"},
+		{Type: "trojan", Remark: "JP Node 1", Server: "jp1.example.com", Port: 443, Group: "JP"},
+		{Type: "trojan", Remark: "SG Node 1", Server: "sg1.example.com", Port: 8388, Group: "SG"},
+	}
+
+	tests := []struct {
+		name     string
+		rules    []string
+		expected []string
+	}{
+		{
+			name:     "Filter by type SS",
+			rules:    []string{"!!TYPE=SS"},
+			expected: []string{"US Node 1", "US Node 2"},
+		},
+		{
+			name:     "Filter by type VMess or Trojan",
+			rules:    []string{"!!TYPE=VMESS|TROJAN"},
+			expected: []string{"HK Node 1", "JP Node 1", "SG Node 1"},
+		},
+		{
+			name:     "Filter by port 443",
+			rules:    []string{"!!PORT=443"},
+			expected: []string{"US Node 1", "HK Node 1", "JP Node 1"},
+		},
+		{
+			name:     "Filter by group US",
+			rules:    []string{"!!GROUP=US"},
+			expected: []string{"US Node 1", "US Node 2"},
+		},
+		{
+			name:     "Filter by regex pattern",
+			rules:    []string{"HK.*"},
+			expected: []string{"HK Node 1"},
+		},
+		{
+			name:     "Filter with TYPE and regex",
+			rules:    []string{"!!TYPE=SS!!US.*"},
+			expected: []string{"US Node 1", "US Node 2"},
+		},
+		{
+			name:     "Direct inclusion",
+			rules:    []string{"[]DIRECT", "[]REJECT"},
+			expected: []string{"DIRECT", "REJECT"},
+		},
+		{
+			name:     "Multiple rules",
+			rules:    []string{"!!TYPE=SS", "!!TYPE=VMESS"},
+			expected: []string{"US Node 1", "US Node 2", "HK Node 1"},
+		},
+		{
+			name:     "Server pattern",
+			rules:    []string{"!!SERVER=.*\\.example\\.com"},
+			expected: []string{"US Node 1", "US Node 2", "HK Node 1", "JP Node 1", "SG Node 1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterProxiesByRules(proxies, tt.rules)
+			if len(result) != len(tt.expected) {
+				t.Errorf("filterProxiesByRules() returned %d proxies, want %d", len(result), len(tt.expected))
+				t.Logf("Got: %v", result)
+				t.Logf("Want: %v", tt.expected)
+				return
+			}
+			for i, name := range result {
+				if name != tt.expected[i] {
+					t.Errorf("filterProxiesByRules()[%d] = %v, want %v", i, name, tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestConvertRulesetToClash(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected []string
+	}{
+		{
+			name: "Clash payload format - domains",
+			content: `payload:
+  - 'example.com'
+  - '.google.com'
+  - '+.facebook.com'`,
+			expected: []string{
+				"DOMAIN,example.com",
+				"DOMAIN-SUFFIX,google.com",
+				"DOMAIN-SUFFIX,facebook.com",
+			},
+		},
+		{
+			name: "Clash payload format - IP CIDR",
+			content: `payload:
+  - '1.1.1.1/32'
+  - '2001:db8::/32'`,
+			expected: []string{
+				"IP-CIDR,1.1.1.1/32",
+				"IP-CIDR6,2001:db8::/32",
+			},
+		},
+		{
+			name: "Surge format",
+			content: `DOMAIN-SUFFIX,google.com
+DOMAIN,example.com
+IP-CIDR,1.1.1.1/32
+# comment line
+DOMAIN-KEYWORD,test`,
+			expected: []string{
+				"DOMAIN-SUFFIX,google.com",
+				"DOMAIN,example.com",
+				"IP-CIDR,1.1.1.1/32",
+				"DOMAIN-KEYWORD,test",
+			},
+		},
+		{
+			name: "QuanX format",
+			content: `HOST,example.com,PROXY
+HOST-SUFFIX,google.com,PROXY
+HOST-KEYWORD,test,PROXY
+IP6-CIDR,2001:db8::/32,PROXY`,
+			expected: []string{
+				"DOMAIN,example.com,PROXY",
+				"DOMAIN-SUFFIX,google.com,PROXY",
+				"DOMAIN-KEYWORD,test,PROXY",
+				"IP-CIDR6,2001:db8::/32,PROXY",
+			},
+		},
+		{
+			name: "Domain keyword detection",
+			content: `payload:
+  - '.example.com.*'`,
+			expected: []string{
+				"DOMAIN-KEYWORD,example.com",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertRulesetToClash(tt.content)
+			if len(result) != len(tt.expected) {
+				t.Errorf("convertRulesetToClash() returned %d rules, want %d", len(result), len(tt.expected))
+				t.Logf("Got: %v", result)
+				t.Logf("Want: %v", tt.expected)
+				return
+			}
+			for i, rule := range result {
+				if rule != tt.expected[i] {
+					t.Errorf("convertRulesetToClash()[%d] = %v, want %v", i, rule, tt.expected[i])
+				}
+			}
+		})
+	}
+}

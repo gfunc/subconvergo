@@ -1,0 +1,37 @@
+proxies:
+  - name: "HK-Clash-01"
+    type: ss
+    server: example1.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: password
+    udp: true
+
+  - name: "HK-Clash-02"
+    type: vmess
+    server: example2.com
+    port: 443
+    uuid: 12345678-1234-1234-1234-123456789012
+    alterId: 0
+    cipher: auto
+    network: ws
+    tls: true
+    ws-opts:
+      path: /path
+      headers:
+        Host: example2.com
+
+  - name: "US-Clash-01"
+    type: trojan
+    server: example3.com
+    port: 443
+    password: password
+    sni: example3.com
+    udp: true
+
+  - name: "JP-Clash-01"
+    type: ss
+    server: example4.com
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: password

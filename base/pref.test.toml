@@ -1,0 +1,179 @@
+version = 1
+
+[common]
+api_mode = true
+api_access_token = "password"
+default_url = []
+enable_insert = true
+insert_url = []
+prepend_insert_url = false
+exclude_remarks = []
+include_remarks = []
+enable_filter = false
+filter_script = ""
+default_external_config = ""
+base_path = "base"
+clash_rule_base = "base/all_base.tpl"
+surge_rule_base = "base/surge.conf"
+surfboard_rule_base = "base/surfboard.conf"
+mellow_rule_base = "base/mellow.conf"
+quan_rule_base = "base/quan.conf"
+quanx_rule_base = "base/quanx.conf"
+loon_rule_base = "base/loon.conf"
+sssub_rule_base = "base/shadowsocks_base.json"
+singbox_rule_base = "base/singbox.json"
+proxy_config = "SYSTEM"
+proxy_ruleset = "SYSTEM"
+proxy_subscription = "NONE"
+append_proxy_type = false
+reload_conf_on_request = false
+
+[userinfo]
+
+[[userinfo.stream_rule]]
+match = "(?i)upload"
+replace = "⬆️"
+
+[[userinfo.time_rule]]
+match = "(?i)expire"
+replace = "⏰"
+
+[node_pref]
+sort_flag = true
+sort_script = ""
+filter_deprecated_nodes = false
+append_sub_userinfo = true
+clash_use_new_field_name = true
+clash_proxies_style = "flow"
+clash_proxy_groups_style = "block"
+singbox_add_clash_modes = true
+
+[[node_pref.rename_node]]
+match = "^\\s+|\\s+$"
+replace = ""
+
+[[node_pref.rename_node]]
+match = "香港"
+replace = "HK"
+
+[[node_pref.rename_node]]
+match = "台湾"
+replace = "TW"
+
+[managed_config]
+write_managed_config = true
+managed_config_prefix = "http://127.0.0.1:25500"
+config_update_interval = 86400
+config_update_strict = false
+quanx_device_id = ""
+
+[surge_external_proxy]
+surge_ssr_path = ""
+resolve_hostname = true
+
+[emojis]
+add_emoji = true
+remove_old_emoji = true
+
+[[emojis.emoji]]
+match = "(🇭🇰)|(港)|(Hong)|(HK)"
+emoji = "🇭🇰"
+
+[[emojis.emoji]]
+match = "(🇨🇳)|(京)|(沪)|(穗)|(深)|(China)|(CN)"
+emoji = "🇨🇳"
+
+[[emojis.emoji]]
+match = "(🇺🇸)|(美)|(US)|(United States)"
+emoji = "🇺🇸"
+
+[[emojis.emoji]]
+match = "(🇯🇵)|(日)|(Japan)|(JP)"
+emoji = "🇯🇵"
+
+[[emojis.emoji]]
+match = "(🇸🇬)|(新)|(Singapore)|(SG)"
+emoji = "🇸🇬"
+
+[[emojis.emoji]]
+match = "(🇰🇷)|(韩)|(Korea)|(KR)"
+emoji = "🇰🇷"
+
+[[emojis.emoji]]
+match = "(🇬🇧)|(英)|(UK)|(Britain)"
+emoji = "🇬🇧"
+
+[[emojis.emoji]]
+match = "(🇩🇪)|(德)|(Germany)|(DE)"
+emoji = "🇩🇪"
+
+[ruleset]
+enabled = true
+overwrite_original_rules = false
+update_ruleset_on_request = false
+
+[[rulesets]]
+group = "DIRECT"
+ruleset = "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/LocalAreaNetwork.list"
+
+[[rulesets]]
+group = "DIRECT"
+ruleset = "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/ChinaDomain.list"
+
+[[rulesets]]
+group = "Proxy"
+ruleset = "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/ProxyLite.list"
+
+[proxy_groups]
+
+[[custom_groups]]
+name = "Proxy"
+type = "select"
+
+[[custom_groups]]
+name = "Auto"
+type = "url-test"
+url = "http://www.gstatic.com/generate_204"
+interval = 300
+
+[template]
+template_path = "templates"
+
+[[template.globals]]
+key = "clash.new_field_name"
+value = "true"
+
+[[template.globals]]
+key = "request.target"
+value = "clash"
+
+[[aliases]]
+uri = "/clash"
+target = "/sub?target=clash"
+
+[[aliases]]
+uri = "/surge"
+target = "/sub?target=surge"
+
+[[tasks]]
+
+[server]
+listen = "0.0.0.0"
+port = 25500
+serve_file_root = ""
+
+[advanced]
+log_level = "info"
+print_debug_info = false
+max_pending_connections = 10240
+max_concurrent_threads = 2
+max_allowed_rulesets = 64
+max_allowed_rules = 32768
+max_allowed_download_size = 0
+enable_cache = true
+cache_subscription = 60
+cache_config = 300
+cache_ruleset = 21600
+script_clean_context = true
+async_fetch_ruleset = false
+skip_failed_links = false

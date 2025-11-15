@@ -1,0 +1,97 @@
+services:
+  # Main application service
+  subconvergo:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: subconvergo-app
+    ports:
+      - "25500:25500"
+    volumes:
+      - ../base:/app
+    environment:
+      - API_MODE=true
+      - PORT=25500
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:25500/version"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - subconvergo-network
+
+  # Test service
+  subconvergo-test:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: builder
+    container_name: subconvergo-test
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    volumes:
+      - ..:/test
+    working_dir: /test
+    command: >
+      sh -c "
+        echo '=== Running Unit Tests ===' &&
+        mkdir -p coverage &&
+        CGO_ENABLED=1 go test -v -race -coverprofile=coverage/coverage.out ./... &&
+        echo '' &&
+        echo '=== Test Coverage ===' &&
+        go tool cover -func=coverage/coverage.out &&
+        echo '' &&
+        echo '=== Generating HTML Coverage Report ===' &&
+        go tool cover -html=coverage/coverage.out -o coverage/coverage.html &&
+        echo 'Coverage report generated at coverage/coverage.html'
+        echo '=== Running Benchmarks ===' &&
+        go test -bench=. -benchmem ./... | tee coverage/benchmark.txt &&
+        echo 'Benchmark report generated at coverage/benchmark.txt'
+      "
+    networks:
+      - subconvergo-network
+
+  # Integration test service
+  integration-test:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: builder
+    container_name: subconvergo-integration
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    depends_on:
+      subconvergo:
+        condition: service_healthy
+    volumes:
+      - ..:/test
+    working_dir: /test
+    environment:
+      - SUBCONVERGO_URL=http://subconvergo:25500
+    command: >
+      sh -c "
+        echo '=== Waiting for service to be ready ===' &&
+        sleep 5 &&
+        echo '=== Running Integration Tests ===' &&
+        go test -v ./tests/... &&
+        echo '' &&
+        echo '=== Running API Tests ===' &&
+        sh /app/tests/test-api.sh
+      "
+    networks:
+      - subconvergo-network
+
+  # Mock subscription server for testing
+  mock-subscription:
+    image: nginx:alpine
+    container_name: mock-subscription-server
+    ports:
+      - "8081:80"
+    volumes:
+      - ./mock-data:/usr/share/nginx/html:ro
+    networks:
+      - subconvergo-network
+
+networks:
+  subconvergo-network:
+    driver: bridge
+

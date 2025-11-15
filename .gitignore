@@ -1,0 +1,9 @@
+.vscode
+.idea
+
+coverage
+**/coverage*
+**/benchmark*
+tests/docker-test-logs.txt
+
+subconvergo

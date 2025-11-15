@@ -1,0 +1,1075 @@
+package handler
+
+import (
+	"bytes"
+	"encoding/base64"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"text/template"
+
+	"github.com/gfunc/subconvergo/config"
+	"github.com/gfunc/subconvergo/generator"
+	"github.com/gfunc/subconvergo/parser"
+	"github.com/gin-gonic/gin"
+	"gopkg.in/ini.v1"
+)
+
+// SubHandler handles subscription conversion requests
+type SubHandler struct{}
+
+// NewSubHandler creates a new subscription handler
+func NewSubHandler() *SubHandler {
+	return &SubHandler{}
+}
+
+// HandleSub processes /sub endpoint
+func (h *SubHandler) HandleSub(c *gin.Context) {
+	h.handleSubWithParams(c, nil)
+}
+
+// handleSubWithParams processes /sub with optional parameter overrides
+func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]string) {
+	// Extract parameters from params map or query
+	getParam := func(key string) string {
+		if params != nil {
+			if val, ok := params[key]; ok {
+				return val
+			}
+		}
+		return c.Query(key)
+	}
+
+	target := getParam("target")
+	urlParam := getParam("url")
+	configParam := getParam("config")
+
+	// Validate required parameters
+	if target == "" {
+		c.String(http.StatusBadRequest, "Invalid target!")
+		return
+	}
+
+	// Use default URL if empty and not in API mode
+	if urlParam == "" {
+		if !config.Global.Common.APIMode {
+			urlParam = strings.Join(config.Global.Common.DefaultURL, "|")
+		}
+	}
+
+	if urlParam == "" {
+		c.String(http.StatusBadRequest, "Invalid request!")
+		return
+	}
+
+	// URL decode
+	urlParam, err := url.QueryUnescape(urlParam)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid URL encoding")
+		return
+	}
+
+	// Handle insert URLs first if enabled
+	var urlsToProcess []string
+	if config.Global.Common.EnableInsert && len(config.Global.Common.InsertURL) > 0 {
+		if config.Global.Common.PrependInsertURL {
+			urlsToProcess = append(urlsToProcess, config.Global.Common.InsertURL...)
+		}
+	}
+
+	// Add main URLs
+	urlsToProcess = append(urlsToProcess, strings.Split(urlParam, "|")...)
+
+	// Append insert URLs if needed
+	if config.Global.Common.EnableInsert && len(config.Global.Common.InsertURL) > 0 {
+		if !config.Global.Common.PrependInsertURL {
+			urlsToProcess = append(urlsToProcess, config.Global.Common.InsertURL...)
+		}
+	}
+
+	// Parse subscription URLs (support multiple URLs separated by |)
+	var allProxies []parser.Proxy
+
+	for _, url := range urlsToProcess {
+		url = strings.TrimSpace(url)
+		if url == "" {
+			continue
+		}
+		if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+			// Parse subscription
+			proxies, err := parser.ParseSubscription(url, config.Global.Common.ProxySubscription)
+			if err != nil {
+				if !config.Global.Advanced.SkipFailedLinks {
+					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription: %v", err))
+					return
+				}
+				continue
+			}
+			allProxies = append(allProxies, proxies...)
+		} else if strings.HasPrefix(url, "file://") {
+			// Parse subscription file
+			proxies, err := parser.ParseSubscriptionFile(url, config.Global.Common.ProxySubscription)
+			if err != nil {
+				if !config.Global.Advanced.SkipFailedLinks {
+					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription file: %v", err))
+					return
+				}
+				continue
+			}
+			allProxies = append(allProxies, proxies...)
+		} else {
+			parserProxy, err := parser.ParseProxyLine(url)
+			if err != nil {
+				if !config.Global.Advanced.SkipFailedLinks {
+					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse proxy line: %v", err))
+					return
+				}
+				continue
+			}
+			allProxies = append(allProxies, parserProxy)
+		}
+
+	}
+
+	if len(allProxies) == 0 {
+		c.String(http.StatusBadRequest, "No valid proxies found")
+		return
+	}
+
+	// Apply filters
+	allProxies = h.applyFilters(allProxies, c)
+
+	// Apply rename rules
+	allProxies = h.applyRenameRules(allProxies)
+
+	// Apply emoji rules
+	if config.Global.Emojis.AddEmoji {
+		allProxies = h.applyEmojiRules(allProxies)
+	}
+
+	// Apply sort if enabled
+	if config.Global.NodePref.SortFlag {
+		allProxies = h.sortProxies(allProxies)
+	}
+
+	// Append proxy type if configured
+	if config.Global.Common.AppendProxyType {
+		for i := range allProxies {
+			allProxies[i].Remark = fmt.Sprintf("%s [%s]", allProxies[i].Remark, allProxies[i].Type)
+		}
+	}
+
+	// Reload config on request if enabled
+	if config.Global.Common.ReloadConfOnRequest {
+		if _, err := config.LoadConfig(); err == nil {
+			// Config reloaded successfully
+		}
+	}
+
+	// Load external config if specified
+	proxyGroups := config.Global.ProxyGroups.CustomProxyGroups
+	rulesets := config.Global.Rulesets.Rulesets
+
+	if configParam != "" {
+		// Load external config (can be URL or file path)
+		extConfig, err := h.loadExternalConfig(configParam)
+		if err == nil {
+			// Merge external config
+			if len(extConfig.ProxyGroups) > 0 {
+				proxyGroups = extConfig.ProxyGroups
+			}
+			if len(extConfig.Rulesets) > 0 {
+				rulesets = extConfig.Rulesets
+			}
+		}
+	}
+
+	// Prepare generator options
+	opts := generator.GeneratorOptions{
+		Target:              target,
+		ProxyGroups:         proxyGroups,
+		Rulesets:            rulesets,
+		EnableRuleGen:       config.Global.Rulesets.Enabled,
+		ClashNewFieldName:   config.Global.NodePref.ClashUseNewFieldName,
+		ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
+		ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
+		SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
+		AppendProxyType:     config.Global.Common.AppendProxyType,
+	}
+
+	// Apply node preferences to generator options
+	if config.Global.NodePref.UDPFlag != nil {
+		opts.UDP = config.Global.NodePref.UDPFlag
+	}
+	if config.Global.NodePref.TCPFastOpenFlag != nil {
+		opts.TFO = config.Global.NodePref.TCPFastOpenFlag
+	}
+	if config.Global.NodePref.SkipCertVerifyFlag != nil {
+		opts.SkipCertVerify = config.Global.NodePref.SkipCertVerifyFlag
+	}
+	if config.Global.NodePref.TLS13Flag != nil {
+		opts.TLS13 = config.Global.NodePref.TLS13Flag
+	}
+
+	// Parse boolean options
+	if udp := getParam("udp"); udp != "" {
+		val := udp == "true"
+		opts.UDP = &val
+	}
+	if tfo := getParam("tfo"); tfo != "" {
+		val := tfo == "true"
+		opts.TFO = &val
+	}
+	if scv := getParam("scv"); scv != "" {
+		val := scv == "true"
+		opts.SkipCertVerify = &val
+	}
+
+	// Prepare request parameters for template rendering
+	requestParams := map[string]string{
+		"target": target,
+	}
+	// Add all query parameters to request context
+	for key, values := range c.Request.URL.Query() {
+		if len(values) > 0 {
+			requestParams[key] = values[0]
+		}
+	}
+
+	// Load base configuration
+	baseConfig, err := h.loadBaseConfig(target, requestParams)
+	if err != nil {
+		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to load base config: %v", err))
+		return
+	}
+
+	// Generate output
+	output, err := generator.Generate(allProxies, opts, baseConfig)
+	if err != nil {
+		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to generate config: %v", err))
+		return
+	}
+
+	// Set appropriate content type
+	contentType := "text/plain;charset=utf-8"
+	switch target {
+	case "clash", "clashr":
+		contentType = "text/yaml;charset=utf-8"
+	case "singbox":
+		contentType = "application/json;charset=utf-8"
+	}
+
+	// Add managed config header for Surge/Surfboard
+	if target == "surge" || target == "surfboard" {
+		if config.Global.ManagedConfig.WriteManagedConfig && config.Global.ManagedConfig.ManagedConfigPrefix != "" {
+			managedURL := config.Global.ManagedConfig.ManagedConfigPrefix + "/sub?" + c.Request.URL.RawQuery
+			output = fmt.Sprintf("#!MANAGED-CONFIG %s interval=%d strict=%t\n%s",
+				managedURL,
+				config.Global.ManagedConfig.ConfigUpdateInterval,
+				config.Global.ManagedConfig.ConfigUpdateStrict,
+				output)
+		}
+	}
+
+	// Add QuanX device ID header if configured
+	if target == "quanx" && config.Global.ManagedConfig.QuanXDeviceID != "" {
+		c.Header("profile-update-interval", fmt.Sprintf("%d", config.Global.ManagedConfig.ConfigUpdateInterval))
+		c.Header("subscription-userinfo", "upload=0; download=0; total=10737418240; expire=4102329600")
+	}
+
+	// Append subscription userinfo if enabled
+	if config.Global.NodePref.AppendSubUserinfo {
+		// Check if we have userinfo from subscription headers
+		if userinfo := c.GetHeader("subscription-userinfo"); userinfo != "" {
+			c.Header("subscription-userinfo", userinfo)
+		}
+	}
+
+	c.Data(http.StatusOK, contentType, []byte(output))
+}
+
+func (h *SubHandler) applyFilters(proxies []parser.Proxy, c *gin.Context) []parser.Proxy {
+	// Get filter params
+	include := c.Query("include")
+	exclude := c.Query("exclude")
+
+	// Apply exclude filter
+	if exclude != "" || len(config.Global.Common.ExcludeRemarks) > 0 {
+		patterns := append(config.Global.Common.ExcludeRemarks, exclude)
+		proxies = filterProxies(proxies, patterns, false)
+	}
+
+	// Apply include filter
+	if include != "" || len(config.Global.Common.IncludeRemarks) > 0 {
+		patterns := append(config.Global.Common.IncludeRemarks, include)
+		proxies = filterProxies(proxies, patterns, true)
+	}
+
+	return proxies
+}
+
+func filterProxies(proxies []parser.Proxy, patterns []string, include bool) []parser.Proxy {
+	if len(patterns) == 0 {
+		return proxies
+	}
+
+	var result []parser.Proxy
+	for _, proxy := range proxies {
+		match := false
+		for _, pattern := range patterns {
+			if pattern == "" {
+				continue
+			}
+			// Simple substring match for now
+			// TODO: Implement regex matching
+			if strings.Contains(proxy.Remark, pattern) {
+				match = true
+				break
+			}
+		}
+
+		if include == match {
+			result = append(result, proxy)
+		}
+	}
+
+	return result
+}
+
+func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]string) (string, error) {
+	var basePath string
+
+	switch target {
+	case "clash", "clashr":
+		basePath = config.Global.Common.ClashRuleBase
+	case "surge":
+		basePath = config.Global.Common.SurgeRuleBase
+	case "surfboard":
+		basePath = config.Global.Common.SurfboardRuleBase
+	case "mellow":
+		basePath = config.Global.Common.MellowRuleBase
+	case "quan":
+		basePath = config.Global.Common.QuanRuleBase
+	case "quanx":
+		basePath = config.Global.Common.QuanXRuleBase
+	case "loon":
+		basePath = config.Global.Common.LoonRuleBase
+	case "sssub":
+		basePath = config.Global.Common.SSSubRuleBase
+	case "singbox":
+		basePath = config.Global.Common.SingBoxRuleBase
+	default:
+		return "", nil
+	}
+
+	if basePath == "" {
+		return "", nil
+	}
+
+	// Resolve path relative to base directory
+	// if !filepath.IsAbs(basePath) {
+	// 	basePath = filepath.Join(config.GetBasePath(), basePath)
+	// }
+
+	data, err := os.ReadFile(basePath)
+	if err != nil {
+		return "", err
+	}
+
+	baseContent := string(data)
+
+	// Apply template rendering with request context
+	if config.Global.Template.TemplatePath != "" || strings.Contains(baseContent, "{{") {
+		rendered, err := h.renderTemplateWithContext(baseContent, requestParams)
+		if err == nil {
+			baseContent = rendered
+		}
+	}
+
+	return baseContent, nil
+}
+
+// applyRenameRules applies rename rules to proxy remarks
+func (h *SubHandler) applyRenameRules(proxies []parser.Proxy) []parser.Proxy {
+	if len(config.Global.NodePref.RenameNodes) == 0 {
+		return proxies
+	}
+
+	for i := range proxies {
+		originalRemark := proxies[i].Remark
+
+		for _, rule := range config.Global.NodePref.RenameNodes {
+			// Skip if no match pattern or both match and replace are empty
+			if rule.Match == "" && rule.Script == "" {
+				continue
+			}
+
+			// TODO: Implement script support if rule.Script is provided
+
+			// Apply matcher-based filtering (supports !!TYPE=, !!GROUP=, etc.)
+			if rule.Match != "" {
+				matched, realRule := h.applyMatcherForRename(rule.Match, proxies[i])
+				if !matched {
+					continue
+				}
+
+				// If there's a real regex rule after the matcher, apply it
+				if realRule != "" {
+					re, err := regexp.Compile(realRule)
+					if err != nil {
+						continue
+					}
+					proxies[i].Remark = re.ReplaceAllString(proxies[i].Remark, rule.Replace)
+				}
+			}
+		}
+
+		// If remark is empty after processing, restore original
+		if proxies[i].Remark == "" {
+			proxies[i].Remark = originalRemark
+		}
+	}
+
+	return proxies
+}
+
+// applyMatcherForRename applies special matchers for rename rules
+func (h *SubHandler) applyMatcherForRename(rule string, proxy parser.Proxy) (bool, string) {
+	// Similar to generator's applyMatcher but for rename context
+
+	// Handle !!GROUP= matcher
+	if strings.HasPrefix(rule, "!!GROUP=") {
+		parts := strings.SplitN(rule, "!!", 3)
+		if len(parts) >= 2 {
+			groupPattern := strings.TrimPrefix(parts[1], "GROUP=")
+			realRule := ""
+			if len(parts) > 2 {
+				realRule = parts[2]
+			}
+			matched, _ := regexp.MatchString(groupPattern, proxy.Group)
+			return matched, realRule
+		}
+	}
+
+	// Handle !!TYPE= matcher
+	if strings.HasPrefix(rule, "!!TYPE=") {
+		parts := strings.SplitN(rule, "!!", 3)
+		if len(parts) >= 2 {
+			typePattern := strings.TrimPrefix(parts[1], "TYPE=")
+			realRule := ""
+			if len(parts) > 2 {
+				realRule = parts[2]
+			}
+			proxyType := strings.ToUpper(proxy.Type)
+			matched, _ := regexp.MatchString("(?i)^("+typePattern+")$", proxyType)
+			return matched, realRule
+		}
+	}
+
+	// Handle !!PORT= matcher
+	if strings.HasPrefix(rule, "!!PORT=") {
+		parts := strings.SplitN(rule, "!!", 3)
+		if len(parts) >= 2 {
+			portPattern := strings.TrimPrefix(parts[1], "PORT=")
+			realRule := ""
+			if len(parts) > 2 {
+				realRule = parts[2]
+			}
+			matched := h.matchRange(portPattern, proxy.Port)
+			return matched, realRule
+		}
+	}
+
+	// Handle !!SERVER= matcher
+	if strings.HasPrefix(rule, "!!SERVER=") {
+		parts := strings.SplitN(rule, "!!", 3)
+		if len(parts) >= 2 {
+			serverPattern := strings.TrimPrefix(parts[1], "SERVER=")
+			realRule := ""
+			if len(parts) > 2 {
+				realRule = parts[2]
+			}
+			matched, _ := regexp.MatchString(serverPattern, proxy.Server)
+			return matched, realRule
+		}
+	}
+
+	// No special matcher, return rule as-is
+	return true, rule
+}
+
+// matchRange checks if a value matches a range pattern
+func (h *SubHandler) matchRange(pattern string, value int) bool {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return true
+	}
+
+	// Handle comma-separated values
+	if strings.Contains(pattern, ",") {
+		parts := strings.Split(pattern, ",")
+		for _, part := range parts {
+			if h.matchRange(strings.TrimSpace(part), value) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Handle ranges: "8000-9000"
+	if strings.Contains(pattern, "-") {
+		parts := strings.Split(pattern, "-")
+		if len(parts) == 2 {
+			start, err1 := fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", new(int))
+			end, err2 := fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", new(int))
+			if start == 1 && end == 1 && err1 == nil && err2 == nil {
+				var startNum, endNum int
+				fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", &startNum)
+				fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &endNum)
+				return value >= startNum && value <= endNum
+			}
+		}
+	}
+
+	// Handle single value
+	var num int
+	if n, err := fmt.Sscanf(pattern, "%d", &num); err == nil && n == 1 {
+		return value == num
+	}
+
+	return false
+}
+
+// applyEmojiRules applies emoji rules to proxy remarks
+func (h *SubHandler) applyEmojiRules(proxies []parser.Proxy) []parser.Proxy {
+	if len(config.Global.Emojis.Rules) == 0 {
+		return proxies
+	}
+
+	for i := range proxies {
+		// Remove old emoji first if configured
+		if config.Global.Emojis.RemoveOldEmoji {
+			proxies[i].Remark = removeEmoji(proxies[i].Remark)
+		}
+
+		// Add new emoji based on rules
+		for _, rule := range config.Global.Emojis.Rules {
+			if (rule.Match == "" && rule.Script == "") || rule.Emoji == "" {
+				continue
+			}
+
+			// TODO: Implement script support if rule.Script is provided
+
+			// Apply matcher-based filtering (supports !!TYPE=, !!GROUP=, etc.)
+			if rule.Match != "" {
+				matched, realRule := h.applyMatcherForRename(rule.Match, proxies[i])
+				if !matched {
+					continue
+				}
+
+				// If there's a real regex rule after the matcher, check if remark matches
+				if realRule != "" {
+					matched, err := regexp.MatchString(realRule, proxies[i].Remark)
+					if err != nil || !matched {
+						continue
+					}
+				}
+
+				// Add emoji and break (only first matching rule)
+				proxies[i].Remark = rule.Emoji + " " + proxies[i].Remark
+				break
+			}
+		}
+	}
+
+	return proxies
+}
+
+// removeEmoji removes emoji characters from a string
+func removeEmoji(s string) string {
+	// Simple implementation - remove common emoji patterns
+	// This regex removes most emoji and flag sequences
+	re := regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{1F900}-\x{1F9FF}\x{1F1E0}-\x{1F1FF}]`)
+	s = re.ReplaceAllString(s, "")
+
+	// Remove leading/trailing spaces
+	return strings.TrimSpace(s)
+}
+
+// sortProxies sorts proxies based on configuration
+func (h *SubHandler) sortProxies(proxies []parser.Proxy) []parser.Proxy {
+	// Simple alphabetical sort by remark
+	// TODO: Implement script-based sorting if sortScript is provided
+	sort.Slice(proxies, func(i, j int) bool {
+		return proxies[i].Remark < proxies[j].Remark
+	})
+
+	return proxies
+}
+
+// renderTemplate renders template with global variables and request context
+func (h *SubHandler) renderTemplate(content string) (string, error) {
+	return h.renderTemplateWithContext(content, nil)
+}
+
+// renderTemplateWithContext renders template with request context
+func (h *SubHandler) renderTemplateWithContext(content string, requestParams map[string]string) (string, error) {
+	// Create template data map with support for nested keys
+	data := make(map[string]interface{})
+
+	// Add global template settings directly to root (for compatibility)
+	for _, g := range config.Global.Template.Globals {
+		setNestedValue(data, g.Key, g.Value)
+	}
+
+	// Add local settings (for compatibility with inja templates)
+	if config.Global.NodePref.ClashUseNewFieldName {
+		setNestedValue(data, "local.clash.new_field_name", "true")
+	} else {
+		setNestedValue(data, "local.clash.new_field_name", "false")
+	}
+
+	// Add request parameters under "request" namespace
+	if requestParams != nil {
+		for key, value := range requestParams {
+			setNestedValue(data, "request."+key, value)
+		}
+	}
+
+	// Define template functions
+	funcMap := template.FuncMap{
+		"default": func(value interface{}, defaultValue string) string {
+			if value == nil {
+				return defaultValue
+			}
+			if str, ok := value.(string); ok {
+				if str == "" {
+					return defaultValue
+				}
+				return str
+			}
+			return defaultValue
+		},
+		"toBool": func(value interface{}) bool {
+			if value == nil {
+				return false
+			}
+			if str, ok := value.(string); ok {
+				return str == "true" || str == "1" || str == "yes"
+			}
+			if b, ok := value.(bool); ok {
+				return b
+			}
+			return false
+		},
+		"eq": func(a, b interface{}) bool {
+			return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
+		},
+		"ne": func(a, b interface{}) bool {
+			return fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b)
+		},
+		"or": func(args ...interface{}) bool {
+			for _, arg := range args {
+				if b, ok := arg.(bool); ok && b {
+					return true
+				}
+			}
+			return false
+		},
+		"and": func(args ...interface{}) bool {
+			for _, arg := range args {
+				if b, ok := arg.(bool); !ok || !b {
+					return false
+				}
+			}
+			return true
+		},
+	}
+
+	// Parse and execute template
+	tmpl, err := template.New("base").Funcs(funcMap).Parse(content)
+	if err != nil {
+		return content, fmt.Errorf("template parse error: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return content, fmt.Errorf("template execute error: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// setNestedValue sets a value in a nested map using dotted key notation
+func setNestedValue(data map[string]interface{}, key string, value string) {
+	keys := strings.Split(key, ".")
+	if len(keys) == 1 {
+		data[key] = value
+		return
+	}
+
+	// Create nested structure
+	current := data
+	for i := 0; i < len(keys)-1; i++ {
+		if _, ok := current[keys[i]]; !ok {
+			current[keys[i]] = make(map[string]interface{})
+		}
+		if nested, ok := current[keys[i]].(map[string]interface{}); ok {
+			current = nested
+		} else {
+			// Handle case where key exists but isn't a map
+			return
+		}
+	}
+	current[keys[len(keys)-1]] = value
+}
+
+// ExternalConfig represents external configuration
+type ExternalConfig struct {
+	ProxyGroups []config.ProxyGroupConfig
+	Rulesets    []config.RulesetConfig
+	BasePath    string
+}
+
+// loadExternalConfig loads external configuration from URL or file
+func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
+	// TODO: Implement full external config loading with URL fetching
+	// For now, return empty config
+	return &ExternalConfig{}, nil
+}
+
+// HandleVersion processes /version endpoint
+func (h *SubHandler) HandleVersion(c *gin.Context) {
+	c.String(http.StatusOK, "subconvergo v0.1.0 backend\n")
+}
+
+// HandleReadConf processes /readconf endpoint
+func (h *SubHandler) HandleReadConf(c *gin.Context) {
+	// Check token
+	if config.Global.Common.APIAccessToken != "" {
+		token := c.Query("token")
+		if token != config.Global.Common.APIAccessToken {
+			c.String(http.StatusForbidden, "Forbidden\n")
+			return
+		}
+	}
+
+	// Reload configuration
+	if config, err := config.LoadConfig(); err != nil {
+		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to reload config: %v\n", err))
+		return
+	} else {
+
+		c.String(http.StatusOK, "done, loaded "+config+"\n")
+	}
+
+}
+
+// HandleGetRuleset processes /getruleset endpoint
+func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
+	urlParam := c.Query("url")
+	rulesetType := c.Query("type")
+
+	if urlParam == "" || rulesetType == "" {
+		c.String(http.StatusBadRequest, "Invalid request!")
+		return
+	}
+
+	// URL decode
+	_, err := base64.URLEncoding.DecodeString(urlParam)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid URL encoding")
+		return
+	}
+
+	// TODO: Implement ruleset fetching and conversion
+	c.String(http.StatusOK, "Ruleset endpoint not yet fully implemented\n")
+}
+
+// HandleRender processes /render endpoint for template rendering
+func (h *SubHandler) HandleRender(c *gin.Context) {
+	// Check token if required
+	if config.Global.Common.APIAccessToken != "" {
+		token := c.Query("token")
+		if token != config.Global.Common.APIAccessToken {
+			c.String(http.StatusForbidden, "Forbidden\n")
+			return
+		}
+	}
+
+	// Get template path from query
+	templatePath := c.Query("path")
+	if templatePath == "" {
+		c.String(http.StatusBadRequest, "Missing template path\n")
+		return
+	}
+
+	// Resolve template path
+	if !filepath.IsAbs(templatePath) {
+		templatePath = filepath.Join(config.GetBasePath(), config.Global.Template.TemplatePath, templatePath)
+	}
+
+	// Read template file
+	data, err := os.ReadFile(templatePath)
+	if err != nil {
+		c.String(http.StatusNotFound, fmt.Sprintf("Template not found: %v\n", err))
+		return
+	}
+
+	// Render template
+	rendered, err := h.renderTemplate(string(data))
+	if err != nil {
+		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to render template: %v\n", err))
+		return
+	}
+
+	c.String(http.StatusOK, rendered)
+}
+
+// HandleGetProfile processes /getprofile endpoint
+// Loads profile configuration files and merges parameters before calling /sub
+func (h *SubHandler) HandleGetProfile(c *gin.Context) {
+	name := c.Query("name")
+	token := c.Query("token")
+
+	// Validate required parameters
+	if token == "" || name == "" {
+		c.String(http.StatusForbidden, "Forbidden")
+		return
+	}
+
+	// Support multiple profiles separated by |
+	profiles := strings.Split(name, "|")
+	if len(profiles) == 0 {
+		c.String(http.StatusForbidden, "Forbidden")
+		return
+	}
+
+	// Load first profile
+	firstProfile := profiles[0]
+
+	// Try multiple path resolutions
+	var profilePath string
+	basePath := config.GetBasePath()
+
+	// Try different path combinations
+	pathsToTry := []string{
+		firstProfile,
+		filepath.Join(basePath, firstProfile),
+		filepath.Join("base", firstProfile),
+		filepath.Join(basePath, "profiles", firstProfile+".ini"),
+		filepath.Join("base", "profiles", firstProfile+".ini"),
+		filepath.Join("profiles", firstProfile+".ini"),
+	}
+
+	for _, path := range pathsToTry {
+		if fileExists(path) {
+			profilePath = path
+			break
+		}
+	}
+
+	if profilePath == "" {
+		c.String(http.StatusNotFound, "Profile not found")
+		return
+	} // Parse first profile
+	// Load INI with custom options to preserve # in URLs
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		IgnoreInlineComment: true, // Don't treat # as inline comment
+	}, profilePath)
+	if err != nil {
+		c.String(http.StatusInternalServerError, fmt.Sprintf("Load profile failed! Reason: %v", err))
+		return
+	}
+
+	// Check if Profile section exists
+	if !cfg.HasSection("Profile") {
+		c.String(http.StatusInternalServerError, "Broken profile!")
+		return
+	}
+
+	profileSection := cfg.Section("Profile")
+	if len(profileSection.Keys()) == 0 {
+		c.String(http.StatusInternalServerError, "Broken profile!")
+		return
+	}
+
+	// Build contents map from profile
+	contents := make(map[string]string)
+	for _, key := range profileSection.Keys() {
+		contents[key.Name()] = key.String()
+	}
+
+	// Validate token
+	profileToken, hasProfileToken := contents["profile_token"]
+	if len(profiles) == 1 && hasProfileToken {
+		// Single profile with its own token
+		if token != profileToken {
+			c.String(http.StatusForbidden, "Forbidden")
+			return
+		}
+		token = config.Global.Common.APIAccessToken
+	} else {
+		// Multiple profiles or no profile token - use global token
+		if token != config.Global.Common.APIAccessToken {
+			c.String(http.StatusForbidden, "Forbidden")
+			return
+		}
+	}
+
+	// Merge URLs from all profiles
+	allURLs := []string{}
+	if urlVal, ok := contents["url"]; ok {
+		allURLs = append(allURLs, strings.Split(urlVal, "|")...)
+	}
+
+	// If multiple profiles, merge them
+	if len(profiles) > 1 {
+		for i := 1; i < len(profiles); i++ {
+			var additionalPath string
+			profileName := profiles[i]
+
+			// Try multiple path resolutions
+			if fileExists(profileName) {
+				additionalPath = profileName
+			} else if fileExists(filepath.Join("base", profileName)) {
+				additionalPath = filepath.Join("base", profileName)
+			} else if fileExists(filepath.Join(config.GetBasePath(), profileName)) {
+				additionalPath = filepath.Join(config.GetBasePath(), profileName)
+			} else {
+				continue
+			}
+
+			additionalCfg, err := ini.LoadSources(ini.LoadOptions{
+				IgnoreInlineComment: true,
+			}, additionalPath)
+			if err != nil || !additionalCfg.HasSection("Profile") {
+				continue
+			}
+
+			additionalSection := additionalCfg.Section("Profile")
+			if urlKey := additionalSection.Key("url"); urlKey != nil {
+				urlVal := urlKey.String()
+				if urlVal != "" {
+					allURLs = append(allURLs, strings.Split(urlVal, "|")...)
+				}
+			}
+		}
+	}
+
+	// Update URL in contents
+	if len(allURLs) > 0 {
+		contents["url"] = strings.Join(allURLs, "|")
+	}
+
+	// Merge rename, exclude, include from all profiles
+	allRenames := []string{}
+	allExcludes := []string{}
+	allIncludes := []string{}
+
+	if renameVal, ok := contents["rename"]; ok {
+		allRenames = append(allRenames, strings.Split(renameVal, "`")...)
+	}
+	if excludeVal, ok := contents["exclude"]; ok {
+		allExcludes = append(allExcludes, strings.Split(excludeVal, "`")...)
+	}
+	if includeVal, ok := contents["include"]; ok {
+		allIncludes = append(allIncludes, strings.Split(includeVal, "`")...)
+	}
+
+	// Merge from additional profiles
+	if len(profiles) > 1 {
+		for i := 1; i < len(profiles); i++ {
+			var additionalPath string
+			profileName := profiles[i]
+
+			// Try multiple path resolutions
+			if fileExists(profileName) {
+				additionalPath = profileName
+			} else if fileExists(filepath.Join("base", profileName)) {
+				additionalPath = filepath.Join("base", profileName)
+			} else if fileExists(filepath.Join(config.GetBasePath(), profileName)) {
+				additionalPath = filepath.Join(config.GetBasePath(), profileName)
+			} else {
+				continue
+			}
+
+			additionalCfg, err := ini.LoadSources(ini.LoadOptions{
+				IgnoreInlineComment: true,
+			}, additionalPath)
+			if err != nil || !additionalCfg.HasSection("Profile") {
+				continue
+			}
+
+			additionalSection := additionalCfg.Section("Profile")
+			if renameKey := additionalSection.Key("rename"); renameKey != nil {
+				if val := renameKey.String(); val != "" {
+					allRenames = append(allRenames, strings.Split(val, "`")...)
+				}
+			}
+			if excludeKey := additionalSection.Key("exclude"); excludeKey != nil {
+				if val := excludeKey.String(); val != "" {
+					allExcludes = append(allExcludes, strings.Split(val, "`")...)
+				}
+			}
+			if includeKey := additionalSection.Key("include"); includeKey != nil {
+				if val := includeKey.String(); val != "" {
+					allIncludes = append(allIncludes, strings.Split(val, "`")...)
+				}
+			}
+		}
+	}
+
+	// Update merged values
+	if len(allRenames) > 0 {
+		contents["rename"] = strings.Join(allRenames, "`")
+	}
+	if len(allExcludes) > 0 {
+		contents["exclude"] = strings.Join(allExcludes, "`")
+	}
+	if len(allIncludes) > 0 {
+		contents["include"] = strings.Join(allIncludes, "`")
+	}
+
+	// Add token and profile_data
+	contents["token"] = token
+
+	// Build profile_data URL
+	profileDataURL := config.Global.ManagedConfig.ManagedConfigPrefix + "/getprofile?" + c.Request.URL.RawQuery
+	contents["profile_data"] = base64.StdEncoding.EncodeToString([]byte(profileDataURL))
+
+	// Copy all original query parameters (query params override profile params)
+	for key, values := range c.Request.URL.Query() {
+		if len(values) > 0 && key != "name" {
+			contents[key] = values[0]
+		}
+	}
+
+	// Add token
+	contents["token"] = token
+
+	// Build merged params
+	params := make(map[string]string)
+	for key, value := range contents {
+		params[key] = value
+	}
+
+	// Store params in context for handleSubWithParams to use
+	c.Set("_merged_params", params)
+
+	// Forward to /sub handler
+	h.handleSubWithParams(c, params)
+}
+
+// fileExists checks if a file exists
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// applyFilters applies include/exclude filters to proxies
