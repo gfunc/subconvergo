@@ -1,15 +1,11 @@
-package parser
+package proxy
 
 import (
 	"encoding/json"
 	"fmt"
-	"log"
-	"strconv"
-	"strings"
 
-	"github.com/gfunc/subconvergo/config"
-	"github.com/metacubex/mihomo/adapter"
-	C "github.com/metacubex/mihomo/config"
+	"log"
+
 	"github.com/metacubex/mihomo/constant"
 
 	"gopkg.in/yaml.v3"
@@ -121,78 +117,4 @@ func (m *MihomoProxy) GetTUICProxy() (*TUICProxy, error) {
 		return nil, fmt.Errorf("not a tuic proxy")
 	}
 	return p, nil
-}
-
-// ParseMihomoConfig parses Clash YAML format and returns proxies
-func ParseMihomoConfig(content string) ([]ProxyInterface, []config.ProxyGroupConfig, error) {
-	// Try parsing as YAML (Clash format)
-	var clashConfig C.RawConfig
-
-	if err := yaml.Unmarshal([]byte(content), &clashConfig); err != nil {
-		return nil, nil, fmt.Errorf("failed to parse clash format: %w", err)
-	}
-
-	if len(clashConfig.Proxy) == 0 {
-		return nil, nil, fmt.Errorf("no proxies found in clash format")
-	}
-
-	var proxies []ProxyInterface
-
-	for _, proxyMap := range clashConfig.Proxy {
-		mihomoProxy, err := adapter.ParseProxy(proxyMap)
-
-		if err != nil {
-			log.Printf("failed to parse proxy in clash format: %v", err)
-			continue // Skip invalid proxies
-		}
-		addr := mihomoProxy.Addr()
-		// parse addr to server and port
-		hostPort := strings.Split(addr, ":")
-		if len(hostPort) != 2 {
-			log.Printf("invalid address format: %s", addr)
-			continue
-		}
-		server := hostPort[0]
-		port, err := strconv.Atoi(hostPort[1])
-		if err != nil {
-			log.Printf("invalid port in address: %s", addr)
-			continue
-		}
-		proxies = append(proxies, &MihomoProxy{
-			ProxyInterface: &BaseProxy{
-				Type:   mihomoProxy.Type().String(),
-				Remark: mihomoProxy.Name(),
-				Server: server,
-				Port:   port,
-			},
-			Clash:   mihomoProxy,
-			Options: proxyMap,
-		})
-	}
-	var proxyGroups []config.ProxyGroupConfig
-	for _, groupMap := range clashConfig.ProxyGroup {
-		groupBytes, err := json.Marshal(groupMap)
-		if err != nil {
-			log.Printf("failed to marshal proxy group: %v", err)
-			continue
-		}
-		var proxyGroup config.ProxyGroupConfig
-		if err := json.Unmarshal(groupBytes, &proxyGroup); err != nil {
-			log.Printf("failed to unmarshal proxy group: %v", err)
-			continue
-		}
-		if len(proxyGroup.Proxies) > 0 {
-			proxyGroup.Rule = make([]string, len(proxyGroup.Proxies))
-			for i, p := range proxyGroup.Proxies {
-				proxyGroup.Rule[i] = fmt.Sprintf("[]%s", p)
-			}
-		}
-		proxyGroups = append(proxyGroups, proxyGroup)
-	}
-
-	if len(proxies) == 0 {
-		return nil, nil, fmt.Errorf("no valid proxies in clash format")
-	}
-
-	return proxies, proxyGroups, nil
 }

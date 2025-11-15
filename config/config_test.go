@@ -73,10 +73,6 @@ advanced:
 		t.Errorf("Expected 2 include remarks, got %d", len(Global.Common.IncludeRemarks))
 	}
 
-	// Verify node_pref section
-	if !Global.NodePref.ClashUseNewFieldName {
-		t.Error("Expected ClashUseNewFieldName=true")
-	}
 	if Global.NodePref.ClashProxiesStyle != "flow" {
 		t.Errorf("Expected ClashProxiesStyle=flow, got %s", Global.NodePref.ClashProxiesStyle)
 	}
@@ -182,10 +178,6 @@ cache_ruleset = 43200
 		t.Errorf("Expected ProxyConfig=NONE, got %s", Global.Common.ProxyConfig)
 	}
 
-	// Verify node_pref section
-	if Global.NodePref.ClashUseNewFieldName {
-		t.Error("Expected ClashUseNewFieldName=false")
-	}
 	if !Global.NodePref.SortFlag {
 		t.Error("Expected SortFlag=true")
 	}
@@ -462,62 +454,6 @@ func TestGetBasePath(t *testing.T) {
 	basePath = GetBasePath()
 	if basePath != "/absolute/path" {
 		t.Errorf("Expected /absolute/path, got %s", basePath)
-	}
-}
-
-func TestBackwardCompatibilityHelpers(t *testing.T) {
-	// Reset and setup test data
-	Global = &Settings{}
-	Global.Common.APIMode = true
-	Global.Common.APIAccessToken = "test-token"
-	Global.Common.BasePath = "test-base"
-	Global.Common.DefaultURL = []string{"url1", "url2"}
-	Global.Common.ExcludeRemarks = []string{"exclude1"}
-	Global.Common.IncludeRemarks = []string{"include1"}
-	Global.Advanced.SkipFailedLinks = true
-	Global.ManagedConfig.ManagedConfigPrefix = "http://test.com"
-	Global.ManagedConfig.WriteManagedConfig = false
-	Global.ManagedConfig.ConfigUpdateInterval = 1234
-	Global.ManagedConfig.ConfigUpdateStrict = true
-	Global.NodePref.ClashUseNewFieldName = false
-	Global.Rulesets.Enabled = false
-
-	// Test helper methods
-	if !Global.GetAPIMode() {
-		t.Error("Expected GetAPIMode()=true")
-	}
-	if Global.GetAccessToken() != "test-token" {
-		t.Errorf("Expected GetAccessToken()=test-token, got %s", Global.GetAccessToken())
-	}
-	if Global.GetBasePath() != "test-base" {
-		t.Errorf("Expected GetBasePath()=test-base, got %s", Global.GetBasePath())
-	}
-	if Global.GetDefaultUrls() != "url1|url2" {
-		t.Errorf("Expected GetDefaultUrls()=url1|url2, got %s", Global.GetDefaultUrls())
-	}
-	if len(Global.GetExcludeRemarks()) != 1 {
-		t.Errorf("Expected 1 exclude remark, got %d", len(Global.GetExcludeRemarks()))
-	}
-	if !Global.GetSkipFailedLinks() {
-		t.Error("Expected GetSkipFailedLinks()=true")
-	}
-	if Global.GetManagedConfigPrefix() != "http://test.com" {
-		t.Errorf("Expected GetManagedConfigPrefix()=http://test.com, got %s", Global.GetManagedConfigPrefix())
-	}
-	if Global.GetWriteManagedConfig() {
-		t.Error("Expected GetWriteManagedConfig()=false")
-	}
-	if Global.GetUpdateInterval() != 1234 {
-		t.Errorf("Expected GetUpdateInterval()=1234, got %d", Global.GetUpdateInterval())
-	}
-	if !Global.GetUpdateStrict() {
-		t.Error("Expected GetUpdateStrict()=true")
-	}
-	if Global.GetClashUseNewField() {
-		t.Error("Expected GetClashUseNewField()=false")
-	}
-	if Global.GetEnableRuleGen() {
-		t.Error("Expected GetEnableRuleGen()=false")
 	}
 }
 

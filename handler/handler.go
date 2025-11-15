@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"text/template"
+
+	"github.com/gfunc/subconvergo/proxy"
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator"
@@ -111,8 +114,9 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	// Parse subscription URLs (support multiple URLs separated by |)
-	var allProxies []parser.ProxyInterface
+	var allProxies []proxy.ProxyInterface
 	var otherProxyGroups []config.ProxyGroupConfig
+	var rawRules []string
 	for _, url := range urlsToProcess {
 		url = strings.TrimSpace(url)
 		if url == "" {
@@ -120,31 +124,39 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		}
 		if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
 			// Parse subscription
-			proxies, groups, err := parser.ParseSubscription(url, config.Global.Common.ProxySubscription)
+			custom, err := parser.ParseSubscription(url, config.Global.Common.ProxySubscription)
 			if err != nil {
 				if !config.Global.Advanced.SkipFailedLinks {
 					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription: %v", err))
 					return
 				}
+				log.Printf("Failed to parse subscription: %s, %v", url, err)
 				continue
 			}
-			allProxies = append(allProxies, proxies...)
-			if groups != nil {
-				otherProxyGroups = append(otherProxyGroups, groups...)
+			allProxies = append(allProxies, custom.Proxies...)
+			if custom.Proxies != nil {
+				otherProxyGroups = append(otherProxyGroups, custom.Groups...)
+			}
+			if custom.RawRules != nil {
+				rawRules = append(rawRules, custom.RawRules...)
 			}
 		} else if strings.HasPrefix(url, "file://") {
 			// Parse subscription file
-			proxies, groups, err := parser.ParseSubscriptionFile(url)
+			custom, err := parser.ParseSubscriptionFile(url)
 			if err != nil {
 				if !config.Global.Advanced.SkipFailedLinks {
 					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription file: %v", err))
 					return
 				}
+				log.Printf("Failed to parse subscription file: %s, %v", url, err)
 				continue
 			}
-			allProxies = append(allProxies, proxies...)
-			if groups != nil {
-				otherProxyGroups = append(otherProxyGroups, groups...)
+			allProxies = append(allProxies, custom.Proxies...)
+			if custom.Proxies != nil {
+				otherProxyGroups = append(otherProxyGroups, custom.Groups...)
+			}
+			if custom.RawRules != nil {
+				rawRules = append(rawRules, custom.RawRules...)
 			}
 		} else {
 			parserProxy, err := parser.ParseProxyLine(url)
@@ -153,7 +165,6 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse proxy line: %v", err))
 					return
 				}
-				continue
 			}
 			allProxies = append(allProxies, parserProxy)
 		}
@@ -204,8 +215,8 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		Target:              target,
 		ProxyGroups:         proxyGroups,
 		Rulesets:            rulesets,
+		RawRules:            rawRules,
 		EnableRuleGen:       config.Global.Rulesets.Enabled,
-		ClashNewFieldName:   config.Global.NodePref.ClashUseNewFieldName,
 		ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
 		ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
 		SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
@@ -303,7 +314,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	c.Data(http.StatusOK, contentType, []byte(output))
 }
 
-func (h *SubHandler) applyFilters(proxies []parser.ProxyInterface, c *gin.Context) []parser.ProxyInterface {
+func (h *SubHandler) applyFilters(proxies []proxy.ProxyInterface, c *gin.Context) []proxy.ProxyInterface {
 	// Get filter params
 	include := c.Query("include")
 	exclude := c.Query("exclude")
@@ -323,12 +334,12 @@ func (h *SubHandler) applyFilters(proxies []parser.ProxyInterface, c *gin.Contex
 	return proxies
 }
 
-func filterProxies(proxies []parser.ProxyInterface, patterns []string, include bool) []parser.ProxyInterface {
+func filterProxies(proxies []proxy.ProxyInterface, patterns []string, include bool) []proxy.ProxyInterface {
 	if len(patterns) == 0 {
 		return proxies
 	}
 
-	var result []parser.ProxyInterface
+	var result []proxy.ProxyInterface
 	for _, proxy := range proxies {
 		match := false
 		for _, pattern := range patterns {
@@ -405,7 +416,7 @@ func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]stri
 }
 
 // applyRenameRules applies rename rules to proxy remarks
-func (h *SubHandler) applyRenameRules(proxies []parser.ProxyInterface) []parser.ProxyInterface {
+func (h *SubHandler) applyRenameRules(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
 	if len(config.Global.NodePref.RenameNodes) == 0 {
 		return proxies
 	}
@@ -449,7 +460,7 @@ func (h *SubHandler) applyRenameRules(proxies []parser.ProxyInterface) []parser.
 }
 
 // applyMatcherForRename applies special matchers for rename rules
-func (h *SubHandler) applyMatcherForRename(rule string, proxy parser.ProxyInterface) (bool, string) {
+func (h *SubHandler) applyMatcherForRename(rule string, proxy proxy.ProxyInterface) (bool, string) {
 	// Similar to generator's applyMatcher but for rename context
 
 	// Handle !!GROUP= matcher
@@ -556,7 +567,7 @@ func (h *SubHandler) matchRange(pattern string, value int) bool {
 }
 
 // applyEmojiRules applies emoji rules to proxy remarks
-func (h *SubHandler) applyEmojiRules(proxies []parser.ProxyInterface) []parser.ProxyInterface {
+func (h *SubHandler) applyEmojiRules(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
 	if len(config.Global.Emojis.Rules) == 0 {
 		return proxies
 	}
@@ -612,7 +623,7 @@ func removeEmoji(s string) string {
 }
 
 // sortProxies sorts proxies based on configuration
-func (h *SubHandler) sortProxies(proxies []parser.ProxyInterface) []parser.ProxyInterface {
+func (h *SubHandler) sortProxies(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
 	// Simple alphabetical sort by remark
 	// TODO: Implement script-based sorting if sortScript is provided
 	sort.Slice(proxies, func(i, j int) bool {
@@ -635,13 +646,6 @@ func (h *SubHandler) renderTemplateWithContext(content string, requestParams map
 	// Add global template settings directly to root (for compatibility)
 	for _, g := range config.Global.Template.Globals {
 		setNestedValue(data, g.Key, g.Value)
-	}
-
-	// Add local settings (for compatibility with inja templates)
-	if config.Global.NodePref.ClashUseNewFieldName {
-		setNestedValue(data, "local.clash.new_field_name", "true")
-	} else {
-		setNestedValue(data, "local.clash.new_field_name", "false")
 	}
 
 	// Add request parameters under "request" namespace

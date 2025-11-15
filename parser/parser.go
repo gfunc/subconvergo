@@ -22,6 +22,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+
+	"gopkg.in/yaml.v3"
+
 	"io"
 	"log"
 	"net/http"
@@ -33,43 +36,51 @@ import (
 	"time"
 
 	"github.com/gfunc/subconvergo/config"
+	"github.com/gfunc/subconvergo/proxy"
 	"github.com/metacubex/mihomo/adapter"
+	C "github.com/metacubex/mihomo/config"
 )
 
+type CustomContent struct {
+	Proxies  []proxy.ProxyInterface
+	Groups   []config.ProxyGroupConfig
+	RawRules []string
+}
+
 // ParseSubscription parses a subscription URL and returns proxy list
-func ParseSubscription(subURL string, proxy string) ([]ProxyInterface, []config.ProxyGroupConfig, error) {
+func ParseSubscription(subURL string, proxy string) (*CustomContent, error) {
 	// Fetch subscription content
 	content, err := fetchSubscription(subURL, proxy)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to fetch subscription: %w", err)
+		return nil, fmt.Errorf("failed to fetch subscription: %w", err)
 	}
 
 	// Try to detect subscription format and parse
-	proxies, groups, err := parseContent(content)
+	custom, err := parseContent(content)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse subscription: %w", err)
+		return nil, fmt.Errorf("failed to parse subscription: %w", err)
 	}
 
-	return proxies, groups, nil
+	return custom, nil
 }
 
 // ParseSubscriptionFile parses a file url like "file://xxxx.yaml" returns proxy list
-func ParseSubscriptionFile(subURL string) ([]ProxyInterface, []config.ProxyGroupConfig, error) {
+func ParseSubscriptionFile(subURL string) (*CustomContent, error) {
 	// get file path
 	filePath := strings.TrimPrefix(subURL, "file://")
 	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read subscription file: %w", err)
+		return nil, fmt.Errorf("failed to read subscription file: %w", err)
 	}
 
 	// Try to detect subscription format and parse
-	proxies, groups, err := parseContent(string(content))
+	custom, err := parseContent(string(content))
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse subscription: %w", err)
+		return nil, fmt.Errorf("failed to parse subscription: %w", err)
 	}
 
-	return proxies, groups, nil
+	return custom, nil
 }
 
 func fetchSubscription(subURL string, proxy string) (string, error) {
@@ -105,14 +116,14 @@ func fetchSubscription(subURL string, proxy string) (string, error) {
 	return string(body), nil
 }
 
-func parseContent(content string) ([]ProxyInterface, []config.ProxyGroupConfig, error) {
+func parseContent(content string) (*CustomContent, error) {
 	// Try base64 decode first (standard subscription format)
 	decoded, err := base64.StdEncoding.DecodeString(content)
 	if err == nil {
 		content = string(decoded)
 	}
 
-	var proxies []ProxyInterface
+	var proxies []proxy.ProxyInterface
 	lines := strings.Split(content, "\n")
 
 	for _, line := range lines {
@@ -122,23 +133,27 @@ func parseContent(content string) ([]ProxyInterface, []config.ProxyGroupConfig, 
 		}
 
 		// Parse different proxy formats
-		proxy, err := ParseProxyLine(line)
+		p, err := ParseProxyLine(line)
 		if err != nil {
 			// Try parsing as YAML/JSON (Clash format)
-			if clashProxies, clashProxyGroups, err := ParseMihomoConfig(content); err == nil {
-				return clashProxies, clashProxyGroups, nil
+			if custom, err := ParseMihomoConfig(content); err == nil {
+				return custom, nil
+			}else{
+				log.Printf("Failed to parse line as proxy or mihomo config: %s, %v", line, err)
+				break
 			}
-			continue
 		}
 
-		proxies = append(proxies, proxy)
+		proxies = append(proxies, p)
 	}
 
 	if len(proxies) == 0 {
-		return nil, nil, fmt.Errorf("no valid proxies found")
+		return nil, fmt.Errorf("no valid proxies found")
 	}
 
-	return proxies, nil, nil
+	return &CustomContent{
+		Proxies: proxies,
+	}, nil
 }
 
 // Helper functions for URL encoding/decoding
@@ -171,23 +186,6 @@ func urlSafeBase64Decode(s string) string {
 	return string(decoded)
 }
 
-func parsePluginOpts(opts string) map[string]interface{} {
-	result := make(map[string]interface{})
-	pairs := strings.Split(opts, ";")
-	for _, pair := range pairs {
-		if pair == "" {
-			continue
-		}
-		kv := strings.SplitN(pair, "=", 2)
-		if len(kv) == 2 {
-			result[kv[0]] = kv[1]
-		} else {
-			result[kv[0]] = "true"
-		}
-	}
-	return result
-}
-
 // ProcessRemark ensures unique remarks by appending _N suffix for duplicates
 func ProcessRemark(remark string, existingRemarks map[string]int) string {
 	if count, exists := existingRemarks[remark]; exists {
@@ -200,7 +198,7 @@ func ProcessRemark(remark string, existingRemarks map[string]int) string {
 }
 
 // ParseProxyLine parses a proxy line and returns a ProxyInterface
-func ParseProxyLine(line string) (SubconverterProxy, error) {
+func ParseProxyLine(line string) (proxy.SubconverterProxy, error) {
 	if strings.HasPrefix(line, "ss://") {
 		return parseShadowsocks(line)
 	} else if strings.HasPrefix(line, "ssr://") {
@@ -226,7 +224,7 @@ func ParseProxyLine(line string) (SubconverterProxy, error) {
 	return nil, fmt.Errorf("unsupported proxy protocol: %s", protocol)
 }
 
-func parseShadowsocks(line string) (SubconverterProxy, error) {
+func parseShadowsocks(line string) (proxy.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "ss://") {
 		return nil, fmt.Errorf("not a valid ss:// link")
@@ -335,8 +333,8 @@ func parseShadowsocks(line string) (SubconverterProxy, error) {
 		group = "SS"
 	}
 
-	proxy := &ShadowsocksProxy{
-		BaseProxy: BaseProxy{
+	p := &proxy.ShadowsocksProxy{
+		BaseProxy: proxy.BaseProxy{
 			Type:   "ss",
 			Remark: remark,
 			Server: server,
@@ -349,20 +347,20 @@ func parseShadowsocks(line string) (SubconverterProxy, error) {
 		PluginOpts:    pluginOpts,
 	}
 
-	mihomoProxy, err := adapter.ParseProxy(proxy.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
 	if err != nil {
-		return proxy, nil
+		return p, nil
 	} else {
-		return &MihomoProxy{
-			ProxyInterface: proxy,
+		return &proxy.MihomoProxy{
+			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        proxy.ProxyOptions(),
+			Options:        p.ProxyOptions(),
 		}, nil
 	}
 
 }
 
-func parseShadowsocksR(line string) (SubconverterProxy, error) {
+func parseShadowsocksR(line string) (proxy.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "ssr://") {
 		return nil, fmt.Errorf("not a valid ssr:// link")
@@ -420,10 +418,10 @@ func parseShadowsocksR(line string) (SubconverterProxy, error) {
 			break
 		}
 	}
-	var proxy *ShadowsocksRProxy
+	var p *proxy.ShadowsocksRProxy
 	if isSS {
-		proxy = &ShadowsocksRProxy{
-			BaseProxy: BaseProxy{
+		p = &proxy.ShadowsocksRProxy{
+			BaseProxy: proxy.BaseProxy{
 				Type:   "ss",
 				Remark: remarks,
 				Server: server,
@@ -437,8 +435,8 @@ func parseShadowsocksR(line string) (SubconverterProxy, error) {
 
 	}
 
-	proxy = &ShadowsocksRProxy{
-		BaseProxy: BaseProxy{
+	p = &proxy.ShadowsocksRProxy{
+		BaseProxy: proxy.BaseProxy{
 			Type:   "ssr",
 			Remark: remarks,
 			Server: server,
@@ -452,20 +450,20 @@ func parseShadowsocksR(line string) (SubconverterProxy, error) {
 		Obfs:          obfs,
 		ObfsParam:     obfsParam,
 	}
-	mihomoProxy, err := adapter.ParseProxy(proxy.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
-		return proxy, nil
+		return p, nil
 	} else {
-		return &MihomoProxy{
-			ProxyInterface: proxy,
+		return &proxy.MihomoProxy{
+			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        proxy.ProxyOptions(),
+			Options:        p.ProxyOptions(),
 		}, nil
 	}
 }
 
-func parseVMess(line string) (SubconverterProxy, error) {
+func parseVMess(line string) (proxy.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "vmess://") {
 		return nil, fmt.Errorf("not a valid vmess:// link")
@@ -519,8 +517,8 @@ func parseVMess(line string) (SubconverterProxy, error) {
 		}
 	}
 
-	proxy := &VMessProxy{
-		BaseProxy: BaseProxy{
+	p := &proxy.VMessProxy{
+		BaseProxy: proxy.BaseProxy{
 			Type:   "vmess",
 			Remark: ps,
 			Server: add,
@@ -535,21 +533,21 @@ func parseVMess(line string) (SubconverterProxy, error) {
 		TLS:     tls == "tls",
 		SNI:     sni,
 	}
-	mihomoProxy, err := adapter.ParseProxy(proxy.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
-		return proxy, nil
+		return p, nil
 	} else {
-		return &MihomoProxy{
-			ProxyInterface: proxy,
+		return &proxy.MihomoProxy{
+			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        proxy.ProxyOptions(),
+			Options:        p.ProxyOptions(),
 		}, nil
 	}
 
 }
 
-func parseTrojan(line string) (SubconverterProxy, error) {
+func parseTrojan(line string) (proxy.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "trojan://") {
 		return nil, fmt.Errorf("not a valid trojan:// link")
@@ -622,8 +620,8 @@ func parseTrojan(line string) (SubconverterProxy, error) {
 		group = "Trojan"
 	}
 
-	proxy := &TrojanProxy{
-		BaseProxy: BaseProxy{
+	p := &proxy.TrojanProxy{
+		BaseProxy: proxy.BaseProxy{
 			Type:   "trojan",
 			Remark: remark,
 			Server: server,
@@ -637,21 +635,21 @@ func parseTrojan(line string) (SubconverterProxy, error) {
 		TLS:           true, // Trojan always uses TLS
 		AllowInsecure: allowInsecure,
 	}
-	mihomoProxy, err := adapter.ParseProxy(proxy.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
 
-		return proxy, nil
+		return p, nil
 	} else {
-		return &MihomoProxy{
-			ProxyInterface: proxy,
+		return &proxy.MihomoProxy{
+			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        proxy.ProxyOptions(),
+			Options:        p.ProxyOptions(),
 		}, nil
 	}
 }
 
-func parseVLESS(line string) (SubconverterProxy, error) {
+func parseVLESS(line string) (proxy.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "vless://") {
 		return nil, fmt.Errorf("not a valid vless:// link")
@@ -728,8 +726,8 @@ func parseVLESS(line string) (SubconverterProxy, error) {
 		group = "VLESS"
 	}
 
-	proxy := &VLESSProxy{
-		BaseProxy: BaseProxy{
+	p := &proxy.VLESSProxy{
+		BaseProxy: proxy.BaseProxy{
 			Type:   "vless",
 			Remark: remark,
 			Server: server,
@@ -745,21 +743,21 @@ func parseVLESS(line string) (SubconverterProxy, error) {
 		Flow:          flow,
 		SNI:           sni,
 	}
-	mihomoProxy, err := adapter.ParseProxy(proxy.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
-		return proxy, nil
+		return p, nil
 	} else {
-		return &MihomoProxy{
-			ProxyInterface: proxy,
+		return &proxy.MihomoProxy{
+			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        proxy.ProxyOptions(),
+			Options:        p.ProxyOptions(),
 		}, nil
 	}
 
 }
 
-func parseHysteria(line string) (SubconverterProxy, error) {
+func parseHysteria(line string) (proxy.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 
 	var protocol string
@@ -821,8 +819,8 @@ func parseHysteria(line string) (SubconverterProxy, error) {
 		remark = server + ":" + port
 	}
 
-	proxy := &HysteriaProxy{
-		BaseProxy: BaseProxy{
+	p := &proxy.HysteriaProxy{
+		BaseProxy: proxy.BaseProxy{
 			Type:   protocol,
 			Remark: remark,
 			Server: server,
@@ -834,20 +832,20 @@ func parseHysteria(line string) (SubconverterProxy, error) {
 		AllowInsecure: insecure,
 		Params:        params,
 	}
-	mihomoProxy, err := adapter.ParseProxy(proxy.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
-		return proxy, nil
+		return p, nil
 	} else {
-		return &MihomoProxy{
-			ProxyInterface: proxy,
+		return &proxy.MihomoProxy{
+			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        proxy.ProxyOptions(),
+			Options:        p.ProxyOptions(),
 		}, nil
 	}
 }
 
-func parseTUIC(line string) (SubconverterProxy, error) {
+func parseTUIC(line string) (proxy.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "tuic://") {
 		return nil, fmt.Errorf("not a valid tuic link")
@@ -903,8 +901,8 @@ func parseTUIC(line string) (SubconverterProxy, error) {
 		remark = server + ":" + port
 	}
 
-	proxy := &TUICProxy{
-		BaseProxy: BaseProxy{
+	p := &proxy.TUICProxy{
+		BaseProxy: proxy.BaseProxy{
 			Type:   "tuic",
 			Remark: remark,
 			Server: server,
@@ -916,15 +914,103 @@ func parseTUIC(line string) (SubconverterProxy, error) {
 		AllowInsecure: insecure,
 		Params:        params,
 	}
-	mihomoProxy, err := adapter.ParseProxy(proxy.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
-		return proxy, nil
+		return p, nil
 	} else {
-		return &MihomoProxy{
-			ProxyInterface: proxy,
+		return &proxy.MihomoProxy{
+			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        proxy.ProxyOptions(),
+			Options:        p.ProxyOptions(),
 		}, nil
 	}
+}
+
+// ParseMihomoConfig parses Clash YAML format and returns proxies
+func ParseMihomoConfig(content string) (*CustomContent, error) {
+	// Try parsing as YAML (Clash format)
+	var clashConfig C.RawConfig
+
+	if err := yaml.Unmarshal([]byte(content), &clashConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse clash format: %w", err)
+	}
+
+	if len(clashConfig.Proxy) == 0 {
+		return nil, fmt.Errorf("no proxies found in clash format")
+	}
+	custom := &CustomContent{Proxies: make([]proxy.ProxyInterface, 0)}
+
+	for _, proxyMap := range clashConfig.Proxy {
+		mihomoProxy, err := adapter.ParseProxy(proxyMap)
+
+		if err != nil {
+			log.Printf("failed to parse proxy in clash format: %v", err)
+			continue // Skip invalid proxies
+		}
+		addr := mihomoProxy.Addr()
+		// parse addr to server and port
+		hostPort := strings.Split(addr, ":")
+		if len(hostPort) != 2 {
+			log.Printf("invalid address format: %s", addr)
+			continue
+		}
+		server := hostPort[0]
+		port, err := strconv.Atoi(hostPort[1])
+		if err != nil {
+			log.Printf("invalid port in address: %s", addr)
+			continue
+		}
+		custom.Proxies = append(custom.Proxies, &proxy.MihomoProxy{
+			ProxyInterface: &proxy.BaseProxy{
+				Type:   mihomoProxy.Type().String(),
+				Remark: mihomoProxy.Name(),
+				Server: server,
+				Port:   port,
+			},
+			Clash:   mihomoProxy,
+			Options: proxyMap,
+		})
+	}
+	custom.Groups = make([]config.ProxyGroupConfig, 0)
+	for _, groupMap := range clashConfig.ProxyGroup {
+		groupBytes, err := json.Marshal(groupMap)
+		if err != nil {
+			log.Printf("failed to marshal proxy group: %v", err)
+			continue
+		}
+		var proxyGroup config.ProxyGroupConfig
+		if err := json.Unmarshal(groupBytes, &proxyGroup); err != nil {
+			log.Printf("failed to unmarshal proxy group: %v", err)
+			continue
+		}
+		if len(proxyGroup.Proxies) > 0 {
+			proxyGroup.Rule = make([]string, len(proxyGroup.Proxies))
+			for i, p := range proxyGroup.Proxies {
+				proxyGroup.Rule[i] = fmt.Sprintf("[]%s", p)
+			}
+		}
+		custom.Groups = append(custom.Groups, proxyGroup)
+	}
+
+	if len(custom.Proxies) == 0 {
+		return nil, fmt.Errorf("no valid proxies in clash format")
+	}
+
+	custom.RawRules = clashConfig.Rule
+	return custom, nil
+}
+
+func getStringField(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		switch val := v.(type) {
+		case string:
+			return val
+		case float64:
+			return strconv.FormatFloat(val, 'f', -1, 64)
+		case int:
+			return strconv.Itoa(val)
+		}
+	}
+	return ""
 }

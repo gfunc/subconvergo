@@ -13,8 +13,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gfunc/subconvergo/proxy"
+
 	"github.com/gfunc/subconvergo/config"
-	"github.com/gfunc/subconvergo/parser"
+	C "github.com/metacubex/mihomo/config"
 	R "github.com/metacubex/mihomo/rules"
 	RC "github.com/metacubex/mihomo/rules/common"
 	"gopkg.in/yaml.v3"
@@ -25,9 +27,9 @@ type GeneratorOptions struct {
 	Target              string
 	ProxyGroups         []config.ProxyGroupConfig
 	Rulesets            []config.RulesetConfig
+	RawRules            []string
 	AppendProxyType     bool
 	EnableRuleGen       bool
-	ClashNewFieldName   bool
 	ClashProxiesStyle   string
 	ClashGroupsStyle    string
 	SingBoxAddClashMode bool
@@ -39,7 +41,7 @@ type GeneratorOptions struct {
 }
 
 // Generate converts proxies to target format
-func Generate(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
+func Generate(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	switch opts.Target {
 	case "clash", "clashr":
 		return generateClash(proxies, opts, baseConfig)
@@ -58,46 +60,44 @@ func Generate(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig
 	}
 }
 
-func generateClash(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateClash(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	// Parse base configuration
-	var base = make(map[string]interface{})
+	var base = C.RawConfig{}
 	if err := yaml.Unmarshal([]byte(baseConfig), &base); err != nil {
 		return "", fmt.Errorf("failed to parse base config: %w", err)
 	}
 	// Convert proxies to Clash format
 	var clashProxies []map[string]interface{}
-	for _, proxy := range proxies {
-		switch c := proxy.(type) {
-		case *parser.MihomoProxy:
+	for _, p := range proxies {
+		switch c := p.(type) {
+		case *proxy.MihomoProxy:
 			clashProxies = append(clashProxies, c.ProxyOptions())
-		case parser.SubconverterProxy:
+		case proxy.SubconverterProxy:
 			clashProxies = append(clashProxies, c.ProxyOptions())
 		default:
-			log.Printf("unsupported proxy type for clash generation: %T", proxy)
+			log.Printf("unsupported proxy type for clash generation: %T", p)
 		}
 	}
 
 	// Set proxies field name based on Clash version
-	proxiesKey := "proxies"
-	if !opts.ClashNewFieldName {
-		proxiesKey = "Proxy"
-	}
-	base[proxiesKey] = clashProxies
+	base.Proxy = clashProxies
 
 	// Generate proxy groups
 	if len(opts.ProxyGroups) > 0 {
 		proxyGroups := generateClashProxyGroups(proxies, opts.ProxyGroups, opts)
-		groupsKey := "proxy-groups"
-		if !opts.ClashNewFieldName {
-			groupsKey = "Proxy Group"
-		}
-		base[groupsKey] = proxyGroups
+		base.ProxyGroup = proxyGroups
 	}
 
 	// Generate rules if enabled
-	if opts.EnableRuleGen && len(opts.Rulesets) > 0 {
-		rules := generateClashRules(opts.Rulesets)
-		base["rules"] = rules
+	if opts.EnableRuleGen {
+		allRules := make([]string, 0)
+		if len(opts.RawRules) > 0 {
+			allRules = append(allRules, opts.RawRules...)
+		}
+		if len(opts.Rulesets) > 0 {
+			allRules = append(allRules, generateClashRules(opts.Rulesets)...)
+		}
+		base.Rule = allRules
 	}
 
 	// Marshal back to YAML
@@ -109,7 +109,7 @@ func generateClash(proxies []parser.ProxyInterface, opts GeneratorOptions, baseC
 	return string(output), nil
 }
 
-func generateClashProxyGroups(proxies []parser.ProxyInterface, groups []config.ProxyGroupConfig, opts GeneratorOptions) []map[string]interface{} {
+func generateClashProxyGroups(proxies []proxy.ProxyInterface, groups []config.ProxyGroupConfig, opts GeneratorOptions) []map[string]interface{} {
 	var result []map[string]interface{}
 
 	for _, group := range groups {
@@ -167,7 +167,7 @@ func generateClashProxyGroups(proxies []parser.ProxyInterface, groups []config.P
 // applyMatcher checks if a proxy matches a rule pattern
 // Supports special matchers: !!GROUP=, !!GROUPID=, !!TYPE=, !!PORT=, !!SERVER=
 // Returns true if the proxy matches, and extracts the real regex pattern if present
-func applyMatcher(rule string, proxy parser.ProxyInterface) (bool, string) {
+func applyMatcher(rule string, proxy proxy.ProxyInterface) (bool, string) {
 	// Handle special [] syntax for direct/reject nodes
 	if strings.HasPrefix(rule, "[]") {
 		return false, rule[2:]
@@ -297,7 +297,7 @@ func matchRange(pattern string, value int) bool {
 
 // filterProxiesByRules filters proxies based on rule patterns
 // Supports regex matching and special matchers
-func filterProxiesByRules(proxies []parser.ProxyInterface, rules []string) []string {
+func filterProxiesByRules(proxies []proxy.ProxyInterface, rules []string) []string {
 	var result []string
 	seen := make(map[string]bool)
 
@@ -448,7 +448,10 @@ func convertRulesetToClash(content string) []string {
 			line = regexp.MustCompile(`^(?i:host-suffix)`).ReplaceAllString(line, "DOMAIN-SUFFIX")
 			line = regexp.MustCompile(`^(?i:host-keyword)`).ReplaceAllString(line, "DOMAIN-KEYWORD")
 			line = regexp.MustCompile(`^(?i:ip6-cidr)`).ReplaceAllString(line, "IP-CIDR6")
-
+			// remove // comments at end of line
+			if idx := strings.Index(line, "//"); idx != -1 {
+				line = strings.TrimSpace(line[:idx])
+			}
 			rules = append(rules, line)
 		}
 	}
@@ -503,10 +506,14 @@ func generateClashRules(rulesets []config.RulesetConfig) []string {
 				// Append group if not already present
 				if !strings.Contains(r, ","+ruleset.Group) && ruleset.Group != "" {
 					// Count commas to determine where to add group
+
 					parts := strings.Split(r, ",")
-					if len(parts) >= 2 {
+					if len(parts) == 2 {
 						// Add group as last parameter
 						r = r + "," + ruleset.Group
+					}	else if len(parts) > 2 {
+						// Insert group before last parameter
+						r = strings.Join(parts[:len(parts)-1], ",") + "," + ruleset.Group + "," + parts[len(parts)-1]
 					}
 				}
 				if validateClashRule(r) {
@@ -535,7 +542,7 @@ func validateClashRule(rule string) bool {
 	return false
 }
 
-func generateSurge(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateSurge(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	var output strings.Builder
 
 	// Add base configuration
@@ -577,7 +584,7 @@ func generateSurge(proxies []parser.ProxyInterface, opts GeneratorOptions, baseC
 	return output.String(), nil
 }
 
-func convertToSurge(proxy parser.ProxyInterface, opts GeneratorOptions) string {
+func convertToSurge(proxy proxy.ProxyInterface, opts GeneratorOptions) string {
 	var parts []string
 	parts = append(parts, proxy.GetRemark())
 
@@ -634,7 +641,7 @@ func convertToSurge(proxy parser.ProxyInterface, opts GeneratorOptions) string {
 	return strings.Join(parts, ", ")
 }
 
-func convertGroupToSurge(group config.ProxyGroupConfig, proxies []parser.ProxyInterface) string {
+func convertGroupToSurge(group config.ProxyGroupConfig, proxies []proxy.ProxyInterface) string {
 	var parts []string
 	parts = append(parts, group.Name)
 	parts = append(parts, strings.ToLower(group.Type))
@@ -663,7 +670,7 @@ func convertGroupToSurge(group config.ProxyGroupConfig, proxies []parser.ProxyIn
 	return strings.Join(parts, ", ")
 }
 
-func generateQuantumultX(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateQuantumultX(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	var output strings.Builder
 
 	// Add base configuration
@@ -704,7 +711,7 @@ func generateQuantumultX(proxies []parser.ProxyInterface, opts GeneratorOptions,
 	return output.String(), nil
 }
 
-func convertToQuantumultX(proxy parser.ProxyInterface, opts GeneratorOptions) string {
+func convertToQuantumultX(proxy proxy.ProxyInterface, opts GeneratorOptions) string {
 	var parts []string
 
 	switch proxy.GetType() {
@@ -756,7 +763,7 @@ func convertToQuantumultX(proxy parser.ProxyInterface, opts GeneratorOptions) st
 	return strings.Join(parts, ", ")
 }
 
-func convertGroupToQuantumultX(group config.ProxyGroupConfig, proxies []parser.ProxyInterface) string {
+func convertGroupToQuantumultX(group config.ProxyGroupConfig, proxies []proxy.ProxyInterface) string {
 	groupType := strings.ToLower(group.Type)
 	if groupType == "select" {
 		groupType = "static"
@@ -780,7 +787,7 @@ func convertGroupToQuantumultX(group config.ProxyGroupConfig, proxies []parser.P
 	return strings.Join(parts, ", ")
 }
 
-func generateLoon(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateLoon(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	// Loon format is very similar to Surge
 	var output strings.Builder
 
@@ -821,7 +828,7 @@ func generateLoon(proxies []parser.ProxyInterface, opts GeneratorOptions, baseCo
 	return output.String(), nil
 }
 
-func convertGroupToLoon(group config.ProxyGroupConfig, proxies []parser.ProxyInterface) string {
+func convertGroupToLoon(group config.ProxyGroupConfig, proxies []proxy.ProxyInterface) string {
 	var parts []string
 	parts = append(parts, group.Name)
 	parts = append(parts, "=")
@@ -840,7 +847,7 @@ func convertGroupToLoon(group config.ProxyGroupConfig, proxies []parser.ProxyInt
 	return strings.Join(parts, ",")
 }
 
-func generateSingBox(proxies []parser.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
+func generateSingBox(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
 	// Parse base configuration as JSON
 	var base map[string]interface{}
 	if err := json.Unmarshal([]byte(baseConfig), &base); err != nil {
@@ -896,7 +903,7 @@ func generateSingBox(proxies []parser.ProxyInterface, opts GeneratorOptions, bas
 	return string(output), nil
 }
 
-func convertToSingBox(proxy parser.ProxyInterface, opts GeneratorOptions) map[string]interface{} {
+func convertToSingBox(proxy proxy.ProxyInterface, opts GeneratorOptions) map[string]interface{} {
 	outbound := map[string]interface{}{
 		"tag":         proxy.GetRemark(),
 		"type":        proxy.GetType(),
@@ -963,21 +970,21 @@ func generateSingBoxRules(rulesets []config.RulesetConfig) []map[string]interfac
 	return rules
 }
 
-func generateSingle(proxies []parser.ProxyInterface, format string) (string, error) {
+func generateSingle(proxies []proxy.ProxyInterface, format string) (string, error) {
 	// Generate simple subscription (base64 encoded links)
 	var lines []string
-	for _, proxy := range proxies {
+	for _, p := range proxies {
 		// if SubconverterProxy
-		if mixin, ok := proxy.(parser.SubconverterProxy); ok {
+		if mixin, ok := p.(proxy.SubconverterProxy); ok {
 
 			// Only include proxies matching the requested format
-			if format == "v2ray" && (proxy.GetType() == "vmess" || proxy.GetType() == "vless") {
+			if format == "v2ray" && (p.GetType() == "vmess" || p.GetType() == "vless") {
 				link, err := mixin.GenerateLink()
 				if err != nil {
 					log.Panicln(`Failed to generate link for proxy:`, err)
 				}
 				lines = append(lines, link)
-			} else if format == proxy.GetType() {
+			} else if format == p.GetType() {
 				link, err := mixin.GenerateLink()
 				if err != nil {
 					log.Panicln(`Failed to generate link for proxy:`, err)

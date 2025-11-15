@@ -10,15 +10,9 @@ dns:
   enable: true
   listen: :1053
 {{end}}
-{{if eq .local.clash.new_field_name "true"}}
 proxies: ~
 proxy-groups: ~
 rules: ~
-{{else}}
-Proxy: ~
-Proxy Group: ~
-Rule: ~
-{{end}}
 {{end}}
 
 {{if eq .request.target "surge"}}

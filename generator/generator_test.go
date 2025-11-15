@@ -3,21 +3,21 @@ package generator
 import (
 	"testing"
 
-	"github.com/gfunc/subconvergo/parser"
+	"github.com/gfunc/subconvergo/proxy"
 )
 
 func TestApplyMatcher(t *testing.T) {
 	tests := []struct {
 		name     string
 		rule     string
-		proxy    *parser.BaseProxy
+		proxy    *proxy.BaseProxy
 		expected bool
 		realRule string
 	}{
 		{
 			name: "GROUP matcher - match",
 			rule: "!!GROUP=US!!.*",
-			proxy: &parser.BaseProxy{
+			proxy: &proxy.BaseProxy{
 				Remark: "US Node 1",
 				Group:  "US Premium",
 			},
@@ -27,7 +27,7 @@ func TestApplyMatcher(t *testing.T) {
 		{
 			name: "GROUP matcher - no match",
 			rule: "!!GROUP=HK!!.*",
-			proxy: &parser.BaseProxy{
+			proxy: &proxy.BaseProxy{
 				Remark: "US Node 1",
 				Group:  "US Premium",
 			},
@@ -37,7 +37,7 @@ func TestApplyMatcher(t *testing.T) {
 		{
 			name: "TYPE matcher - shadowsocks",
 			rule: "!!TYPE=SS|VMess!!.*",
-			proxy: &parser.BaseProxy{
+			proxy: &proxy.BaseProxy{
 				Remark: "Test Node",
 				Type:   "ss",
 			},
@@ -47,7 +47,7 @@ func TestApplyMatcher(t *testing.T) {
 		{
 			name: "PORT matcher - range",
 			rule: "!!PORT=443!!.*",
-			proxy: &parser.BaseProxy{
+			proxy: &proxy.BaseProxy{
 				Remark: "Test Node",
 				Port:   443,
 			},
@@ -57,7 +57,7 @@ func TestApplyMatcher(t *testing.T) {
 		{
 			name: "SERVER matcher",
 			rule: "!!SERVER=example\\.com!!.*",
-			proxy: &parser.BaseProxy{
+			proxy: &proxy.BaseProxy{
 				Remark: "Test Node",
 				Server: "example.com",
 			},
@@ -67,7 +67,7 @@ func TestApplyMatcher(t *testing.T) {
 		{
 			name: "Direct node []",
 			rule: "[]DIRECT",
-			proxy: &parser.BaseProxy{
+			proxy: &proxy.BaseProxy{
 				Remark: "Test Node",
 			},
 			expected: false,
@@ -76,7 +76,7 @@ func TestApplyMatcher(t *testing.T) {
 		{
 			name: "No matcher - pass through",
 			rule: "US.*",
-			proxy: &parser.BaseProxy{
+			proxy: &proxy.BaseProxy{
 				Remark: "US Node 1",
 			},
 			expected: true,
@@ -125,12 +125,12 @@ func TestMatchRange(t *testing.T) {
 }
 
 func TestFilterProxiesByRules(t *testing.T) {
-	proxies := []parser.ProxyInterface{
-		&parser.BaseProxy{Type: "ss", Remark: "US Node 1", Server: "us1.example.com", Port: 443, Group: "US"},
-		&parser.BaseProxy{Type: "ss", Remark: "US Node 2", Server: "us2.example.com", Port: 8080, Group: "US"},
-		&parser.BaseProxy{Type: "vmess", Remark: "HK Node 1", Server: "hk1.example.com", Port: 443, Group: "HK"},
-		&parser.BaseProxy{Type: "trojan", Remark: "JP Node 1", Server: "jp1.example.com", Port: 443, Group: "JP"},
-		&parser.BaseProxy{Type: "trojan", Remark: "SG Node 1", Server: "sg1.example.com", Port: 8388, Group: "SG"},
+	proxies := []proxy.ProxyInterface{
+		&proxy.BaseProxy{Type: "ss", Remark: "US Node 1", Server: "us1.example.com", Port: 443, Group: "US"},
+		&proxy.BaseProxy{Type: "ss", Remark: "US Node 2", Server: "us2.example.com", Port: 8080, Group: "US"},
+		&proxy.BaseProxy{Type: "vmess", Remark: "HK Node 1", Server: "hk1.example.com", Port: 443, Group: "HK"},
+		&proxy.BaseProxy{Type: "trojan", Remark: "JP Node 1", Server: "jp1.example.com", Port: 443, Group: "JP"},
+		&proxy.BaseProxy{Type: "trojan", Remark: "SG Node 1", Server: "sg1.example.com", Port: 8388, Group: "SG"},
 	}
 
 	tests := []struct {

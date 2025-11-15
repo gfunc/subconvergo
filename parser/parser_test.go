@@ -3,6 +3,8 @@ package parser
 import (
 	"strings"
 	"testing"
+
+	P "github.com/gfunc/subconvergo/proxy"
 )
 
 // TestProxyInterfaceGenerateLink tests that GenerateLink works correctly for all proxy types
@@ -165,12 +167,12 @@ func TestVMessProxyGenerateLink(t *testing.T) {
 		t.Errorf("Generated link cannot be parsed back: %v", err)
 	}
 
-	proxyVMess, err := proxy.(*MihomoProxy).GetVmessProxy()
+	proxyVMess, err := proxy.(*P.MihomoProxy).GetVmessProxy()
 	if err != nil {
 		t.Fatalf("proxy is not of type *VMessProxy")
 	}
 
-	proxy2VMess, err := proxy2.(*MihomoProxy).GetVmessProxy()
+	proxy2VMess, err := proxy2.(*P.MihomoProxy).GetVmessProxy()
 	if err != nil {
 		t.Fatalf("proxy2 is not of type *VMessProxy")
 	}

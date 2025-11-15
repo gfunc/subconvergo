@@ -82,7 +82,6 @@ type NodePrefConfig struct {
 	SortScript            string             `yaml:"sort_script" toml:"sort_script" ini:"sort_script"`
 	FilterDeprecatedNodes bool               `yaml:"filter_deprecated_nodes" toml:"filter_deprecated_nodes" ini:"filter_deprecated_nodes"`
 	AppendSubUserinfo     bool               `yaml:"append_sub_userinfo" toml:"append_sub_userinfo" ini:"append_sub_userinfo"`
-	ClashUseNewFieldName  bool               `yaml:"clash_use_new_field_name" toml:"clash_use_new_field_name" ini:"clash_use_new_field_name"`
 	ClashProxiesStyle     string             `yaml:"clash_proxies_style" toml:"clash_proxies_style" ini:"clash_proxies_style"`
 	ClashProxyGroupsStyle string             `yaml:"clash_proxy_groups_style" toml:"clash_proxy_groups_style" ini:"clash_proxy_groups_style"`
 	SingBoxAddClashModes  bool               `yaml:"singbox_add_clash_modes" toml:"singbox_add_clash_modes" ini:"singbox_add_clash_modes"`
@@ -229,7 +228,6 @@ func init() {
 	Global.Common.ProxyRuleset = "SYSTEM"
 	Global.Common.ProxySubscription = "NONE"
 
-	Global.NodePref.ClashUseNewFieldName = true
 	Global.NodePref.ClashProxiesStyle = "flow"
 	Global.NodePref.ClashProxyGroupsStyle = "block"
 	Global.NodePref.AppendSubUserinfo = true
@@ -405,9 +403,6 @@ func loadINIConfig(path string) error {
 		}
 		if key := sec.Key("append_sub_userinfo"); key != nil {
 			Global.NodePref.AppendSubUserinfo = key.MustBool()
-		}
-		if key := sec.Key("clash_use_new_field_name"); key != nil {
-			Global.NodePref.ClashUseNewFieldName = key.MustBool()
 		}
 		if key := sec.Key("clash_proxies_style"); key != nil {
 			Global.NodePref.ClashProxiesStyle = key.String()
@@ -1226,22 +1221,3 @@ func GetBasePath() string {
 	cwd, _ := os.Getwd()
 	return filepath.Join(cwd, Global.Common.BasePath)
 }
-
-// Backward compatibility helpers
-func (s *Settings) GetAPIMode() bool                         { return s.Common.APIMode }
-func (s *Settings) GetAccessToken() string                   { return s.Common.APIAccessToken }
-func (s *Settings) GetBasePath() string                      { return s.Common.BasePath }
-func (s *Settings) GetDefaultUrls() string                   { return strings.Join(s.Common.DefaultURL, "|") }
-func (s *Settings) GetExcludeRemarks() []string              { return s.Common.ExcludeRemarks }
-func (s *Settings) GetIncludeRemarks() []string              { return s.Common.IncludeRemarks }
-func (s *Settings) GetProxyConfig() string                   { return s.Common.ProxyConfig }
-func (s *Settings) GetProxySubscription() string             { return s.Common.ProxySubscription }
-func (s *Settings) GetSkipFailedLinks() bool                 { return s.Advanced.SkipFailedLinks }
-func (s *Settings) GetManagedConfigPrefix() string           { return s.ManagedConfig.ManagedConfigPrefix }
-func (s *Settings) GetWriteManagedConfig() bool              { return s.ManagedConfig.WriteManagedConfig }
-func (s *Settings) GetUpdateInterval() int                   { return s.ManagedConfig.ConfigUpdateInterval }
-func (s *Settings) GetUpdateStrict() bool                    { return s.ManagedConfig.ConfigUpdateStrict }
-func (s *Settings) GetClashUseNewField() bool                { return s.NodePref.ClashUseNewFieldName }
-func (s *Settings) GetEnableRuleGen() bool                   { return s.Rulesets.Enabled }
-func (s *Settings) GetCustomProxyGroups() []ProxyGroupConfig { return s.ProxyGroups.CustomProxyGroups }
-func (s *Settings) GetCustomRulesets() []RulesetConfig       { return s.Rulesets.Rulesets }

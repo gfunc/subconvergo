@@ -1,4 +1,4 @@
-package parser
+package proxy
 
 import (
 	"encoding/base64"
@@ -626,16 +626,19 @@ func urlEncode(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, " ", "%20"), "#", "%23")
 }
 
-func getStringField(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case string:
-			return val
-		case float64:
-			return strconv.FormatFloat(val, 'f', -1, 64)
-		case int:
-			return strconv.Itoa(val)
+func parsePluginOpts(opts string) map[string]interface{} {
+	result := make(map[string]interface{})
+	pairs := strings.Split(opts, ";")
+	for _, pair := range pairs {
+		if pair == "" {
+			continue
+		}
+		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) == 2 {
+			result[kv[0]] = kv[1]
+		} else {
+			result[kv[0]] = "true"
 		}
 	}
-	return ""
+	return result
 }
