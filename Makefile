@@ -38,36 +38,21 @@ build-all: ## Build for all platforms
 	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME)-windows-amd64.exe .
 
 # Test targets
-test: ## Run tests with Docker (default)
-	@echo "Running tests with Docker..."
-	./tests/run-tests.sh docker
-
-test-local: ## Run tests locally without Docker
-	@echo "Running tests locally..."
-	./tests/run-tests.sh local
+test: ## Run smoke tests (integration/API tests with Docker)
+	@echo "Running smoke tests..."
+	python -m tests.smoke
 
 test-unit: ## Run unit tests only
 	@echo "Running unit tests..."
-	$(GOTEST) -v -race -coverprofile=coverage/coverage.out ./...
+	./tests/run-tests.sh unit
 
-test-integration: ## Run integration tests
-	@echo "Running integration tests..."
-	$(GOTEST) -v ./tests/...
-
-test-api: ## Run API tests
-	@echo "Running API tests..."
-	./tests/run-tests.sh api
-
-test-all: ## Run comprehensive test suite
-	@echo "Running all tests..."
-	./tests/run-tests.sh all
+test-all: test-unit test ## Run unit tests and smoke tests
+	@echo "All tests completed"
 
 # Coverage targets
-coverage: test-unit ## Generate coverage report
+coverage: ## Generate coverage report
 	@echo "Generating coverage report..."
-	mkdir -p coverage
-	$(GO) tool cover -html=coverage/coverage.out -o coverage/coverage.html
-	$(GO) tool cover -func=coverage/coverage.out
+	./tests/run-tests.sh coverage
 
 coverage-view: coverage ## Open coverage report in browser
 	@echo "Opening coverage report..."
@@ -124,10 +109,6 @@ docker-build: ## Build Docker image
 	$(DOCKER) build -t $(BINARY_NAME):$(VERSION) .
 	$(DOCKER) tag $(BINARY_NAME):$(VERSION) $(BINARY_NAME):latest
 
-docker-build-test: ## Build Docker test image
-	@echo "Building Docker test image..."
-	$(DOCKER) build -f tests/Dockerfile.test -t $(BINARY_NAME):test .
-
 docker-run: docker-build ## Run Docker container
 	@echo "Running Docker container..."
 	$(DOCKER) run --rm -p 25500:25500 \
@@ -135,26 +116,10 @@ docker-run: docker-build ## Run Docker container
 		-v $(PWD)/pref.toml:/app/pref.toml:ro \
 		$(BINARY_NAME):latest
 
-docker-compose-up: ## Start services with docker-compose
-	$(DOCKER_COMPOSE) up -d
-
-docker-compose-down: ## Stop services with docker-compose
-	$(DOCKER_COMPOSE) down -v
-
-docker-compose-test: ## Run tests with docker-compose
-	$(DOCKER_COMPOSE) -f tests/docker-compose.test.yml up --build --abort-on-container-exit
-	$(DOCKER_COMPOSE) -f tests/docker-compose.test.yml down -v
-
 # Benchmark
 bench: ## Run benchmarks
 	@echo "Running benchmarks..."
-	$(GOTEST) -bench=. -benchmem ./...
-
-bench-compare: ## Compare benchmarks (requires benchstat)
-	@echo "Running benchmark comparison..."
-	@which benchstat > /dev/null || (echo "benchstat not installed. Run: go install golang.org/x/perf/cmd/benchstat@latest"; exit 1)
-	$(GOTEST) -bench=. -benchmem -count=5 ./... | tee benchmark-new.txt
-	@echo "Compare with: benchstat benchmark-old.txt benchmark-new.txt"
+	./tests/run-tests.sh bench
 
 # Security
 security-scan: ## Run security scan
@@ -196,14 +161,8 @@ install: build ## Install binary to GOPATH/bin
 	$(GO) install $(LDFLAGS) .
 
 # CI/CD
-ci: deps lint vet test-local ## Run CI pipeline (local tests)
+ci: deps lint vet test-unit test ## Run CI pipeline
 	@echo "CI pipeline completed"
-
-ci-docker: deps test ## Run CI pipeline with Docker
-	@echo "Docker CI pipeline completed"
-
-ci-full: deps lint vet test-all coverage security-scan ## Run full CI pipeline
-	@echo "Full CI pipeline completed"
 
 # Version
 version: ## Show version information

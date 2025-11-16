@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -16,11 +17,13 @@ import (
 
 	"github.com/gfunc/subconvergo/proxy"
 
+	"github.com/BurntSushi/toml"
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator"
 	"github.com/gfunc/subconvergo/parser"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/ini.v1"
+	"gopkg.in/yaml.v3"
 )
 
 // SubHandler handles subscription conversion requests
@@ -339,23 +342,50 @@ func filterProxies(proxies []proxy.ProxyInterface, patterns []string, include bo
 		return proxies
 	}
 
+	// Pre-compile regexes for all patterns
+	type compiledPat struct {
+		raw string
+		re  *regexp.Regexp
+	}
+	compiled := make([]compiledPat, len(patterns))
+	for i, p := range patterns {
+		compiled[i].raw = p
+		if p == "" {
+			continue
+		}
+		var expr string
+		if strings.HasPrefix(p, "/") && strings.HasSuffix(p, "/") && len(p) > 2 {
+			expr = p[1 : len(p)-1]
+		} else {
+			expr = regexp.QuoteMeta(p)
+		}
+		if re, err := regexp.Compile(expr); err == nil {
+			compiled[i].re = re
+		}
+	}
+
 	var result []proxy.ProxyInterface
-	for _, proxy := range proxies {
-		match := false
-		for _, pattern := range patterns {
-			if pattern == "" {
+	for _, pr := range proxies {
+		matched := false
+		for i, p := range patterns {
+			if p == "" {
 				continue
 			}
-			// Simple substring match for now
-			// TODO: Implement regex matching
-			if strings.Contains(proxy.GetRemark(), pattern) {
-				match = true
-				break
+			if compiled[i].re != nil {
+				if compiled[i].re.MatchString(pr.GetRemark()) {
+					matched = true
+					break
+				}
+			} else {
+				// regex failed to compile; fallback to substring contains
+				if strings.Contains(pr.GetRemark(), p) {
+					matched = true
+					break
+				}
 			}
 		}
-
-		if include == match {
-			result = append(result, proxy)
+		if include == matched {
+			result = append(result, pr)
 		}
 	}
 
@@ -648,11 +678,9 @@ func (h *SubHandler) renderTemplateWithContext(content string, requestParams map
 		setNestedValue(data, g.Key, g.Value)
 	}
 
-	// Add request parameters under "request" namespace
-	if requestParams != nil {
-		for key, value := range requestParams {
-			setNestedValue(data, "request."+key, value)
-		}
+	// Add request parameters under "request" namespace (nil-safe range)
+	for key, value := range requestParams {
+		setNestedValue(data, "request."+key, value)
 	}
 
 	// Define template functions
@@ -752,8 +780,73 @@ type ExternalConfig struct {
 
 // loadExternalConfig loads external configuration from URL or file
 func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
-	// TODO: Implement full external config loading with URL fetching
-	// For now, return empty config
+	var data []byte
+
+	// Determine source: http(s) or local file
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		resp, err := http.Get(path)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
+		}
+		data, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// resolve candidate paths
+		candidates := []string{path}
+		if !filepath.IsAbs(path) {
+			candidates = append(candidates, filepath.Join(config.GetBasePath(), path))
+			candidates = append(candidates, filepath.Join(config.GetBasePath(), "config", path))
+		}
+		var readErr error
+		for _, p := range candidates {
+			if b, err := os.ReadFile(p); err == nil {
+				data = b
+				readErr = nil
+				break
+			} else {
+				readErr = err
+			}
+		}
+		if data == nil {
+			return nil, fmt.Errorf("external config not found: %v", readErr)
+		}
+	}
+
+	// Try YAML -> TOML -> INI using the Settings struct to leverage existing tags
+	var extSettings config.Settings
+	if err := yaml.Unmarshal(data, &extSettings); err == nil {
+		return &ExternalConfig{
+			ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
+			Rulesets:    extSettings.Rulesets.Rulesets,
+			BasePath:    extSettings.Common.BasePath,
+		}, nil
+	}
+
+	if _, err := toml.Decode(string(data), &extSettings); err == nil {
+		return &ExternalConfig{
+			ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
+			Rulesets:    extSettings.Rulesets.Rulesets,
+			BasePath:    extSettings.Common.BasePath,
+		}, nil
+	}
+
+	if cfg, err := ini.Load(data); err == nil {
+		if err := cfg.MapTo(&extSettings); err == nil {
+			return &ExternalConfig{
+				ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
+				Rulesets:    extSettings.Rulesets.Rulesets,
+				BasePath:    extSettings.Common.BasePath,
+			}, nil
+		}
+	}
+
+	// If all failed, return empty (non-nil) config to avoid breaking caller
 	return &ExternalConfig{}, nil
 }
 
@@ -795,14 +888,59 @@ func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 	}
 
 	// URL decode
-	_, err := base64.URLEncoding.DecodeString(urlParam)
+	decoded, err := base64.URLEncoding.DecodeString(urlParam)
 	if err != nil {
 		c.String(http.StatusBadRequest, "Invalid URL encoding")
 		return
 	}
 
-	// TODO: Implement ruleset fetching and conversion
-	c.String(http.StatusOK, "Ruleset endpoint not yet fully implemented\n")
+	target := string(decoded)
+	var content []byte
+
+	// Remote fetch
+	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
+		resp, err := http.Get(target)
+		if err != nil {
+			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: %v", err))
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: status %d", resp.StatusCode))
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to read ruleset: %v", err))
+			return
+		}
+		content = body
+	} else {
+		// Local path resolution attempts
+		candidates := []string{
+			target,
+			filepath.Join(config.GetBasePath(), target),
+			filepath.Join(config.GetBasePath(), "rules", target),
+		}
+		var readErr error
+		for _, p := range candidates {
+			if data, err := os.ReadFile(p); err == nil {
+				content = data
+				readErr = nil
+				break
+			} else {
+				readErr = err
+			}
+		}
+		if content == nil {
+			c.String(http.StatusNotFound, fmt.Sprintf("Ruleset not found: %v", readErr))
+			return
+		}
+	}
+
+	// For now, return content as-is for supported types
+	_ = rulesetType // placeholder for future conversions
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", content)
 }
 
 // HandleRender processes /render endpoint for template rendering

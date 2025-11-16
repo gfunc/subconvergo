@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/base64"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -177,6 +178,37 @@ func TestFilterProxiesFunc(t *testing.T) {
 	}
 }
 
+func TestFilterProxiesRegexInclude(t *testing.T) {
+	proxies := []P.ProxyInterface{
+		&P.BaseProxy{Remark: "HK Node"},
+		&P.BaseProxy{Remark: "US Node"},
+		&P.BaseProxy{Remark: "HK Server"},
+	}
+	// Include remarks that start with HK using regex
+	filtered := filterProxies(proxies, []string{"/^HK/"}, true)
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 proxies starting with HK, got %d", len(filtered))
+	}
+	for _, p := range filtered {
+		if !strings.HasPrefix(p.GetRemark(), "HK") {
+			t.Fatalf("unexpected remark in regex include: %s", p.GetRemark())
+		}
+	}
+}
+
+func TestFilterProxiesRegexExclude(t *testing.T) {
+	proxies := []P.ProxyInterface{
+		&P.BaseProxy{Remark: "HK Node"},
+		&P.BaseProxy{Remark: "US Node"},
+		&P.BaseProxy{Remark: "JP Node"},
+	}
+	// Exclude remarks matching US or JP
+	filtered := filterProxies(proxies, []string{"/(US|JP)/"}, false)
+	if len(filtered) != 1 || !strings.Contains(filtered[0].GetRemark(), "HK") {
+		t.Fatalf("expected only HK to remain, got %v", filtered)
+	}
+}
+
 func TestSetNestedValue(t *testing.T) {
 	data := make(map[string]interface{})
 	setNestedValue(data, "key", "value")
@@ -302,11 +334,66 @@ func TestApplyEmojiRulesFunc(t *testing.T) {
 func TestLoadExternalConfigFunc(t *testing.T) {
 	h := NewSubHandler()
 	cfg, err := h.loadExternalConfig("nonexistent.ini")
-	if err != nil {
-		t.Error("loadExternalConfig returned error")
+	if err == nil || cfg != nil {
+		t.Error("expected error for nonexistent external config")
 	}
-	if cfg == nil {
-		t.Error("cfg should not be nil")
+}
+
+func TestLoadExternalConfig_YAMLRemote(t *testing.T) {
+	h := NewSubHandler()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, ""+
+			"proxy_groups:\n"+
+			"  custom_proxy_group:\n"+
+			"    - name: Auto\n"+
+			"      type: select\n"+
+			"      rule: ['.*']\n"+
+			"rulesets:\n"+
+			"  enabled: true\n"+
+			"  rulesets:\n"+
+			"    - ruleset: rules/custom_test_rules.list\n"+
+			"      group: Auto\n")
+	}))
+	defer srv.Close()
+
+	ecfg, err := h.loadExternalConfig(srv.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ecfg.ProxyGroups) == 0 || ecfg.ProxyGroups[0].Name != "Auto" {
+		t.Fatalf("external groups not parsed: %#v", ecfg.ProxyGroups)
+	}
+	if len(ecfg.Rulesets) == 0 || ecfg.Rulesets[0].Group != "Auto" {
+		t.Fatalf("external rulesets not parsed: %#v", ecfg.Rulesets)
+	}
+}
+
+func TestLoadExternalConfig_LocalTOML(t *testing.T) {
+	h := NewSubHandler()
+	dir := t.TempDir()
+	content := []byte(`
+		[proxy_groups]
+		[[proxy_groups.custom_groups]]
+		name = "Auto"
+		type = "select"
+		rule = [".*"]
+
+		[rulesets]
+		enabled = true
+		[[rulesets.rulesets]]
+		ruleset = "rules/custom_test_rules.list"
+		group = "Auto"
+	`)
+	fp := filepath.Join(dir, "ext.toml")
+	if err := os.WriteFile(fp, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ecfg, err := h.loadExternalConfig(fp)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ecfg.ProxyGroups) == 0 || ecfg.ProxyGroups[0].Name != "Auto" {
+		t.Fatalf("toml groups not parsed: %#v", ecfg.ProxyGroups)
 	}
 }
 
@@ -456,6 +543,62 @@ func TestHandleGetRulesetWithParams(t *testing.T) {
 
 	h.HandleGetRuleset(c)
 	t.Logf("GetRuleset with params returned: %d", w.Code)
+}
+
+func TestHandleGetRuleset_RemoteFetch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	// Start a test HTTP server serving a simple ruleset
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("DOMAIN-SUFFIX,example.com,Auto\nMATCH,Auto\n"))
+	}))
+	defer ts.Close()
+
+	encoded := base64.URLEncoding.EncodeToString([]byte(ts.URL))
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash", nil)
+	c.Request = req
+
+	h.HandleGetRuleset(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "MATCH,Auto") {
+		t.Fatalf("unexpected ruleset body: %s", body)
+	}
+}
+
+func TestHandleGetRuleset_LocalPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	// Prepare a temp base path with a rules file
+	dir := t.TempDir()
+	rulesDir := filepath.Join(dir, "rules")
+	_ = os.MkdirAll(rulesDir, 0o755)
+	filePath := filepath.Join(rulesDir, "local_test.list")
+	if err := os.WriteFile(filePath, []byte("GEOIP,CN,DIRECT\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Point base path to temp dir
+	config.Global.Common.BasePath = dir
+
+	encoded := base64.URLEncoding.EncodeToString([]byte("local_test.list"))
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash", nil)
+	c.Request = req
+
+	h.HandleGetRuleset(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "GEOIP,CN,DIRECT") {
+		t.Fatalf("unexpected ruleset content: %s", w.Body.String())
+	}
 }
 
 func TestHandleRenderWithTemplate(t *testing.T) {

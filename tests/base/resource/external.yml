@@ -1,0 +1,12 @@
+proxy_groups:
+  custom_proxy_group:
+    - name: Auto
+      type: select
+      rule: [".*"]
+
+rulesets:
+  enabled: true
+  overwrite_original_rules: false
+  rulesets:
+    - ruleset: rules/custom_test_rules.list
+      group: Auto
