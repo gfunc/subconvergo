@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -25,7 +26,12 @@ func (m *MihomoProxy) GenerateLink() (string, error) {
 	case SubconverterProxy:
 		return p.GenerateLink()
 	default:
-		return "", fmt.Errorf("GenerateLink not supported for this proxy type")
+		b, err := json.Marshal(m.ProxyOptions())
+		if err != nil {
+			return "", fmt.Errorf("error GenerateLink for proxy %s of type %s, %v", m.GetRemark(), m.GetType(), err)
+		}
+		content := base64.StdEncoding.EncodeToString(b)
+		return fmt.Sprintf("%s://%s", m.GetType(), content), nil
 	}
 }
 

@@ -53,7 +53,7 @@ curl http://localhost:25500/version
 | **Hysteria** | `hysteria://` | ~10.9µs | v1, bandwidth config |
 | **Hysteria2** | `hy2://` | ~10.9µs | v2, obfuscation |
 | **TUIC** | `tuic://` | ~16.1µs | QUIC, BBR/Cubic |
-| **Clash** | YAML | - | Native parser |
+| **Clash** | YAML/`protocol://base64dict` | - | Native parser |
 
 New protocols automatically supported via [mihomo](https://github.com/metacubex/mihomo) upgrades.
 

@@ -225,7 +225,8 @@ func ParseProxyLine(line string) (proxy.SubconverterProxy, error) {
 		return nil, fmt.Errorf("invalid proxy link format")
 	}
 	protocol := line[:idx]
-	return nil, fmt.Errorf("unsupported proxy protocol: %s", protocol)
+	log.Printf("unsupported native proxy protocol: %s, trying mihomo package", protocol)
+	return ParseMihomoProxy(protocol, line[idx:])
 }
 
 func parseShadowsocks(line string) (proxy.SubconverterProxy, error) {
@@ -436,24 +437,23 @@ func parseShadowsocksR(line string) (proxy.SubconverterProxy, error) {
 			EncryptMethod: method,
 		}
 	} else {
-
+		p = &proxy.ShadowsocksRProxy{
+			BaseProxy: proxy.BaseProxy{
+				Type:   "ssr",
+				Remark: remarks,
+				Server: server,
+				Port:   portNum,
+				Group:  group,
+			},
+			Password:      password,
+			EncryptMethod: method,
+			Protocol:      protocol,
+			ProtocolParam: protocolParam,
+			Obfs:          obfs,
+			ObfsParam:     obfsParam,
+		}
 	}
 
-	p = &proxy.ShadowsocksRProxy{
-		BaseProxy: proxy.BaseProxy{
-			Type:   "ssr",
-			Remark: remarks,
-			Server: server,
-			Port:   portNum,
-			Group:  group,
-		},
-		Password:      password,
-		EncryptMethod: method,
-		Protocol:      protocol,
-		ProtocolParam: protocolParam,
-		Obfs:          obfs,
-		ObfsParam:     obfsParam,
-	}
 	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
@@ -946,35 +946,12 @@ func ParseMihomoConfig(content string) (*CustomContent, error) {
 	custom := &CustomContent{Proxies: make([]proxy.ProxyInterface, 0)}
 
 	for _, proxyMap := range clashConfig.Proxy {
-		mihomoProxy, err := adapter.ParseProxy(proxyMap)
-
+		mihomoProxy, err := parseMihomoProxy(proxyMap)
 		if err != nil {
 			log.Printf("failed to parse proxy in clash format: %v", err)
-			continue // Skip invalid proxies
-		}
-		addr := mihomoProxy.Addr()
-		// parse addr to server and port
-		hostPort := strings.Split(addr, ":")
-		if len(hostPort) != 2 {
-			log.Printf("invalid address format: %s", addr)
 			continue
 		}
-		server := hostPort[0]
-		port, err := strconv.Atoi(hostPort[1])
-		if err != nil {
-			log.Printf("invalid port in address: %s", addr)
-			continue
-		}
-		custom.Proxies = append(custom.Proxies, &proxy.MihomoProxy{
-			ProxyInterface: &proxy.BaseProxy{
-				Type:   mihomoProxy.Type().String(),
-				Remark: mihomoProxy.Name(),
-				Server: server,
-				Port:   port,
-			},
-			Clash:   mihomoProxy,
-			Options: proxyMap,
-		})
+		custom.Proxies = append(custom.Proxies, mihomoProxy)
 	}
 	custom.Groups = make([]config.ProxyGroupConfig, 0)
 	for _, groupMap := range clashConfig.ProxyGroup {
@@ -1003,6 +980,50 @@ func ParseMihomoConfig(content string) (*CustomContent, error) {
 
 	custom.RawRules = clashConfig.Rule
 	return custom, nil
+}
+
+func ParseMihomoProxy(protocol, content string) (*proxy.MihomoProxy, error) {
+	// Try base64 decode first (standard subscription format)
+	decoded, err := base64.StdEncoding.DecodeString(content)
+	if err != nil {
+		decoded = []byte(content)
+	}
+	options := make(map[string]any)
+	if err := yaml.Unmarshal(decoded, &options); err != nil {
+		return nil, fmt.Errorf("failed to parse clash proxy: %s://%s, %w", protocol, content, err)
+	}
+	if _, ok := options["type"]; !ok {
+		options["type"] = protocol
+	}
+	return parseMihomoProxy(options)
+}
+
+func parseMihomoProxy(options map[string]any) (*proxy.MihomoProxy, error) {
+	mihomoProxy, err := adapter.ParseProxy(options)
+	if err != nil {
+		return nil, err
+	}
+	addr := mihomoProxy.Addr()
+	// parse addr to server and port
+	hostPort := strings.Split(addr, ":")
+	if len(hostPort) != 2 {
+		return nil, fmt.Errorf("invalid address format: %s", addr)
+	}
+	server := hostPort[0]
+	port, err := strconv.Atoi(hostPort[1])
+	if err != nil {
+		return nil, fmt.Errorf("invalid port in address: %s", addr)
+	}
+	return &proxy.MihomoProxy{
+		ProxyInterface: &proxy.BaseProxy{
+			Type:   options["type"].(string),
+			Remark: mihomoProxy.Name(),
+			Server: server,
+			Port:   port,
+		},
+		Clash:   mihomoProxy,
+		Options: options,
+	}, nil
 }
 
 func getStringField(m map[string]interface{}, key string) string {

@@ -48,4 +48,4 @@ WORKDIR /base
 USER subconvergo
 EXPOSE 25500
 
-CMD ["subconvergo"]
+ENTRYPOINT ["subconvergo"]

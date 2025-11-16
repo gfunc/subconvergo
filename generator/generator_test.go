@@ -438,7 +438,7 @@ func TestGenerateSingBoxRules(t *testing.T) {
 
 func TestGenerateSingle(t *testing.T) {
 	proxies := []proxy.ProxyInterface{
-		&proxy.ShadowsocksProxy{BaseProxy: proxy.BaseProxy{Type:"ss", Remark: "SS", Server: "host", Port: 8388}, Password: "pwd", EncryptMethod: "aes-256-gcm"},
+		&proxy.ShadowsocksProxy{BaseProxy: proxy.BaseProxy{Type: "ss", Remark: "SS", Server: "host", Port: 8388}, Password: "pwd", EncryptMethod: "aes-256-gcm"},
 	}
 
 	result, err := generateSingle(proxies, "ss")

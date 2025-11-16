@@ -511,7 +511,7 @@ func generateClashRules(rulesets []config.RulesetConfig) []string {
 					if len(parts) == 2 {
 						// Add group as last parameter
 						r = r + "," + ruleset.Group
-					}	else if len(parts) > 2 {
+					} else if len(parts) > 2 {
 						// Insert group before last parameter
 						r = strings.Join(parts[:len(parts)-1], ",") + "," + ruleset.Group + "," + parts[len(parts)-1]
 					}
