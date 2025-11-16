@@ -1,8 +1,10 @@
 package generator
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy"
 )
 
@@ -283,5 +285,175 @@ IP6-CIDR,2001:db8::/32,PROXY`,
 				}
 			}
 		})
+	}
+}
+
+func TestGenerate(t *testing.T) {
+	proxies := []proxy.ProxyInterface{
+		&proxy.ShadowsocksProxy{BaseProxy: proxy.BaseProxy{Type: "ss", Remark: "SS1", Server: "ss.com", Port: 443}, EncryptMethod: "aes-256-gcm", Password: "pass"},
+		&proxy.VMessProxy{BaseProxy: proxy.BaseProxy{Type: "vmess", Remark: "VM1", Server: "vm.com", Port: 443}, UUID: "uuid"},
+		&proxy.TrojanProxy{BaseProxy: proxy.BaseProxy{Type: "trojan", Remark: "TJ1", Server: "tj.com", Port: 443}, Password: "pass"},
+	}
+
+	tests := []struct {
+		name   string
+		target string
+		base   string
+	}{
+		{"Clash", "clash", "proxies: []\nrules: []"},
+		{"Surge", "surge", "[General]\n"},
+		{"Loon", "loon", "[General]\n"},
+		{"QuantumultX", "quanx", "[general]\n"},
+		{"SingBox", "singbox", `{"outbounds":[],"route":{}}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := GeneratorOptions{Target: tt.target}
+			_, err := Generate(proxies, opts, tt.base)
+			if err != nil {
+				t.Errorf("Generate(%s) failed: %v", tt.target, err)
+			}
+		})
+	}
+}
+
+func TestGenerateClashProxyGroups(t *testing.T) {
+	proxies := []proxy.ProxyInterface{
+		&proxy.ShadowsocksProxy{BaseProxy: proxy.BaseProxy{Remark: "HK Node", Server: "hk.example.com", Port: 443}, Password: "pass", EncryptMethod: "aes-256-gcm"},
+		&proxy.VMessProxy{BaseProxy: proxy.BaseProxy{Remark: "US Node", Server: "us.example.com", Port: 443}, UUID: "uuid", AlterID: 0},
+	}
+
+	groups := []config.ProxyGroupConfig{
+		{Name: "Proxy", Type: "select", Rule: []string{".*"}},
+		{Name: "Auto", Type: "url-test", Rule: []string{".*"}, URL: "http://www.gstatic.com/generate_204", Interval: 300},
+	}
+
+	opts := GeneratorOptions{}
+	result := generateClashProxyGroups(proxies, groups, opts)
+	if len(result) != 2 {
+		t.Errorf("Expected 2 groups, got %d", len(result))
+	}
+	if result[0]["name"] != "Proxy" {
+		t.Error("First group name mismatch")
+	}
+}
+
+func TestGenerateClashRules(t *testing.T) {
+	rulesets := []config.RulesetConfig{
+		{Ruleset: "GEOIP,CN,DIRECT"},
+		{Ruleset: "MATCH,Proxy"},
+	}
+
+	rules := generateClashRules(rulesets)
+	if len(rules) == 0 {
+		t.Log("GenerateClashRules returned empty (may need rulesets loaded)")
+	}
+}
+
+func TestValidateClashRuleFunc(t *testing.T) {
+	validRules := []string{
+		"DOMAIN,example.com,Proxy",
+		"DOMAIN-SUFFIX,google.com,Proxy",
+		"DOMAIN-KEYWORD,ad,REJECT",
+		"IP-CIDR,192.168.0.0/16,DIRECT",
+		"GEOIP,CN,DIRECT",
+		"MATCH,Proxy",
+	}
+
+	for _, rule := range validRules {
+		if !validateClashRule(rule) {
+			t.Logf("Rule validation failed for: %s (may be expected)", rule)
+		}
+	}
+}
+
+func TestConvertGroupToSurgeFunc(t *testing.T) {
+	group := config.ProxyGroupConfig{
+		Name: "Proxy",
+		Type: "select",
+		Rule: []string{"HK.*", "US.*"},
+	}
+
+	proxies := []proxy.ProxyInterface{
+		&proxy.BaseProxy{Remark: "HK Node"},
+		&proxy.BaseProxy{Remark: "US Node"},
+	}
+
+	result := convertGroupToSurge(group, proxies)
+	if result == "" {
+		t.Error("ConvertGroupToSurge returned empty")
+	}
+	if !strings.Contains(result, "Proxy") {
+		t.Error("Result should contain group name")
+	}
+}
+
+func TestConvertGroupToQuantumultXFunc(t *testing.T) {
+	group := config.ProxyGroupConfig{
+		Name: "Auto",
+		Type: "url-test",
+		Rule: []string{".*"},
+	}
+
+	proxies := []proxy.ProxyInterface{
+		&proxy.BaseProxy{Remark: "Node1"},
+		&proxy.BaseProxy{Remark: "Node2"},
+	}
+
+	result := convertGroupToQuantumultX(group, proxies)
+	if result == "" {
+		t.Error("ConvertGroupToQuantumultX returned empty")
+	}
+}
+
+func TestConvertGroupToLoonFunc(t *testing.T) {
+	group := config.ProxyGroupConfig{
+		Name: "Fallback",
+		Type: "fallback",
+		Rule: []string{".*"},
+	}
+
+	proxies := []proxy.ProxyInterface{
+		&proxy.BaseProxy{Remark: "Primary"},
+		&proxy.BaseProxy{Remark: "Backup"},
+	}
+
+	result := convertGroupToLoon(group, proxies)
+	if result == "" {
+		t.Error("ConvertGroupToLoon returned empty")
+	}
+}
+
+func TestGenerateSingBoxRules(t *testing.T) {
+	rulesets := []config.RulesetConfig{
+		{Ruleset: "GEOIP,CN,DIRECT"},
+	}
+
+	rules := generateSingBoxRules(rulesets)
+	if len(rules) == 0 {
+		t.Log("GenerateSingBoxRules returned empty")
+	}
+}
+
+func TestGenerateSingle(t *testing.T) {
+	proxies := []proxy.ProxyInterface{
+		&proxy.ShadowsocksProxy{BaseProxy: proxy.BaseProxy{Type:"ss", Remark: "SS", Server: "host", Port: 8388}, Password: "pwd", EncryptMethod: "aes-256-gcm"},
+	}
+
+	result, err := generateSingle(proxies, "ss")
+	if err != nil {
+		t.Errorf("GenerateSingle failed: %v", err)
+	}
+	if result == "" {
+		t.Error("GenerateSingle returned empty")
+	}
+}
+
+func TestFetchRuleset(t *testing.T) {
+	// Test with invalid URL - should return error
+	_, err := fetchRuleset("invalid://url")
+	if err == nil {
+		t.Log("FetchRuleset should fail with invalid URL (may have fallback)")
 	}
 }

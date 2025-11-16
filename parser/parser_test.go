@@ -335,3 +335,47 @@ func TestTUICProxyGenerateLink(t *testing.T) {
 		})
 	}
 }
+
+func TestUrlDecode(t *testing.T) {
+	if urlDecode("Hello+World") != "Hello World" {
+		t.Error("urlDecode failed")
+	}
+}
+
+func TestUrlSafeBase64Decode(t *testing.T) {
+	if urlSafeBase64Decode("SGVsbG8gV29ybGQ=") != "Hello World" {
+		t.Error("urlSafeBase64Decode failed")
+	}
+}
+
+func TestProcessRemark(t *testing.T) {
+	remarks := map[string]int{}
+	// First call returns original
+	if ProcessRemark("Test", remarks) != "Test" {
+		t.Error("ProcessRemark failed")
+	}
+	// Second call appends _2 (count+1)
+	if ProcessRemark("Test", remarks) != "Test_2" {
+		t.Error("ProcessRemark duplicate failed")
+	}
+}
+
+func TestGetStringField(t *testing.T) {
+	data := map[string]interface{}{"key": "value", "num": 123}
+	if getStringField(data, "key") != "value" {
+		t.Error("getStringField failed")
+	}
+}
+
+func TestParseProxyLine(t *testing.T) {
+	lines := []string{
+		"ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test",
+		"trojan://password@example.com:443#Test",
+	}
+	for _, line := range lines {
+		proxy, err := ParseProxyLine(line)
+		if err != nil || proxy == nil {
+			t.Errorf("ParseProxyLine failed for %s", line[:10])
+		}
+	}
+}
