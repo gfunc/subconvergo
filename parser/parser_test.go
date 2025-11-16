@@ -379,3 +379,16 @@ func TestParseProxyLine(t *testing.T) {
 		}
 	}
 }
+
+func TestParseContentSkipsComments(t *testing.T) {
+	content := `# comment line
+ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test`
+
+	result, err := parseContent(content)
+	if err != nil {
+		t.Fatalf("parseContent returned error: %v", err)
+	}
+	if len(result.Proxies) != 1 {
+		t.Fatalf("expected 1 proxy, got %d", len(result.Proxies))
+	}
+}

@@ -1,0 +1,6 @@
+# Custom rules exercising Clash and Surge parsing paths
+DOMAIN-SUFFIX,test.example,DIRECT
+DOMAIN,media.example,Proxy
+IP-CIDR,10.10.0.0/16,DIRECT
+GEOIP,CN,DIRECT
+FINAL,Proxy

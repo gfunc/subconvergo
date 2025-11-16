@@ -259,9 +259,10 @@ func init() {
 
 // LoadConfig loads configuration from pref files
 func LoadConfig() (string, error) {
-	// Check for config configFile existence in order: yml -> toml -> ini
+	// Check for config configFile existence in order: yml/yaml -> toml -> ini
 	configFileList := []string{
 		"pref.yml",
+		"pref.yaml",
 		"pref.toml",
 		"pref.ini",
 		"pref.example.yml",

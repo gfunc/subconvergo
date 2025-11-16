@@ -1,0 +1,4 @@
+🔰 节点选择,rules/global.list
+🌏 国内媒体,rules/media.list
+🎯 全球直连,rules/direct.list
+🛑 全球拦截,rules/block.list

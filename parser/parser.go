@@ -131,6 +131,10 @@ func parseContent(content string) (*CustomContent, error) {
 		if line == "" {
 			continue
 		}
+		// Skip comment lines
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
 
 		// Parse different proxy formats
 		p, err := ParseProxyLine(line)
@@ -138,7 +142,7 @@ func parseContent(content string) (*CustomContent, error) {
 			// Try parsing as YAML/JSON (Clash format)
 			if custom, err := ParseMihomoConfig(content); err == nil {
 				return custom, nil
-			}else{
+			} else {
 				log.Printf("Failed to parse line as proxy or mihomo config: %s, %v", line, err)
 				break
 			}

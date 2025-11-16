@@ -1,0 +1,4 @@
+# simple managed ruleset for smoke testing
+DOMAIN-SUFFIX,example.com,Auto
+IP-CIDR,10.0.0.0/8,DIRECT
+MATCH,Auto

@@ -5,5 +5,7 @@ coverage
 **/coverage*
 **/benchmark*
 tests/docker-test-logs.txt
+tests/results
 
 subconvergo
+**__pycache__

@@ -1,0 +1,15 @@
+proxies:
+  - name: "sshtest"
+    type: ssh
+    server: "10.2.1.1"
+    username: user
+    password: passwd
+    port: 22
+proxy-groups:
+  - name: "sshg"
+    type: select
+    proxies:
+      - sshtest
+rules:
+  - DOMAIN-SUFFIX,uco.com,sshg
+  - IP-CIDR,10.2.0.0/16,sshg,no-resolve
