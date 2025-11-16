@@ -4,10 +4,11 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      
     ports:
       - "25500:25500"
     volumes:
-      - ./base:/app
+      - ./base:/base
     environment:
       - API_MODE=true
       - PORT=25500
@@ -22,6 +23,7 @@ services:
 
   subconverter:
     image: georgefu12/subconverter:latest
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     ports:
       - "25550:25500"
     volumes:
@@ -43,6 +45,7 @@ services:
   mock-subscription:
     image: nginx:alpine
     container_name: mock-subscription-server
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     ports:
       - "8081:80"
     volumes:
