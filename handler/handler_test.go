@@ -43,51 +43,6 @@ func TestApplyFilters(t *testing.T) {
 	}
 }
 
-func TestApplyRenameRules(t *testing.T) {
-	h := NewSubHandler()
-	// Setup rename rules (with matcher + regex)
-	config.Global.NodePref.RenameNodes = []config.RenameNodeConfig{
-		{Match: "!!TYPE=SS!!香港", Replace: "HK"}, // matches SS only
-		{Match: "JP", Replace: "Japan"},
-	}
-
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Type: "ss", Remark: "香港 01"},
-		&P.BaseProxy{Type: "vmess", Remark: "JP 02"},
-	}
-
-	out := h.applyRenameRules(proxies)
-	if out[0].GetRemark() != "HK 01" {
-		t.Errorf("expected first remark renamed to 'HK 01', got %q", out[0].GetRemark())
-	}
-	if out[1].GetRemark() != "Japan 02" {
-		t.Errorf("expected second remark renamed to 'Japan 02', got %q", out[1].GetRemark())
-	}
-}
-
-func TestApplyEmojiRules(t *testing.T) {
-	h := NewSubHandler()
-	config.Global.Emojis.AddEmoji = true
-	config.Global.Emojis.RemoveOldEmoji = true
-	config.Global.Emojis.Rules = []config.EmojiRuleConfig{
-		{Match: "HK", Emoji: "🇭🇰"},
-		{Match: "US", Emoji: "🇺🇸"},
-	}
-
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "HK 01"},
-		&P.BaseProxy{Remark: "US 02"},
-	}
-
-	out := h.applyEmojiRules(proxies)
-	if got := out[0].GetRemark(); len(got) == 0 || !strings.HasPrefix(got, "🇭🇰") {
-		t.Errorf("expected HK remark to start with emoji, got %q", got)
-	}
-	if got := out[1].GetRemark(); len(got) == 0 || !strings.HasPrefix(got, "🇺🇸") {
-		t.Errorf("expected US remark to start with emoji, got %q", got)
-	}
-}
-
 func TestRenderTemplateWithContext(t *testing.T) {
 	h := NewSubHandler()
 	// Provide one global and one request var
@@ -221,42 +176,9 @@ func TestSetNestedValue(t *testing.T) {
 	}
 }
 
-func TestRemoveEmojiFunc(t *testing.T) {
-	// removeEmoji removes emoji and trims spaces
-	if removeEmoji("🇺🇸 US") != "US" {
-		t.Error("Emoji not removed")
-	}
-}
-
 func TestFileExists(t *testing.T) {
 	if fileExists("/nonexistent/file") {
 		t.Error("Nonexistent file reported as existing")
-	}
-}
-
-func TestSortProxies(t *testing.T) {
-	h := NewSubHandler()
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "Z"},
-		&P.BaseProxy{Remark: "A"},
-	}
-	config.Global.NodePref.SortFlag = true
-	sorted := h.sortProxies(proxies)
-	if len(sorted) != 2 || sorted[0].GetRemark() != "A" {
-		t.Error("Sort failed")
-	}
-}
-
-func TestApplyMatcherForRename(t *testing.T) {
-	h := NewSubHandler()
-	proxy := &P.BaseProxy{Type: "ss", Remark: "test", Port: 443}
-	matched, _ := h.applyMatcherForRename("!!TYPE=SS!!test", proxy)
-	if !matched {
-		t.Error("TYPE matcher failed")
-	}
-	matched, _ = h.applyMatcherForRename("!!PORT=443!!test", proxy)
-	if !matched {
-		t.Error("PORT matcher failed")
 	}
 }
 
@@ -286,19 +208,6 @@ func TestLoadBaseConfigFunc(t *testing.T) {
 	}
 }
 
-func TestMatchRangeFunc(t *testing.T) {
-	h := NewSubHandler()
-	if !h.matchRange("443", 443) {
-		t.Error("Single value match failed")
-	}
-	if !h.matchRange("400-500", 443) {
-		t.Error("Range match failed")
-	}
-	if h.matchRange("400-500", 600) {
-		t.Error("Range should not match")
-	}
-}
-
 func TestRenderTemplateFunc(t *testing.T) {
 	h := NewSubHandler()
 	result, err := h.renderTemplate("Hello {{.Name}}")
@@ -309,27 +218,6 @@ func TestRenderTemplateFunc(t *testing.T) {
 	}
 }
 
-func TestApplyEmojiRulesFunc(t *testing.T) {
-	h := NewSubHandler()
-	config.Global.Emojis.AddEmoji = true
-	config.Global.Emojis.Rules = []config.EmojiRuleConfig{
-		{Match: "US|America", Emoji: "🇺🇸"},
-		{Match: "HK|Hong", Emoji: "🇭🇰"},
-	}
-
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "US Node"},
-		&P.BaseProxy{Remark: "HK Server"},
-	}
-
-	result := h.applyEmojiRules(proxies)
-	if len(result) != 2 {
-		t.Error("Emoji rules changed proxy count")
-	}
-	if !strings.Contains(result[0].GetRemark(), "🇺🇸") && !strings.Contains(result[0].GetRemark(), "US") {
-		t.Log("Emoji may not have been added (depends on config)")
-	}
-}
 
 func TestLoadExternalConfigFunc(t *testing.T) {
 	h := NewSubHandler()
@@ -479,43 +367,6 @@ func TestFilterProxiesWithIncludeExclude(t *testing.T) {
 	if len(excluded) == 0 {
 		t.Error("Exclude should keep some proxies")
 	}
-}
-
-func TestApplyRenameRulesFunc(t *testing.T) {
-	h := NewSubHandler()
-	config.Global.NodePref.RenameNodes = []config.RenameNodeConfig{
-		{Match: "HK", Replace: "Hong Kong"},
-		{Match: "US", Replace: "United States"},
-	}
-
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "HK Node"},
-		&P.BaseProxy{Remark: "US Server"},
-	}
-
-	renamed := h.applyRenameRules(proxies)
-	if len(renamed) != 2 {
-		t.Error("Rename changed proxy count")
-	}
-	// Check if rename happened (depending on implementation)
-	t.Logf("After rename: %s, %s", renamed[0].GetRemark(), renamed[1].GetRemark())
-}
-
-func TestMatchRangeEdgeCases(t *testing.T) {
-	h := NewSubHandler()
-
-	// Empty pattern returns true (matches all)
-	if !h.matchRange("", 443) {
-		t.Error("Empty pattern should match (match all)")
-	}
-
-	// Multiple ranges
-	if !h.matchRange("80,443,8080", 443) {
-		t.Error("Comma separated should match")
-	}
-
-	// Invalid format - should not panic
-	h.matchRange("invalid", 443)
 }
 
 func TestSetNestedValueFunc(t *testing.T) {

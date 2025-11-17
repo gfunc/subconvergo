@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+
 	"strings"
 	"text/template"
 
@@ -120,58 +120,28 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	var allProxies []proxy.ProxyInterface
 	var otherProxyGroups []config.ProxyGroupConfig
 	var rawRules []string
-	for _, url := range urlsToProcess {
+	for index, url := range urlsToProcess {
 		url = strings.TrimSpace(url)
 		if url == "" {
 			continue
 		}
-		if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
-			// Parse subscription
-			custom, err := parser.ParseSubscription(url, config.Global.Common.ProxySubscription)
-			if err != nil {
-				if !config.Global.Advanced.SkipFailedLinks {
-					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription: %v", err))
-					return
-				}
-				log.Printf("Failed to parse subscription: %s, %v", url, err)
-				continue
-			}
-			allProxies = append(allProxies, custom.Proxies...)
-			if custom.Proxies != nil {
-				otherProxyGroups = append(otherProxyGroups, custom.Groups...)
-			}
-			if custom.RawRules != nil {
-				rawRules = append(rawRules, custom.RawRules...)
-			}
-		} else if strings.HasPrefix(url, "file://") {
-			// Parse subscription file
-			custom, err := parser.ParseSubscriptionFile(url)
-			if err != nil {
-				if !config.Global.Advanced.SkipFailedLinks {
-					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription file: %v", err))
-					return
-				}
-				log.Printf("Failed to parse subscription file: %s, %v", url, err)
-				continue
-			}
-			allProxies = append(allProxies, custom.Proxies...)
-			if custom.Proxies != nil {
-				otherProxyGroups = append(otherProxyGroups, custom.Groups...)
-			}
-			if custom.RawRules != nil {
-				rawRules = append(rawRules, custom.RawRules...)
-			}
-		} else {
-			parserProxy, err := parser.ParseProxyLine(url)
-			if err != nil {
-				if !config.Global.Advanced.SkipFailedLinks {
-					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse proxy line: %v", err))
-					return
-				}
-			}
-			allProxies = append(allProxies, parserProxy)
+		sp := &parser.SubParser{
+			Index: index,
+			URL:   url,
+			Proxy: config.Global.Common.ProxySubscription,
 		}
-
+		custom, err := sp.Parse()
+		if err == nil {
+			allProxies = append(allProxies, custom.Proxies...)
+			otherProxyGroups = append(otherProxyGroups, custom.Groups...)
+			rawRules = append(rawRules, custom.RawRules...)
+			continue
+		} else if !config.Global.Advanced.SkipFailedLinks {
+			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription (%s): %v", url, err))
+			return
+		} else {
+			log.Printf("Failed to parse subscription (%s): %v", url, err)
+		}
 	}
 
 	if len(allProxies) == 0 {
@@ -181,26 +151,6 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 
 	// Apply filters
 	allProxies = h.applyFilters(allProxies, c)
-
-	// Apply rename rules
-	allProxies = h.applyRenameRules(allProxies)
-
-	// Apply emoji rules
-	if config.Global.Emojis.AddEmoji {
-		allProxies = h.applyEmojiRules(allProxies)
-	}
-
-	// Apply sort if enabled
-	if config.Global.NodePref.SortFlag {
-		allProxies = h.sortProxies(allProxies)
-	}
-
-	// Append proxy type if configured
-	if config.Global.Common.AppendProxyType {
-		for i := range allProxies {
-			allProxies[i].SetRemark(fmt.Sprintf("%s [%s]", allProxies[i].GetRemark(), allProxies[i].GetType()))
-		}
-	}
 
 	// Reload config on request if enabled
 	if config.Global.Common.ReloadConfOnRequest {
@@ -215,15 +165,19 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 
 	// Prepare generator options
 	opts := generator.GeneratorOptions{
-		Target:              target,
-		ProxyGroups:         proxyGroups,
-		Rulesets:            rulesets,
-		RawRules:            rawRules,
-		EnableRuleGen:       config.Global.Rulesets.Enabled,
+		Target:          target,
+		ProxyGroups:     proxyGroups,
+		Rulesets:        rulesets,
+		RawRules:        rawRules,
+		AppendProxyType: config.Global.Common.AppendProxyType,
+		EnableRuleGen:   config.Global.Rulesets.Enabled,
+		RenameNodes:     config.Global.NodePref.RenameNodes,
+		SortProxies:     config.Global.NodePref.SortFlag,
+		Emoji:           config.Global.Emojis,
+
 		ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
 		ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
 		SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
-		AppendProxyType:     config.Global.Common.AppendProxyType,
 	}
 
 	// Apply node preferences to generator options
@@ -443,224 +397,6 @@ func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]stri
 	}
 
 	return baseContent, nil
-}
-
-// applyRenameRules applies rename rules to proxy remarks
-func (h *SubHandler) applyRenameRules(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
-	if len(config.Global.NodePref.RenameNodes) == 0 {
-		return proxies
-	}
-
-	for i := range proxies {
-		originalRemark := proxies[i].GetRemark()
-
-		for _, rule := range config.Global.NodePref.RenameNodes {
-			// Skip if no match pattern or both match and replace are empty
-			if rule.Match == "" && rule.Script == "" {
-				continue
-			}
-
-			// TODO: Implement script support if rule.Script is provided
-
-			// Apply matcher-based filtering (supports !!TYPE=, !!GROUP=, etc.)
-			if rule.Match != "" {
-				matched, realRule := h.applyMatcherForRename(rule.Match, proxies[i])
-				if !matched {
-					continue
-				}
-
-				// If there's a real regex rule after the matcher, apply it
-				if realRule != "" {
-					re, err := regexp.Compile(realRule)
-					if err != nil {
-						continue
-					}
-					proxies[i].SetRemark(re.ReplaceAllString(proxies[i].GetRemark(), rule.Replace))
-				}
-			}
-		}
-
-		// If remark is empty after processing, restore original
-		if proxies[i].GetRemark() == "" {
-			proxies[i].SetRemark(originalRemark)
-		}
-	}
-
-	return proxies
-}
-
-// applyMatcherForRename applies special matchers for rename rules
-func (h *SubHandler) applyMatcherForRename(rule string, proxy proxy.ProxyInterface) (bool, string) {
-	// Similar to generator's applyMatcher but for rename context
-
-	// Handle !!GROUP= matcher
-	if strings.HasPrefix(rule, "!!GROUP=") {
-		parts := strings.SplitN(rule, "!!", 3)
-		if len(parts) >= 2 {
-			groupPattern := strings.TrimPrefix(parts[1], "GROUP=")
-			realRule := ""
-			if len(parts) > 2 {
-				realRule = parts[2]
-			}
-			matched, _ := regexp.MatchString(groupPattern, proxy.GetGroup())
-			return matched, realRule
-		}
-	}
-
-	// Handle !!TYPE= matcher
-	if strings.HasPrefix(rule, "!!TYPE=") {
-		parts := strings.SplitN(rule, "!!", 3)
-		if len(parts) >= 2 {
-			typePattern := strings.TrimPrefix(parts[1], "TYPE=")
-			realRule := ""
-			if len(parts) > 2 {
-				realRule = parts[2]
-			}
-			proxyType := strings.ToUpper(proxy.GetType())
-			matched, _ := regexp.MatchString("(?i)^("+typePattern+")$", proxyType)
-			return matched, realRule
-		}
-	}
-
-	// Handle !!PORT= matcher
-	if strings.HasPrefix(rule, "!!PORT=") {
-		parts := strings.SplitN(rule, "!!", 3)
-		if len(parts) >= 2 {
-			portPattern := strings.TrimPrefix(parts[1], "PORT=")
-			realRule := ""
-			if len(parts) > 2 {
-				realRule = parts[2]
-			}
-			matched := h.matchRange(portPattern, proxy.GetPort())
-			return matched, realRule
-		}
-	}
-
-	// Handle !!SERVER= matcher
-	if strings.HasPrefix(rule, "!!SERVER=") {
-		parts := strings.SplitN(rule, "!!", 3)
-		if len(parts) >= 2 {
-			serverPattern := strings.TrimPrefix(parts[1], "SERVER=")
-			realRule := ""
-			if len(parts) > 2 {
-				realRule = parts[2]
-			}
-			matched, _ := regexp.MatchString(serverPattern, proxy.GetServer())
-			return matched, realRule
-		}
-	}
-
-	// No special matcher, return rule as-is
-	return true, rule
-}
-
-// matchRange checks if a value matches a range pattern
-func (h *SubHandler) matchRange(pattern string, value int) bool {
-	pattern = strings.TrimSpace(pattern)
-	if pattern == "" {
-		return true
-	}
-
-	// Handle comma-separated values
-	if strings.Contains(pattern, ",") {
-		parts := strings.Split(pattern, ",")
-		for _, part := range parts {
-			if h.matchRange(strings.TrimSpace(part), value) {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Handle ranges: "8000-9000"
-	if strings.Contains(pattern, "-") {
-		parts := strings.Split(pattern, "-")
-		if len(parts) == 2 {
-			start, err1 := fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", new(int))
-			end, err2 := fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", new(int))
-			if start == 1 && end == 1 && err1 == nil && err2 == nil {
-				var startNum, endNum int
-				fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", &startNum)
-				fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &endNum)
-				return value >= startNum && value <= endNum
-			}
-		}
-	}
-
-	// Handle single value
-	var num int
-	if n, err := fmt.Sscanf(pattern, "%d", &num); err == nil && n == 1 {
-		return value == num
-	}
-
-	return false
-}
-
-// applyEmojiRules applies emoji rules to proxy remarks
-func (h *SubHandler) applyEmojiRules(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
-	if len(config.Global.Emojis.Rules) == 0 {
-		return proxies
-	}
-
-	for i := range proxies {
-		// Remove old emoji first if configured
-		if config.Global.Emojis.RemoveOldEmoji {
-			proxies[i].SetRemark(removeEmoji(proxies[i].GetRemark()))
-		}
-
-		// Add new emoji based on rules
-		for _, rule := range config.Global.Emojis.Rules {
-			if (rule.Match == "" && rule.Script == "") || rule.Emoji == "" {
-				continue
-			}
-
-			// TODO: Implement script support if rule.Script is provided
-
-			// Apply matcher-based filtering (supports !!TYPE=, !!GROUP=, etc.)
-			if rule.Match != "" {
-				matched, realRule := h.applyMatcherForRename(rule.Match, proxies[i])
-				if !matched {
-					continue
-				}
-
-				// If there's a real regex rule after the matcher, check if remark matches
-				if realRule != "" {
-					matched, err := regexp.MatchString(realRule, proxies[i].GetRemark())
-					if err != nil || !matched {
-						continue
-					}
-				}
-
-				// Add emoji and break (only first matching rule)
-				proxies[i].SetRemark(rule.Emoji + " " + proxies[i].GetRemark())
-				break
-			}
-		}
-	}
-
-	return proxies
-}
-
-// removeEmoji removes emoji characters from a string
-func removeEmoji(s string) string {
-	// Simple implementation - remove common emoji patterns
-	// This regex removes most emoji and flag sequences
-	re := regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{1F900}-\x{1F9FF}\x{1F1E0}-\x{1F1FF}]`)
-	s = re.ReplaceAllString(s, "")
-
-	// Remove leading/trailing spaces
-	return strings.TrimSpace(s)
-}
-
-// sortProxies sorts proxies based on configuration
-func (h *SubHandler) sortProxies(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
-	// Simple alphabetical sort by remark
-	// TODO: Implement script-based sorting if sortScript is provided
-	sort.Slice(proxies, func(i, j int) bool {
-		return proxies[i].GetRemark() < proxies[j].GetRemark()
-	})
-
-	return proxies
 }
 
 // renderTemplate renders template with global variables and request context

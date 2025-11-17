@@ -457,3 +457,104 @@ func TestFetchRuleset(t *testing.T) {
 		t.Log("FetchRuleset should fail with invalid URL (may have fallback)")
 	}
 }
+
+func TestRemoveEmojiFunc(t *testing.T) {
+	// removeEmoji removes emoji and trims spaces
+	if removeEmoji("🇺🇸 US") != "US" {
+		t.Error("Emoji not removed")
+	}
+}
+
+func TestSortProxies(t *testing.T) {
+	proxies := []proxy.ProxyInterface{
+		&proxy.BaseProxy{Remark: "Z"},
+		&proxy.BaseProxy{Remark: "A"},
+	}
+	config.Global.NodePref.SortFlag = true
+	sorted := sortProxies(proxies)
+	if len(sorted) != 2 || sorted[0].GetRemark() != "A" {
+		t.Error("Sort failed")
+	}
+}
+
+func TestApplyMatcherForRename(t *testing.T) {
+	proxy := &proxy.BaseProxy{Type: "ss", Remark: "test", Port: 443}
+	matched, _ := applyMatcherForRename("!!TYPE=SS!!test", proxy)
+	if !matched {
+		t.Error("TYPE matcher failed")
+	}
+	matched, _ = applyMatcherForRename("!!PORT=443!!test", proxy)
+	if !matched {
+		t.Error("PORT matcher failed")
+	}
+}
+
+func TestMatchRangeFunc(t *testing.T) {
+	if !matchRange("443", 443) {
+		t.Error("Single value match failed")
+	}
+	if !matchRange("400-500", 443) {
+		t.Error("Range match failed")
+	}
+	if matchRange("400-500", 600) {
+		t.Error("Range should not match")
+	}
+}
+
+func TestApplyEmojiRules(t *testing.T) {
+	emojiConfig := config.EmojiConfig{
+		AddEmoji:       true,
+		RemoveOldEmoji: true,
+		Rules: []config.EmojiRuleConfig{
+			{Match: "US|America", Emoji: "🇺🇸"},
+			{Match: "HK|Hong", Emoji: "🇭🇰"},
+		},
+	}
+
+	proxies := []proxy.ProxyInterface{
+		&proxy.BaseProxy{Remark: "US Node"},
+		&proxy.BaseProxy{Remark: "HK Server"},
+	}
+
+	result := applyEmojiRules(proxies, emojiConfig)
+	if len(result) != 2 {
+		t.Error("Emoji rules changed proxy count")
+	}
+	if !strings.Contains(result[0].GetRemark(), "🇺🇸") && !strings.Contains(result[0].GetRemark(), "US") {
+		t.Log("Emoji may not have been added (depends on config)")
+	}
+}
+
+func TestApplyRenameRulesFunc(t *testing.T) {
+	renameNodes := []config.RenameNodeConfig{
+		{Match: "HK", Replace: "Hong Kong"},
+		{Match: "US", Replace: "United States"},
+	}
+
+	proxies := []proxy.ProxyInterface{
+		&proxy.BaseProxy{Remark: "HK Node"},
+		&proxy.BaseProxy{Remark: "US Server"},
+	}
+
+	renamed := applyRenameRules(proxies, renameNodes)
+	if len(renamed) != 2 {
+		t.Error("Rename changed proxy count")
+	}
+	// Check if rename happened (depending on implementation)
+	t.Logf("After rename: %s, %s", renamed[0].GetRemark(), renamed[1].GetRemark())
+}
+
+func TestMatchRangeEdgeCases(t *testing.T) {
+	// Empty pattern returns true (matches all)
+	if !matchRange("", 443) {
+		t.Error("Empty pattern should match (match all)")
+	}
+
+	// Multiple ranges
+	if !matchRange("80,443,8080", 443) {
+		t.Error("Comma separated should match")
+	}
+
+	// Invalid format - should not panic
+	matchRange("invalid", 443)
+}

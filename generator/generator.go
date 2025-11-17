@@ -8,8 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -24,12 +24,16 @@ import (
 
 // GeneratorOptions contains options for proxy generation
 type GeneratorOptions struct {
-	Target              string
-	ProxyGroups         []config.ProxyGroupConfig
-	Rulesets            []config.RulesetConfig
-	RawRules            []string
-	AppendProxyType     bool
-	EnableRuleGen       bool
+	Target          string
+	ProxyGroups     []config.ProxyGroupConfig
+	Rulesets        []config.RulesetConfig
+	RawRules        []string
+	AppendProxyType bool
+	EnableRuleGen   bool
+	SortProxies     bool
+	RenameNodes     []config.RenameNodeConfig
+	Emoji           config.EmojiConfig
+
 	ClashProxiesStyle   string
 	ClashGroupsStyle    string
 	SingBoxAddClashMode bool
@@ -42,6 +46,24 @@ type GeneratorOptions struct {
 
 // Generate converts proxies to target format
 func Generate(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
+	// Apply rename rules
+	proxies = applyRenameRules(proxies, opts.RenameNodes)
+
+	// process emoji
+	if opts.Emoji.AddEmoji {
+		proxies = applyEmojiRules(proxies, opts.Emoji)
+	}
+
+	// Append proxy type to remark if enabled
+	if opts.AppendProxyType {
+		for i := range proxies {
+			proxies[i].SetRemark(fmt.Sprintf("%s [%s]", proxies[i].GetRemark(), proxies[i].GetType()))
+		}
+	}
+	// Sort proxies if enabled
+	if opts.SortProxies {
+		proxies = sortProxies(proxies)
+	}
 	switch opts.Target {
 	case "clash", "clashr":
 		return generateClash(proxies, opts, baseConfig)
@@ -188,7 +210,6 @@ func applyMatcher(rule string, proxy proxy.ProxyInterface) (bool, string) {
 	}
 
 	// Handle !!GROUPID= matcher
-	// Note: GroupID is not currently tracked in parser.ProxyInterface, default to 0
 	if strings.HasPrefix(rule, "!!GROUPID=") || strings.HasPrefix(rule, "!!INSERT=") {
 		parts := strings.SplitN(rule, "!!", 3)
 		if len(parts) >= 2 {
@@ -204,7 +225,7 @@ func applyMatcher(rule string, proxy proxy.ProxyInterface) (bool, string) {
 			}
 			// Parse range (e.g., "0", "0-5", "1,2,3")
 			// Default GroupID to 0 since it's not tracked in current implementation
-			matched := matchRange(groupIDPattern, 0)
+			matched := matchRange(groupIDPattern, proxy.GetGroupId())
 			return matched, realRule
 		}
 	}
@@ -358,25 +379,9 @@ func fetchRuleset(path string) (string, error) {
 		return string(body), nil
 	}
 
-	// Try as local file
-	basePath := config.Global.Common.BasePath
-	if basePath == "" {
-		basePath = "base"
+	if data, err := os.ReadFile(path); err == nil {
+		return string(data), nil
 	}
-
-	// Try multiple possible paths
-	paths := []string{
-		path,
-		filepath.Join(basePath, path),
-		filepath.Join(basePath, "rules", path),
-	}
-
-	for _, p := range paths {
-		if data, err := os.ReadFile(p); err == nil {
-			return string(data), nil
-		}
-	}
-
 	return "", fmt.Errorf("ruleset not found: %s", path)
 }
 
@@ -998,4 +1003,180 @@ func generateSingle(proxies []proxy.ProxyInterface, format string) (string, erro
 	subscription := strings.Join(lines, "\n")
 	encoded := base64.StdEncoding.EncodeToString([]byte(subscription))
 	return encoded, nil
+}
+
+// removeEmoji removes emoji characters from a string
+func removeEmoji(s string) string {
+	// Simple implementation - remove common emoji patterns
+	// This regex removes most emoji and flag sequences
+	re := regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{1F900}-\x{1F9FF}\x{1F1E0}-\x{1F1FF}]`)
+	s = re.ReplaceAllString(s, "")
+
+	// Remove leading/trailing spaces
+	return strings.TrimSpace(s)
+}
+
+// applyEmojiRules applies emoji rules to proxy remarks
+func applyEmojiRules(proxies []proxy.ProxyInterface, emojiConfig config.EmojiConfig) []proxy.ProxyInterface {
+	if len(emojiConfig.Rules) == 0 {
+		return proxies
+	}
+
+	for i := range proxies {
+		// Remove old emoji first if configured
+		if emojiConfig.RemoveOldEmoji {
+			proxies[i].SetRemark(removeEmoji(proxies[i].GetRemark()))
+		}
+
+		// Add new emoji based on rules
+		for _, rule := range emojiConfig.Rules {
+			if (rule.Match == "" && rule.Script == "") || rule.Emoji == "" {
+				continue
+			}
+
+			// TODO: Implement script support if rule.Script is provided
+
+			// Apply matcher-based filtering (supports !!TYPE=, !!GROUP=, etc.)
+			if rule.Match != "" {
+				matched, realRule := applyMatcherForRename(rule.Match, proxies[i])
+				if !matched {
+					continue
+				}
+
+				// If there's a real regex rule after the matcher, check if remark matches
+				if realRule != "" {
+					matched, err := regexp.MatchString(realRule, proxies[i].GetRemark())
+					if err != nil || !matched {
+						continue
+					}
+				}
+
+				// Add emoji and break (only first matching rule)
+				proxies[i].SetRemark(rule.Emoji + " " + proxies[i].GetRemark())
+				break
+			}
+		}
+	}
+
+	return proxies
+}
+
+// applyMatcherForRename applies special matchers for rename rules
+func applyMatcherForRename(rule string, proxy proxy.ProxyInterface) (bool, string) {
+	// Similar to generator's applyMatcher but for rename context
+
+	// Handle !!GROUP= matcher
+	if strings.HasPrefix(rule, "!!GROUP=") {
+		parts := strings.SplitN(rule, "!!", 3)
+		if len(parts) >= 2 {
+			groupPattern := strings.TrimPrefix(parts[1], "GROUP=")
+			realRule := ""
+			if len(parts) > 2 {
+				realRule = parts[2]
+			}
+			matched, _ := regexp.MatchString(groupPattern, proxy.GetGroup())
+			return matched, realRule
+		}
+	}
+
+	// Handle !!TYPE= matcher
+	if strings.HasPrefix(rule, "!!TYPE=") {
+		parts := strings.SplitN(rule, "!!", 3)
+		if len(parts) >= 2 {
+			typePattern := strings.TrimPrefix(parts[1], "TYPE=")
+			realRule := ""
+			if len(parts) > 2 {
+				realRule = parts[2]
+			}
+			proxyType := strings.ToUpper(proxy.GetType())
+			matched, _ := regexp.MatchString("(?i)^("+typePattern+")$", proxyType)
+			return matched, realRule
+		}
+	}
+
+	// Handle !!PORT= matcher
+	if strings.HasPrefix(rule, "!!PORT=") {
+		parts := strings.SplitN(rule, "!!", 3)
+		if len(parts) >= 2 {
+			portPattern := strings.TrimPrefix(parts[1], "PORT=")
+			realRule := ""
+			if len(parts) > 2 {
+				realRule = parts[2]
+			}
+			matched := matchRange(portPattern, proxy.GetPort())
+			return matched, realRule
+		}
+	}
+
+	// Handle !!SERVER= matcher
+	if strings.HasPrefix(rule, "!!SERVER=") {
+		parts := strings.SplitN(rule, "!!", 3)
+		if len(parts) >= 2 {
+			serverPattern := strings.TrimPrefix(parts[1], "SERVER=")
+			realRule := ""
+			if len(parts) > 2 {
+				realRule = parts[2]
+			}
+			matched, _ := regexp.MatchString(serverPattern, proxy.GetServer())
+			return matched, realRule
+		}
+	}
+
+	// No special matcher, return rule as-is
+	return true, rule
+}
+
+// applyRenameRules applies rename rules to proxy remarks
+func applyRenameRules(proxies []proxy.ProxyInterface, renameNodes []config.RenameNodeConfig) []proxy.ProxyInterface {
+	if len(renameNodes) == 0 {
+		return proxies
+	}
+
+	for i := range proxies {
+		originalRemark := proxies[i].GetRemark()
+
+		for _, rule := range renameNodes {
+			// Skip if no match pattern or both match and replace are empty
+			if rule.Match == "" && rule.Script == "" {
+				continue
+			}
+
+			// TODO: Implement script support if rule.Script is provided
+
+			// Apply matcher-based filtering (supports !!TYPE=, !!GROUP=, etc.)
+			if rule.Match != "" {
+				matched, realRule := applyMatcherForRename(rule.Match, proxies[i])
+				if !matched {
+					continue
+				}
+
+				// If there's a real regex rule after the matcher, apply it
+				if realRule != "" {
+					re, err := regexp.Compile(realRule)
+					if err != nil {
+						continue
+					}
+					proxies[i].SetRemark(re.ReplaceAllString(proxies[i].GetRemark(), rule.Replace))
+				}
+			}
+		}
+
+		// If remark is empty after processing, restore original
+		if proxies[i].GetRemark() == "" {
+			proxies[i].SetRemark(originalRemark)
+		}
+	}
+
+	return proxies
+}
+
+// sortProxies sorts proxies based on configuration
+func sortProxies(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
+	// Simple alphabetical sort by remark
+	// TODO: Implement script-based sorting if sortScript is provided
+	sort.Slice(proxies, func(i, j int) bool {
+		return proxies[i].GetRemark() < proxies[j].GetRemark()
+	})
+
+	return proxies
 }

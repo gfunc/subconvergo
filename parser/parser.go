@@ -41,33 +41,85 @@ import (
 	C "github.com/metacubex/mihomo/config"
 )
 
-type CustomContent struct {
+type SubContent struct {
 	Proxies  []proxy.ProxyInterface
 	Groups   []config.ProxyGroupConfig
 	RawRules []string
 }
 
+type SubParser struct {
+	Index int
+	URL   string
+	Proxy string
+}
+
+func (sp *SubParser) Parse() (*SubContent, error) {
+	sc := &SubContent{
+		Proxies:  make([]proxy.ProxyInterface, 0),
+		Groups:   make([]config.ProxyGroupConfig, 0),
+		RawRules: make([]string, 0),
+	}
+	if strings.HasPrefix(sp.URL, "http://") || strings.HasPrefix(sp.URL, "https://") {
+		// Parse subscription
+		custom, err := sp.ParseSubscription()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse subscription: %w", err)
+		}
+		sc.Proxies = append(sc.Proxies, custom.Proxies...)
+		if custom.Proxies != nil {
+			sc.Groups = append(sc.Groups, custom.Groups...)
+		}
+		if custom.RawRules != nil {
+			sc.RawRules = append(sc.RawRules, custom.RawRules...)
+		}
+	} else if strings.HasPrefix(sp.URL, "file://") {
+		custom, err := sp.ParseSubscriptionFile()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse subscription: %w", err)
+		}
+		sc.Proxies = append(sc.Proxies, custom.Proxies...)
+		if custom.Proxies != nil {
+			sc.Groups = append(sc.Groups, custom.Groups...)
+		}
+		if custom.RawRules != nil {
+			sc.RawRules = append(sc.RawRules, custom.RawRules...)
+		}
+	} else {
+		parserProxy, err := ParseProxyLine(sp.URL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse proxy line: %w", err)
+		}
+		parserProxy.SetGroupId(sp.Index)
+		parserProxy.SetGroup(sp.URL)
+		sc.Proxies = append(sc.Proxies, parserProxy)
+	}
+	return sc, nil
+}
+
 // ParseSubscription parses a subscription URL and returns proxy list
-func ParseSubscription(subURL string, proxy string) (*CustomContent, error) {
+func (sp *SubParser) ParseSubscription() (*SubContent, error) {
 	// Fetch subscription content
-	content, err := fetchSubscription(subURL, proxy)
+	content, err := sp.fetchSubscription()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch subscription: %w", err)
 	}
 
 	// Try to detect subscription format and parse
-	custom, err := parseContent(content)
+	custom, err := sp.parseContent(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subscription: %w", err)
 	}
-
+	for _, p := range custom.Proxies {
+		p.SetGroupId(sp.Index)
+		p.SetGroup(sp.URL)
+	}
 	return custom, nil
 }
 
 // ParseSubscriptionFile parses a file url like "file://xxxx.yaml" returns proxy list
-func ParseSubscriptionFile(subURL string) (*CustomContent, error) {
+func (sp *SubParser) ParseSubscriptionFile() (*SubContent, error) {
 	// get file path
-	filePath := strings.TrimPrefix(subURL, "file://")
+	filePath := strings.TrimPrefix(sp.URL, "file://")
 	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -75,7 +127,7 @@ func ParseSubscriptionFile(subURL string) (*CustomContent, error) {
 	}
 
 	// Try to detect subscription format and parse
-	custom, err := parseContent(string(content))
+	custom, err := sp.parseContent(string(content))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subscription: %w", err)
 	}
@@ -83,14 +135,14 @@ func ParseSubscriptionFile(subURL string) (*CustomContent, error) {
 	return custom, nil
 }
 
-func fetchSubscription(subURL string, proxy string) (string, error) {
+func (sp *SubParser) fetchSubscription() (string, error) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
 	// Configure proxy if specified
-	if proxy != "" && proxy != "NONE" {
-		proxyURL, err := url.Parse(proxy)
+	if sp.Proxy != "" && sp.Proxy != "NONE" {
+		proxyURL, err := url.Parse(sp.Proxy)
 		if err == nil {
 			client.Transport = &http.Transport{
 				Proxy: http.ProxyURL(proxyURL),
@@ -98,7 +150,7 @@ func fetchSubscription(subURL string, proxy string) (string, error) {
 		}
 	}
 
-	resp, err := client.Get(subURL)
+	resp, err := client.Get(sp.URL)
 	if err != nil {
 		return "", err
 	}
@@ -116,7 +168,7 @@ func fetchSubscription(subURL string, proxy string) (string, error) {
 	return string(body), nil
 }
 
-func parseContent(content string) (*CustomContent, error) {
+func (sp *SubParser) parseContent(content string) (*SubContent, error) {
 	// Try base64 decode first (standard subscription format)
 	decoded, err := base64.StdEncoding.DecodeString(content)
 	if err == nil {
@@ -155,7 +207,7 @@ func parseContent(content string) (*CustomContent, error) {
 		return nil, fmt.Errorf("no valid proxies found")
 	}
 
-	return &CustomContent{
+	return &SubContent{
 		Proxies: proxies,
 	}, nil
 }
@@ -932,7 +984,7 @@ func parseTUIC(line string) (proxy.SubconverterProxy, error) {
 }
 
 // ParseMihomoConfig parses Clash YAML format and returns proxies
-func ParseMihomoConfig(content string) (*CustomContent, error) {
+func ParseMihomoConfig(content string) (*SubContent, error) {
 	// Try parsing as YAML (Clash format)
 	var clashConfig C.RawConfig
 
@@ -943,7 +995,7 @@ func ParseMihomoConfig(content string) (*CustomContent, error) {
 	if len(clashConfig.Proxy) == 0 {
 		return nil, fmt.Errorf("no proxies found in clash format")
 	}
-	custom := &CustomContent{Proxies: make([]proxy.ProxyInterface, 0)}
+	custom := &SubContent{Proxies: make([]proxy.ProxyInterface, 0)}
 
 	for _, proxyMap := range clashConfig.Proxy {
 		mihomoProxy, err := parseMihomoProxy(proxyMap)

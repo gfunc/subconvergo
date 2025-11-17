@@ -383,8 +383,12 @@ func TestParseProxyLine(t *testing.T) {
 func TestParseContentSkipsComments(t *testing.T) {
 	content := `# comment line
 ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test`
-
-	result, err := parseContent(content)
+	sp := &SubParser{
+		Index: 0,
+		URL:   "",
+		Proxy: "",
+	}
+	result, err := sp.parseContent(content)
 	if err != nil {
 		t.Fatalf("parseContent returned error: %v", err)
 	}

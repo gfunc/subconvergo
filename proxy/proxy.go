@@ -14,9 +14,11 @@ type ProxyInterface interface {
 	GetRemark() string
 	GetServer() string
 	GetPort() int
-	GetGroup() string
 	SetRemark(remark string)
+	GetGroup() string
 	SetGroup(group string)
+	GetGroupId() int
+	SetGroupId(groupId int)
 }
 
 type SubconverterProxy interface {
@@ -27,11 +29,12 @@ type SubconverterProxy interface {
 
 // BaseProxy contains common fields shared by all proxy types
 type BaseProxy struct {
-	Type   string `yaml:"type" json:"type"`
-	Remark string `yaml:"remark" json:"remark"`
-	Server string `yaml:"server" json:"server"`
-	Port   int    `yaml:"port" json:"port"`
-	Group  string `yaml:"group" json:"group"`
+	Type    string `yaml:"type" json:"type"`
+	Remark  string `yaml:"remark" json:"remark"`
+	Server  string `yaml:"server" json:"server"`
+	Port    int    `yaml:"port" json:"port"`
+	Group   string `yaml:"group" json:"group"` // group here is not proxy group, but subscription group
+	GroupId int    `yaml:"group_id" json:"group_id"`
 }
 
 func (p *BaseProxy) GetType() string {
@@ -60,6 +63,14 @@ func (p *BaseProxy) GetGroup() string {
 
 func (p *BaseProxy) SetGroup(group string) {
 	p.Group = group
+}
+
+func (p *BaseProxy) GetGroupId() int {
+	return p.GroupId
+}
+
+func (p *BaseProxy) SetGroupId(groupId int) {
+	p.GroupId = groupId
 }
 
 // ShadowsocksProxy represents a Shadowsocks proxy
