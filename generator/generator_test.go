@@ -441,7 +441,7 @@ func TestGenerateSingle(t *testing.T) {
 		&proxy.ShadowsocksProxy{BaseProxy: proxy.BaseProxy{Type: "ss", Remark: "SS", Server: "host", Port: 8388}, Password: "pwd", EncryptMethod: "aes-256-gcm"},
 	}
 
-	result, err := generateSingle(proxies, "ss")
+	result, err := generateSingle(proxies, "ss", nil)
 	if err != nil {
 		t.Errorf("GenerateSingle failed: %v", err)
 	}

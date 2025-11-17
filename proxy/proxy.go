@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/gfunc/subconvergo/config"
 )
 
 type ProxyInterface interface {
@@ -23,8 +25,8 @@ type ProxyInterface interface {
 
 type SubconverterProxy interface {
 	ProxyInterface
-	GenerateLink() (string, error)
-	ProxyOptions() map[string]interface{}
+	GenerateLink(ext *config.ExtraSetting) (string, error)
+	ProxyOptions(ext *config.ExtraSetting) map[string]interface{}
 }
 
 // BaseProxy contains common fields shared by all proxy types
@@ -76,13 +78,13 @@ func (p *BaseProxy) SetGroupId(groupId int) {
 // ShadowsocksProxy represents a Shadowsocks proxy
 type ShadowsocksProxy struct {
 	BaseProxy     `yaml:",inline"`
-	Password      string `yaml:"password" json:"password"`
-	EncryptMethod string `yaml:"encrypt_method" json:"encrypt_method"`
-	Plugin        string `yaml:"plugin" json:"plugin"`
-	PluginOpts    string `yaml:"plugin_opts" json:"plugin_opts"`
+	Password      string                 `yaml:"password" json:"password"`
+	EncryptMethod string                 `yaml:"encrypt_method" json:"encrypt_method"`
+	Plugin        string                 `yaml:"plugin" json:"plugin"`
+	PluginOpts    map[string]interface{} `yaml:"plugin_opts" json:"plugin_opts"`
 }
 
-func (p *ShadowsocksProxy) GenerateLink() (string, error) {
+func (p *ShadowsocksProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	// Format: ss://base64(method:password)@server:port#remark
 	userInfo := fmt.Sprintf("%s:%s", p.EncryptMethod, p.Password)
 	encoded := base64.URLEncoding.EncodeToString([]byte(userInfo))
@@ -90,7 +92,7 @@ func (p *ShadowsocksProxy) GenerateLink() (string, error) {
 	return link, nil
 }
 
-func (p *ShadowsocksProxy) ProxyOptions() map[string]interface{} {
+func (p *ShadowsocksProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":     "ss",
 		"name":     p.Remark,
@@ -101,9 +103,29 @@ func (p *ShadowsocksProxy) ProxyOptions() map[string]interface{} {
 	}
 
 	if p.Plugin != "" {
-		options["plugin"] = p.Plugin
-		if p.PluginOpts != "" {
-			options["plugin-opts"] = parsePluginOpts(p.PluginOpts)
+		opts := make(map[string]interface{})
+		if len(p.PluginOpts) != 0 {
+
+			switch p.Plugin {
+			case "simple-obfs":
+			case "obfs-local":
+				options["plugin"] = "obfs"
+				opts["mode"] = p.PluginOpts["obfs"]
+				opts["host"] = p.PluginOpts["obfs-host"]
+			case "v2ray-plugin":
+				options["plugin"] = "v2ray-plugin"
+				opts["mode"] = p.PluginOpts["mode"]
+				opts["host"] = p.PluginOpts["host"]
+				opts["path"] = p.PluginOpts["path"]
+				opts["tls"] = p.PluginOpts["tls"]
+				opts["mux"] = p.PluginOpts["mux"]
+				if ext != nil {
+					if ext.SkipCertVerify != nil {
+						opts["skip-cert-verify"] = *ext.SkipCertVerify
+					}
+				}
+			}
+			options["plugin-opts"] = opts
 		}
 	}
 
@@ -121,7 +143,7 @@ type ShadowsocksRProxy struct {
 	ObfsParam     string `yaml:"obfs_param" json:"obfs_param"`
 }
 
-func (p *ShadowsocksRProxy) GenerateLink() (string, error) {
+func (p *ShadowsocksRProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	// Format: ssr://base64(server:port:protocol:method:obfs:base64(password)/?...)
 	passEncoded := base64.URLEncoding.EncodeToString([]byte(p.Password))
 	mainPart := fmt.Sprintf("%s:%d:%s:%s:%s:%s",
@@ -153,7 +175,7 @@ func (p *ShadowsocksRProxy) GenerateLink() (string, error) {
 	return "ssr://" + encoded, nil
 }
 
-func (p *ShadowsocksRProxy) ProxyOptions() (options map[string]interface{}) {
+func (p *ShadowsocksRProxy) ProxyOptions(ext *config.ExtraSetting) (options map[string]interface{}) {
 	if p.Type == "ss" {
 		options = map[string]interface{}{
 			"type":     "ss",
@@ -192,7 +214,7 @@ type VMessProxy struct {
 	SNI       string `yaml:"sni" json:"sni"`
 }
 
-func (p *VMessProxy) GenerateLink() (string, error) {
+func (p *VMessProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	// VMess JSON format
 	vmessData := map[string]interface{}{
 		"v":    "2",
@@ -221,7 +243,7 @@ func (p *VMessProxy) GenerateLink() (string, error) {
 	return "vmess://" + encoded, nil
 }
 
-func (p *VMessProxy) ProxyOptions() map[string]interface{} {
+func (p *VMessProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":    "vmess",
 		"name":    p.Remark,
@@ -240,7 +262,7 @@ func (p *VMessProxy) ProxyOptions() map[string]interface{} {
 		}
 	}
 	switch p.Network {
-	case "ws", "httpupgrade":
+	case "ws":
 		wsOpts := make(map[string]interface{})
 		if p.Path == "" {
 			p.Path = "/"
@@ -252,7 +274,21 @@ func (p *VMessProxy) ProxyOptions() map[string]interface{} {
 			wsOpts["headers"] = headers
 		}
 		options["ws-opts"] = wsOpts
-
+	case "httpupgrade":
+		options["network"] = "ws"
+		wsOpts := make(map[string]interface{})
+		if p.Path == "" {
+			p.Path = "/"
+		}
+		wsOpts["v2ray-http-upgrade"] = true
+		wsOpts["v2ray-http-upgrade-fast-open"] = true
+		wsOpts["path"] = p.Path
+		if p.Host != "" {
+			headers := make(map[string]string)
+			headers["Host"] = p.Host
+			wsOpts["headers"] = headers
+		}
+		options["ws-opts"] = wsOpts
 	case "http", "h2":
 		h2Opts := make(map[string]interface{})
 		if p.Path != "" {
@@ -297,7 +333,7 @@ type TrojanProxy struct {
 	AllowInsecure bool   `yaml:"allow_insecure" json:"allow_insecure"`
 }
 
-func (p *TrojanProxy) GenerateLink() (string, error) {
+func (p *TrojanProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	// Format: trojan://password@server:port?params#remark
 	link := fmt.Sprintf("trojan://%s@%s:%d", p.Password, p.Server, p.Port)
 
@@ -326,7 +362,7 @@ func (p *TrojanProxy) GenerateLink() (string, error) {
 	return link, nil
 }
 
-func (p *TrojanProxy) ProxyOptions() map[string]interface{} {
+func (p *TrojanProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":     "trojan",
 		"name":     p.Remark,
@@ -377,7 +413,7 @@ type VLESSProxy struct {
 	SNI           string `yaml:"sni" json:"sni"`
 }
 
-func (p *VLESSProxy) GenerateLink() (string, error) {
+func (p *VLESSProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	// Format: vless://uuid@server:port?params#remark
 	link := fmt.Sprintf("vless://%s@%s:%d", p.UUID, p.Server, p.Port)
 
@@ -406,7 +442,7 @@ func (p *VLESSProxy) GenerateLink() (string, error) {
 	return link, nil
 }
 
-func (p *VLESSProxy) ProxyOptions() map[string]interface{} {
+func (p *VLESSProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":    "vless",
 		"name":    p.Remark,
@@ -474,7 +510,7 @@ type HysteriaProxy struct {
 	Params        url.Values `yaml:"-" json:"params"`
 }
 
-func (p *HysteriaProxy) GenerateLink() (string, error) {
+func (p *HysteriaProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	protocol := p.Type
 	link := fmt.Sprintf("%s://%s@%s:%d", protocol, p.Password, p.Server, p.Port)
 
@@ -496,7 +532,7 @@ func (p *HysteriaProxy) GenerateLink() (string, error) {
 	return link, nil
 }
 
-func (p *HysteriaProxy) ProxyOptions() map[string]interface{} {
+func (p *HysteriaProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":   p.Type,
 		"name":   p.Remark,
@@ -576,7 +612,7 @@ type TUICProxy struct {
 	Params        url.Values `yaml:"-" json:"params"`
 }
 
-func (p *TUICProxy) GenerateLink() (string, error) {
+func (p *TUICProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	link := fmt.Sprintf("tuic://%s", p.UUID)
 	if p.Password != "" {
 		link += ":" + p.Password
@@ -598,7 +634,7 @@ func (p *TUICProxy) GenerateLink() (string, error) {
 	return link, nil
 }
 
-func (p *TUICProxy) ProxyOptions() map[string]interface{} {
+func (p *TUICProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":   "tuic",
 		"name":   p.Remark,
@@ -635,21 +671,4 @@ func (p *TUICProxy) ProxyOptions() map[string]interface{} {
 
 func urlEncode(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, " ", "%20"), "#", "%23")
-}
-
-func parsePluginOpts(opts string) map[string]interface{} {
-	result := make(map[string]interface{})
-	pairs := strings.Split(opts, ";")
-	for _, pair := range pairs {
-		if pair == "" {
-			continue
-		}
-		kv := strings.SplitN(pair, "=", 2)
-		if len(kv) == 2 {
-			result[kv[0]] = kv[1]
-		} else {
-			result[kv[0]] = "true"
-		}
-	}
-	return result
 }

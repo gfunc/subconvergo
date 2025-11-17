@@ -10,6 +10,9 @@ import (
 
 func TestLoadYAMLConfig(t *testing.T) {
 	// Create a temporary YAML config file
+	setting := Settings{}
+	setting.init()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test.yml")
 
@@ -52,71 +55,72 @@ advanced:
 	}
 
 	// Load the config
-	if err := loadYAMLConfig(configPath); err != nil {
+	if err := setting.loadYAMLConfig(configPath); err != nil {
 		t.Fatalf("Failed to load YAML config: %v", err)
 	}
 
 	// Verify common section
-	if Global.Common.APIMode != false {
-		t.Errorf("Expected APIMode=false, got %v", Global.Common.APIMode)
+	if setting.Common.APIMode != false {
+		t.Errorf("Expected APIMode=false, got %v", setting.Common.APIMode)
 	}
-	if Global.Common.APIAccessToken != "test-password" {
-		t.Errorf("Expected APIAccessToken=test-password, got %s", Global.Common.APIAccessToken)
+	if setting.Common.APIAccessToken != "test-password" {
+		t.Errorf("Expected APIAccessToken=test-password, got %s", setting.Common.APIAccessToken)
 	}
-	if Global.Common.BasePath != "testbase" {
-		t.Errorf("Expected BasePath=testbase, got %s", Global.Common.BasePath)
+	if setting.Common.BasePath != "testbase" {
+		t.Errorf("Expected BasePath=testbase, got %s", setting.Common.BasePath)
 	}
-	if len(Global.Common.ExcludeRemarks) != 2 {
-		t.Errorf("Expected 2 exclude remarks, got %d", len(Global.Common.ExcludeRemarks))
+	if len(setting.Common.ExcludeRemarks) != 2 {
+		t.Errorf("Expected 2 exclude remarks, got %d", len(setting.Common.ExcludeRemarks))
 	}
-	if len(Global.Common.IncludeRemarks) != 2 {
-		t.Errorf("Expected 2 include remarks, got %d", len(Global.Common.IncludeRemarks))
+	if len(setting.Common.IncludeRemarks) != 2 {
+		t.Errorf("Expected 2 include remarks, got %d", len(setting.Common.IncludeRemarks))
 	}
 
-	if Global.NodePref.ClashProxiesStyle != "flow" {
-		t.Errorf("Expected ClashProxiesStyle=flow, got %s", Global.NodePref.ClashProxiesStyle)
+	if setting.NodePref.ClashProxiesStyle != "flow" {
+		t.Errorf("Expected ClashProxiesStyle=flow, got %s", setting.NodePref.ClashProxiesStyle)
 	}
-	if !Global.NodePref.AppendSubUserinfo {
+	if !setting.NodePref.AppendSubUserinfo {
 		t.Error("Expected AppendSubUserinfo=true")
 	}
 
 	// Verify managed_config section
-	if !Global.ManagedConfig.WriteManagedConfig {
+	if !setting.ManagedConfig.WriteManagedConfig {
 		t.Error("Expected WriteManagedConfig=true")
 	}
-	if Global.ManagedConfig.ManagedConfigPrefix != "http://example.com:8080" {
-		t.Errorf("Expected ManagedConfigPrefix=http://example.com:8080, got %s", Global.ManagedConfig.ManagedConfigPrefix)
+	if setting.ManagedConfig.ManagedConfigPrefix != "http://example.com:8080" {
+		t.Errorf("Expected ManagedConfigPrefix=http://example.com:8080, got %s", setting.ManagedConfig.ManagedConfigPrefix)
 	}
-	if Global.ManagedConfig.ConfigUpdateInterval != 3600 {
-		t.Errorf("Expected ConfigUpdateInterval=3600, got %d", Global.ManagedConfig.ConfigUpdateInterval)
+	if setting.ManagedConfig.ConfigUpdateInterval != 3600 {
+		t.Errorf("Expected ConfigUpdateInterval=3600, got %d", setting.ManagedConfig.ConfigUpdateInterval)
 	}
-	if !Global.ManagedConfig.ConfigUpdateStrict {
+	if !setting.ManagedConfig.ConfigUpdateStrict {
 		t.Error("Expected ConfigUpdateStrict=true")
 	}
 
 	// Verify server section
-	if Global.Server.Listen != "127.0.0.1" {
-		t.Errorf("Expected Listen=127.0.0.1, got %s", Global.Server.Listen)
+	if setting.Server.Listen != "127.0.0.1" {
+		t.Errorf("Expected Listen=127.0.0.1, got %s", setting.Server.Listen)
 	}
-	if Global.Server.Port != 8888 {
-		t.Errorf("Expected Port=8888, got %d", Global.Server.Port)
+	if setting.Server.Port != 8888 {
+		t.Errorf("Expected Port=8888, got %d", setting.Server.Port)
 	}
 
 	// Verify advanced section
-	if Global.Advanced.LogLevel != "debug" {
-		t.Errorf("Expected LogLevel=debug, got %s", Global.Advanced.LogLevel)
+	if setting.Advanced.LogLevel != "debug" {
+		t.Errorf("Expected LogLevel=debug, got %s", setting.Advanced.LogLevel)
 	}
-	if !Global.Advanced.SkipFailedLinks {
+	if !setting.Advanced.SkipFailedLinks {
 		t.Error("Expected SkipFailedLinks=true")
 	}
-	if Global.Advanced.MaxAllowedRulesets != 100 {
-		t.Errorf("Expected MaxAllowedRulesets=100, got %d", Global.Advanced.MaxAllowedRulesets)
+	if setting.Advanced.MaxAllowedRulesets != 100 {
+		t.Errorf("Expected MaxAllowedRulesets=100, got %d", setting.Advanced.MaxAllowedRulesets)
 	}
 }
 
 func TestLoadTOMLConfig(t *testing.T) {
 	// Reset global config
-	Global = &Settings{}
+	setting := Settings{}
+	setting.init()
 
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test.toml")
@@ -160,71 +164,71 @@ cache_ruleset = 43200
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
-	if err := loadTOMLConfig(configPath); err != nil {
+	if err := setting.loadTOMLConfig(configPath); err != nil {
 		t.Fatalf("Failed to load TOML config: %v", err)
 	}
 
 	// Verify common section
-	if !Global.Common.APIMode {
+	if !setting.Common.APIMode {
 		t.Error("Expected APIMode=true")
 	}
-	if Global.Common.APIAccessToken != "toml-token" {
-		t.Errorf("Expected APIAccessToken=toml-token, got %s", Global.Common.APIAccessToken)
+	if setting.Common.APIAccessToken != "toml-token" {
+		t.Errorf("Expected APIAccessToken=toml-token, got %s", setting.Common.APIAccessToken)
 	}
-	if Global.Common.BasePath != "toml-base" {
-		t.Errorf("Expected BasePath=toml-base, got %s", Global.Common.BasePath)
+	if setting.Common.BasePath != "toml-base" {
+		t.Errorf("Expected BasePath=toml-base, got %s", setting.Common.BasePath)
 	}
-	if Global.Common.ProxyConfig != "NONE" {
-		t.Errorf("Expected ProxyConfig=NONE, got %s", Global.Common.ProxyConfig)
+	if setting.Common.ProxyConfig != "NONE" {
+		t.Errorf("Expected ProxyConfig=NONE, got %s", setting.Common.ProxyConfig)
 	}
 
-	if !Global.NodePref.SortFlag {
+	if !setting.NodePref.SortFlag {
 		t.Error("Expected SortFlag=true")
 	}
-	if !Global.NodePref.FilterDeprecatedNodes {
+	if !setting.NodePref.FilterDeprecatedNodes {
 		t.Error("Expected FilterDeprecatedNodes=true")
 	}
-	if Global.NodePref.SingBoxAddClashModes {
+	if setting.NodePref.SingBoxAddClashModes {
 		t.Error("Expected SingBoxAddClashModes=false")
 	}
 
 	// Verify rename rules
-	if len(Global.NodePref.RenameNodes) != 1 {
-		t.Errorf("Expected 1 rename node, got %d", len(Global.NodePref.RenameNodes))
+	if len(setting.NodePref.RenameNodes) != 1 {
+		t.Errorf("Expected 1 rename node, got %d", len(setting.NodePref.RenameNodes))
 	} else {
-		if Global.NodePref.RenameNodes[0].Match != "HK" {
-			t.Errorf("Expected Match=HK, got %s", Global.NodePref.RenameNodes[0].Match)
+		if setting.NodePref.RenameNodes[0].Match != "HK" {
+			t.Errorf("Expected Match=HK, got %s", setting.NodePref.RenameNodes[0].Match)
 		}
-		if Global.NodePref.RenameNodes[0].Replace != "Hong Kong" {
-			t.Errorf("Expected Replace='Hong Kong', got %s", Global.NodePref.RenameNodes[0].Replace)
+		if setting.NodePref.RenameNodes[0].Replace != "Hong Kong" {
+			t.Errorf("Expected Replace='Hong Kong', got %s", setting.NodePref.RenameNodes[0].Replace)
 		}
 	}
 
 	// Verify managed config
-	if Global.ManagedConfig.WriteManagedConfig {
+	if setting.ManagedConfig.WriteManagedConfig {
 		t.Error("Expected WriteManagedConfig=false")
 	}
-	if Global.ManagedConfig.ConfigUpdateInterval != 7200 {
-		t.Errorf("Expected ConfigUpdateInterval=7200, got %d", Global.ManagedConfig.ConfigUpdateInterval)
+	if setting.ManagedConfig.ConfigUpdateInterval != 7200 {
+		t.Errorf("Expected ConfigUpdateInterval=7200, got %d", setting.ManagedConfig.ConfigUpdateInterval)
 	}
 
 	// Verify server
-	if Global.Server.Port != 9000 {
-		t.Errorf("Expected Port=9000, got %d", Global.Server.Port)
+	if setting.Server.Port != 9000 {
+		t.Errorf("Expected Port=9000, got %d", setting.Server.Port)
 	}
 
 	// Verify advanced
-	if Global.Advanced.MaxConcurrentThreads != 4 {
-		t.Errorf("Expected MaxConcurrentThreads=4, got %d", Global.Advanced.MaxConcurrentThreads)
+	if setting.Advanced.MaxConcurrentThreads != 4 {
+		t.Errorf("Expected MaxConcurrentThreads=4, got %d", setting.Advanced.MaxConcurrentThreads)
 	}
-	if !Global.Advanced.EnableCache {
+	if !setting.Advanced.EnableCache {
 		t.Error("Expected EnableCache=true")
 	}
 }
 
 func TestLoadINIConfig(t *testing.T) {
-	// Reset global config
-	Global = &Settings{}
+	setting := Settings{}
+	setting.init()
 
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test.ini")
@@ -306,132 +310,132 @@ skip_failed_links=false
 		t.Fatalf("Failed to create test config: %v", err)
 	}
 
-	if err := loadINIConfig(configPath); err != nil {
+	if err := setting.loadINIConfig(configPath); err != nil {
 		t.Fatalf("Failed to load INI config: %v", err)
 	}
 
 	// Verify common section
-	if !Global.Common.APIMode {
+	if !setting.Common.APIMode {
 		t.Error("Expected APIMode=true")
 	}
-	if Global.Common.APIAccessToken != "ini-token" {
-		t.Errorf("Expected APIAccessToken=ini-token, got %s", Global.Common.APIAccessToken)
+	if setting.Common.APIAccessToken != "ini-token" {
+		t.Errorf("Expected APIAccessToken=ini-token, got %s", setting.Common.APIAccessToken)
 	}
-	if Global.Common.BasePath != "ini-base" {
-		t.Errorf("Expected BasePath=ini-base, got %s", Global.Common.BasePath)
+	if setting.Common.BasePath != "ini-base" {
+		t.Errorf("Expected BasePath=ini-base, got %s", setting.Common.BasePath)
 	}
 
 	// Verify userinfo section
-	if len(Global.UserInfo.StreamRules) < 2 {
-		t.Errorf("Expected at least 2 stream rules, got %d", len(Global.UserInfo.StreamRules))
+	if len(setting.UserInfo.StreamRules) < 2 {
+		t.Errorf("Expected at least 2 stream rules, got %d", len(setting.UserInfo.StreamRules))
 	}
-	if len(Global.UserInfo.TimeRules) < 1 {
-		t.Errorf("Expected at least 1 time rule, got %d", len(Global.UserInfo.TimeRules))
+	if len(setting.UserInfo.TimeRules) < 1 {
+		t.Errorf("Expected at least 1 time rule, got %d", len(setting.UserInfo.TimeRules))
 	}
 
 	// Verify node_pref
-	if Global.NodePref.ClashProxiesStyle != "compact" {
-		t.Errorf("Expected ClashProxiesStyle=compact, got %s", Global.NodePref.ClashProxiesStyle)
+	if setting.NodePref.ClashProxiesStyle != "compact" {
+		t.Errorf("Expected ClashProxiesStyle=compact, got %s", setting.NodePref.ClashProxiesStyle)
 	}
-	if Global.NodePref.AppendSubUserinfo {
+	if setting.NodePref.AppendSubUserinfo {
 		t.Error("Expected AppendSubUserinfo=false")
 	}
 
 	// Verify rename rules parsing
-	if len(Global.NodePref.RenameNodes) < 2 {
-		t.Errorf("Expected at least 2 rename rules, got %d", len(Global.NodePref.RenameNodes))
+	if len(setting.NodePref.RenameNodes) < 2 {
+		t.Errorf("Expected at least 2 rename rules, got %d", len(setting.NodePref.RenameNodes))
 	} else {
 		// Check first rename rule
-		if Global.NodePref.RenameNodes[0].Match != "HK" {
-			t.Errorf("Expected first rename match=HK, got %s", Global.NodePref.RenameNodes[0].Match)
+		if setting.NodePref.RenameNodes[0].Match != "HK" {
+			t.Errorf("Expected first rename match=HK, got %s", setting.NodePref.RenameNodes[0].Match)
 		}
-		if Global.NodePref.RenameNodes[0].Replace != "香港" {
-			t.Errorf("Expected first rename replace=香港, got %s", Global.NodePref.RenameNodes[0].Replace)
+		if setting.NodePref.RenameNodes[0].Replace != "香港" {
+			t.Errorf("Expected first rename replace=香港, got %s", setting.NodePref.RenameNodes[0].Replace)
 		}
 		// Check import rule
-		if Global.NodePref.RenameNodes[1].Match != `\(?((x|X)?(\d+)(\.?\d+)?)((\s?倍率?)|(x|X))\)?` &&
-			Global.NodePref.RenameNodes[1].Replace != "$1x" {
-			t.Errorf(`Expected Match=\(?((x|X)?(\d+)(\.?\d+)?)((\s?倍率?)|(x|X))\)? Replace=$1x, got %s %s`, Global.NodePref.RenameNodes[1].Match, Global.NodePref.RenameNodes[1].Replace)
+		if setting.NodePref.RenameNodes[1].Match != `\(?((x|X)?(\d+)(\.?\d+)?)((\s?倍率?)|(x|X))\)?` &&
+			setting.NodePref.RenameNodes[1].Replace != "$1x" {
+			t.Errorf(`Expected Match=\(?((x|X)?(\d+)(\.?\d+)?)((\s?倍率?)|(x|X))\)? Replace=$1x, got %s %s`, setting.NodePref.RenameNodes[1].Match, setting.NodePref.RenameNodes[1].Replace)
 		}
 	}
 
 	// Verify managed config
-	if !Global.ManagedConfig.WriteManagedConfig {
+	if !setting.ManagedConfig.WriteManagedConfig {
 		t.Error("Expected WriteManagedConfig=true")
 	}
-	if Global.ManagedConfig.ConfigUpdateInterval != 1800 {
-		t.Errorf("Expected ConfigUpdateInterval=1800, got %d", Global.ManagedConfig.ConfigUpdateInterval)
+	if setting.ManagedConfig.ConfigUpdateInterval != 1800 {
+		t.Errorf("Expected ConfigUpdateInterval=1800, got %d", setting.ManagedConfig.ConfigUpdateInterval)
 	}
-	if Global.ManagedConfig.ConfigUpdateStrict {
+	if setting.ManagedConfig.ConfigUpdateStrict {
 		t.Error("Expected ConfigUpdateStrict=false")
 	}
 
 	// Verify surge external
-	if Global.SurgeExternal.ResolveHostname {
+	if setting.SurgeExternal.ResolveHostname {
 		t.Error("Expected ResolveHostname=false")
 	}
 
 	// Verify emojis
-	if !Global.Emojis.AddEmoji {
+	if !setting.Emojis.AddEmoji {
 		t.Error("Expected AddEmoji=true")
 	}
-	if Global.Emojis.RemoveOldEmoji {
+	if setting.Emojis.RemoveOldEmoji {
 		t.Error("Expected RemoveOldEmoji=false")
 	}
-	if len(Global.Emojis.Rules) < 2 {
-		t.Errorf("Expected at least 2 emoji rules, got %d", len(Global.Emojis.Rules))
+	if len(setting.Emojis.Rules) < 2 {
+		t.Errorf("Expected at least 2 emoji rules, got %d", len(setting.Emojis.Rules))
 	}
 
 	// Verify rulesets
-	if !Global.Rulesets.Enabled {
+	if !setting.Rulesets.Enabled {
 		t.Error("Expected Rulesets.Enabled=true")
 	}
-	if !Global.Rulesets.OverwriteOriginalRules {
+	if !setting.Rulesets.OverwriteOriginalRules {
 		t.Error("Expected OverwriteOriginalRules=true")
 	}
-	if len(Global.Rulesets.Rulesets) < 3 {
-		t.Errorf("Expected at least 3 rulesets, got %d", len(Global.Rulesets.Rulesets))
+	if len(setting.Rulesets.Rulesets) < 3 {
+		t.Errorf("Expected at least 3 rulesets, got %d", len(setting.Rulesets.Rulesets))
 	}
 
 	// Verify proxy groups
-	if len(Global.ProxyGroups.CustomProxyGroups) < 3 {
-		t.Errorf("Expected at least 3 proxy groups, got %d", len(Global.ProxyGroups.CustomProxyGroups))
+	if len(setting.ProxyGroups.CustomProxyGroups) < 3 {
+		t.Errorf("Expected at least 3 proxy groups, got %d", len(setting.ProxyGroups.CustomProxyGroups))
 	}
 
 	// Verify template
-	if Global.Template.TemplatePath != "/path/to/templates" {
-		t.Errorf("Expected TemplatePath=/path/to/templates, got %s", Global.Template.TemplatePath)
+	if setting.Template.TemplatePath != "/path/to/templates" {
+		t.Errorf("Expected TemplatePath=/path/to/templates, got %s", setting.Template.TemplatePath)
 	}
-	if len(Global.Template.Globals) < 2 {
-		t.Errorf("Expected at least 2 template globals, got %d", len(Global.Template.Globals))
+	if len(setting.Template.Globals) < 2 {
+		t.Errorf("Expected at least 2 template globals, got %d", len(setting.Template.Globals))
 	}
 
 	// Verify aliases
-	if len(Global.Aliases) < 2 {
-		t.Errorf("Expected at least 2 aliases, got %d", len(Global.Aliases))
+	if len(setting.Aliases) < 2 {
+		t.Errorf("Expected at least 2 aliases, got %d", len(setting.Aliases))
 	}
 
 	// Verify tasks
-	if len(Global.Tasks) < 1 {
-		t.Errorf("Expected at least 1 task, got %d", len(Global.Tasks))
+	if len(setting.Tasks) < 1 {
+		t.Errorf("Expected at least 1 task, got %d", len(setting.Tasks))
 	}
 
 	// Verify server
-	if Global.Server.Port != 7777 {
-		t.Errorf("Expected Port=7777, got %d", Global.Server.Port)
+	if setting.Server.Port != 7777 {
+		t.Errorf("Expected Port=7777, got %d", setting.Server.Port)
 	}
 
 	// Verify advanced
-	if Global.Advanced.LogLevel != "warn" {
-		t.Errorf("Expected LogLevel=warn, got %s", Global.Advanced.LogLevel)
+	if setting.Advanced.LogLevel != "warn" {
+		t.Errorf("Expected LogLevel=warn, got %s", setting.Advanced.LogLevel)
 	}
-	if !Global.Advanced.PrintDebugInfo {
+	if !setting.Advanced.PrintDebugInfo {
 		t.Error("Expected PrintDebugInfo=true")
 	}
-	if Global.Advanced.MaxAllowedRules != 50000 {
-		t.Errorf("Expected MaxAllowedRules=50000, got %d", Global.Advanced.MaxAllowedRules)
+	if setting.Advanced.MaxAllowedRules != 50000 {
+		t.Errorf("Expected MaxAllowedRules=50000, got %d", setting.Advanced.MaxAllowedRules)
 	}
-	if Global.Advanced.SkipFailedLinks {
+	if setting.Advanced.SkipFailedLinks {
 		t.Error("Expected SkipFailedLinks=false")
 	}
 }

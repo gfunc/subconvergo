@@ -25,6 +25,7 @@ import (
 
 // GeneratorOptions contains options for proxy generation
 type GeneratorOptions struct {
+	config.ExtraSetting
 	Target          string
 	ProxyGroups     []config.ProxyGroupConfig
 	Rulesets        []config.RulesetConfig
@@ -34,15 +35,6 @@ type GeneratorOptions struct {
 	SortProxies     bool
 	RenameNodes     []config.RenameNodeConfig
 	Emoji           config.EmojiConfig
-
-	ClashProxiesStyle   string
-	ClashGroupsStyle    string
-	SingBoxAddClashMode bool
-	UDP                 *bool
-	TFO                 *bool
-	SkipCertVerify      *bool
-	TLS13               *bool
-	NodeList            bool
 }
 
 // Generate converts proxies to target format
@@ -78,7 +70,7 @@ func Generate(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig 
 	case "singbox":
 		return generateSingBox(proxies, opts, baseConfig)
 	case "ss", "ssr", "v2ray", "trojan":
-		return generateSingle(proxies, opts.Target)
+		return generateSingle(proxies, opts.Target, &opts.ExtraSetting)
 	default:
 		return "", fmt.Errorf("unsupported target: %s", opts.Target)
 	}
@@ -101,9 +93,9 @@ func generateClash(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseCo
 	for _, p := range proxies {
 		switch c := p.(type) {
 		case *proxy.MihomoProxy:
-			clashProxies = append(clashProxies, c.ProxyOptions())
+			clashProxies = append(clashProxies, c.ProxyOptions(&opts.ExtraSetting))
 		case proxy.SubconverterProxy:
-			clashProxies = append(clashProxies, c.ProxyOptions())
+			clashProxies = append(clashProxies, c.ProxyOptions(&opts.ExtraSetting))
 		default:
 			log.Printf("[generator.generateClash] unsupported proxy type=%T remark=%s", p, p.GetRemark())
 		}
@@ -338,11 +330,11 @@ func matchRange(pattern string, value int) bool {
 
 // filterProxiesByRules filters proxies based on rule patterns
 // Supports regex matching and special matchers
-func filterProxiesByRules(proxies []proxy.ProxyInterface, rules []string) []string {
+func filterProxiesByRules(proxies []proxy.ProxyInterface, groupRules []string) []string {
 	var result []string
 	seen := make(map[string]bool)
 
-	for _, rule := range rules {
+	for _, rule := range groupRules {
 		// Handle [] prefix for direct inclusion
 		if strings.HasPrefix(rule, "[]") {
 			name := rule[2:]
@@ -1001,7 +993,7 @@ func generateSingBoxRules(rulesets []config.RulesetConfig) []map[string]interfac
 	return rules
 }
 
-func generateSingle(proxies []proxy.ProxyInterface, format string) (string, error) {
+func generateSingle(proxies []proxy.ProxyInterface, target string, ext *config.ExtraSetting) (string, error) {
 	// Generate simple subscription (base64 encoded links)
 	var lines []string
 	for _, p := range proxies {
@@ -1009,14 +1001,14 @@ func generateSingle(proxies []proxy.ProxyInterface, format string) (string, erro
 		if mixin, ok := p.(proxy.SubconverterProxy); ok {
 
 			// Only include proxies matching the requested format
-			if format == "v2ray" && (p.GetType() == "vmess" || p.GetType() == "vless") {
-				link, err := mixin.GenerateLink()
+			if target == "v2ray" && (p.GetType() == "vmess" || p.GetType() == "vless") {
+				link, err := mixin.GenerateLink(ext)
 				if err != nil {
 					log.Panicln(`Failed to generate link for proxy:`, err)
 				}
 				lines = append(lines, link)
-			} else if format == p.GetType() {
-				link, err := mixin.GenerateLink()
+			} else if target == p.GetType() {
+				link, err := mixin.GenerateLink(ext)
 				if err != nil {
 					log.Panicln(`Failed to generate link for proxy:`, err)
 				}

@@ -107,7 +107,7 @@ func (sp *SubParser) parseURL() {
 		return
 	}
 	sp.Tag = u.Fragment
-	
+
 	// remove tag from sp.URL
 	if idx := strings.Index(sp.URL, "#"); idx != -1 {
 		sp.URL = sp.URL[:idx]
@@ -239,36 +239,6 @@ func (sp *SubParser) parseContent(content string) (*SubContent, error) {
 	return &SubContent{
 		Proxies: proxies,
 	}, nil
-}
-
-// Helper functions for URL encoding/decoding
-func urlDecode(s string) string {
-	decoded, err := url.QueryUnescape(s)
-	if err != nil {
-		return s
-	}
-	return decoded
-}
-
-func urlSafeBase64Decode(s string) string {
-	// Replace URL-safe characters
-	s = strings.ReplaceAll(s, "-", "+")
-	s = strings.ReplaceAll(s, "_", "/")
-
-	// Add padding if necessary
-	if m := len(s) % 4; m != 0 {
-		s += strings.Repeat("=", 4-m)
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		// Try without padding
-		decoded, err = base64.RawStdEncoding.DecodeString(s)
-		if err != nil {
-			return s
-		}
-	}
-	return string(decoded)
 }
 
 // ProcessRemark ensures unique remarks by appending _N suffix for duplicates
@@ -430,17 +400,17 @@ func parseShadowsocks(line string) (proxy.SubconverterProxy, error) {
 		Password:      password,
 		EncryptMethod: method,
 		Plugin:        plugin,
-		PluginOpts:    pluginOpts,
+		PluginOpts:    parsePluginOpts(pluginOpts),
 	}
 
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
 	if err != nil {
 		return p, nil
 	} else {
 		return &proxy.MihomoProxy{
 			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(),
+			Options:        p.ProxyOptions(nil),
 		}, nil
 	}
 
@@ -535,7 +505,7 @@ func parseShadowsocksR(line string) (proxy.SubconverterProxy, error) {
 		}
 	}
 
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
 		return p, nil
@@ -543,7 +513,7 @@ func parseShadowsocksR(line string) (proxy.SubconverterProxy, error) {
 		return &proxy.MihomoProxy{
 			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(),
+			Options:        p.ProxyOptions(nil),
 		}, nil
 	}
 }
@@ -618,7 +588,7 @@ func parseVMess(line string) (proxy.SubconverterProxy, error) {
 		TLS:     tls == "tls",
 		SNI:     sni,
 	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
 		return p, nil
@@ -626,7 +596,7 @@ func parseVMess(line string) (proxy.SubconverterProxy, error) {
 		return &proxy.MihomoProxy{
 			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(),
+			Options:        p.ProxyOptions(nil),
 		}, nil
 	}
 
@@ -720,7 +690,7 @@ func parseTrojan(line string) (proxy.SubconverterProxy, error) {
 		TLS:           true, // Trojan always uses TLS
 		AllowInsecure: allowInsecure,
 	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
 
@@ -729,7 +699,7 @@ func parseTrojan(line string) (proxy.SubconverterProxy, error) {
 		return &proxy.MihomoProxy{
 			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(),
+			Options:        p.ProxyOptions(nil),
 		}, nil
 	}
 }
@@ -828,7 +798,7 @@ func parseVLESS(line string) (proxy.SubconverterProxy, error) {
 		Flow:          flow,
 		SNI:           sni,
 	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
 		return p, nil
@@ -836,7 +806,7 @@ func parseVLESS(line string) (proxy.SubconverterProxy, error) {
 		return &proxy.MihomoProxy{
 			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(),
+			Options:        p.ProxyOptions(nil),
 		}, nil
 	}
 
@@ -917,7 +887,7 @@ func parseHysteria(line string) (proxy.SubconverterProxy, error) {
 		AllowInsecure: insecure,
 		Params:        params,
 	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
 		return p, nil
@@ -925,7 +895,7 @@ func parseHysteria(line string) (proxy.SubconverterProxy, error) {
 		return &proxy.MihomoProxy{
 			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(),
+			Options:        p.ProxyOptions(nil),
 		}, nil
 	}
 }
@@ -999,7 +969,7 @@ func parseTUIC(line string) (proxy.SubconverterProxy, error) {
 		AllowInsecure: insecure,
 		Params:        params,
 	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions())
+	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
 	if err != nil {
 		log.Printf("mihomo proxy parse failed %v", err)
 		return p, nil
@@ -1007,7 +977,7 @@ func parseTUIC(line string) (proxy.SubconverterProxy, error) {
 		return &proxy.MihomoProxy{
 			ProxyInterface: p,
 			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(),
+			Options:        p.ProxyOptions(nil),
 		}, nil
 	}
 }
@@ -1107,6 +1077,36 @@ func parseMihomoProxy(options map[string]any) (*proxy.MihomoProxy, error) {
 	}, nil
 }
 
+// Helper functions for URL encoding/decoding
+func urlDecode(s string) string {
+	decoded, err := url.QueryUnescape(s)
+	if err != nil {
+		return s
+	}
+	return decoded
+}
+
+func urlSafeBase64Decode(s string) string {
+	// Replace URL-safe characters
+	s = strings.ReplaceAll(s, "-", "+")
+	s = strings.ReplaceAll(s, "_", "/")
+
+	// Add padding if necessary
+	if m := len(s) % 4; m != 0 {
+		s += strings.Repeat("=", 4-m)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		// Try without padding
+		decoded, err = base64.RawStdEncoding.DecodeString(s)
+		if err != nil {
+			return s
+		}
+	}
+	return string(decoded)
+}
+
 func getStringField(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
@@ -1119,4 +1119,21 @@ func getStringField(m map[string]interface{}, key string) string {
 		}
 	}
 	return ""
+}
+
+func parsePluginOpts(opts string) map[string]interface{} {
+	result := make(map[string]interface{})
+	pairs := strings.Split(opts, ";")
+	for _, pair := range pairs {
+		if pair == "" {
+			continue
+		}
+		kv := strings.SplitN(pair, "=", 2)
+		if len(kv) == 2 {
+			result[kv[0]] = urlDecode(kv[1])
+		} else {
+			result[kv[0]] = "true"
+		}
+	}
+	return result
 }

@@ -218,7 +218,6 @@ func TestRenderTemplateFunc(t *testing.T) {
 	}
 }
 
-
 func TestLoadExternalConfigFunc(t *testing.T) {
 	h := NewSubHandler()
 	cfg, err := h.loadExternalConfig("nonexistent.ini")

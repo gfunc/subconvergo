@@ -60,7 +60,7 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 			}
 
 			// Generate a new link
-			generatedLink, _ := proxyInterface.GenerateLink()
+			generatedLink, _ := proxyInterface.GenerateLink(nil)
 			if generatedLink == "" {
 				t.Errorf("GenerateLink() returned empty string")
 			}
@@ -133,7 +133,7 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 				t.Fatalf("parseShadowsocks error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.GenerateLink(nil)
 			if !strings.HasPrefix(link, "ss://") {
 				t.Errorf("GenerateLink() should start with ss://, got %v", link)
 			}
@@ -156,7 +156,7 @@ func TestVMessProxyGenerateLink(t *testing.T) {
 		t.Fatalf("parseVMess error = %v", err)
 	}
 
-	link, _ := proxy.GenerateLink()
+	link, _ := proxy.GenerateLink(nil)
 	if !strings.HasPrefix(link, "vmess://") {
 		t.Errorf("GenerateLink() should start with vmess://, got %v", link)
 	}
@@ -208,7 +208,7 @@ func TestTrojanProxyGenerateLink(t *testing.T) {
 				t.Fatalf("parseTrojan error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.GenerateLink(nil)
 			if !strings.HasPrefix(link, "trojan://") {
 				t.Errorf("GenerateLink() should start with trojan://, got %v", link)
 			}
@@ -245,7 +245,7 @@ func TestVLESSProxyGenerateLink(t *testing.T) {
 				t.Fatalf("parseVLESS error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.GenerateLink(nil)
 			if !strings.HasPrefix(link, "vless://") {
 				t.Errorf("GenerateLink() should start with vless://, got %v", link)
 			}
@@ -285,7 +285,7 @@ func TestHysteriaProxyGenerateLink(t *testing.T) {
 				t.Fatalf("parseHysteria error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.GenerateLink(nil)
 			if !strings.HasPrefix(link, tt.protocol+"://") {
 				t.Errorf("GenerateLink() should start with %s://, got %v", tt.protocol, link)
 			}
@@ -322,7 +322,7 @@ func TestTUICProxyGenerateLink(t *testing.T) {
 				t.Fatalf("parseTUIC error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.GenerateLink(nil)
 			if !strings.HasPrefix(link, "tuic://") {
 				t.Errorf("GenerateLink() should start with tuic://, got %v", link)
 			}

@@ -7,6 +7,7 @@ import (
 
 	"log"
 
+	"github.com/gfunc/subconvergo/config"
 	"github.com/metacubex/mihomo/constant"
 
 	"gopkg.in/yaml.v3"
@@ -18,15 +19,15 @@ type MihomoProxy struct {
 	Options map[string]interface{} `yaml:"-" json:"-"`
 }
 
-func (m *MihomoProxy) GenerateLink() (string, error) {
+func (m *MihomoProxy) GenerateLink(opts *config.ExtraSetting) (string, error) {
 	if m.ProxyInterface == nil {
 		return "", fmt.Errorf("Plain proxy is not set")
 	}
 	switch p := m.ProxyInterface.(type) {
 	case SubconverterProxy:
-		return p.GenerateLink()
+		return p.GenerateLink(opts)
 	default:
-		b, err := json.Marshal(m.ProxyOptions())
+		b, err := json.Marshal(m.ProxyOptions(opts))
 		if err != nil {
 			return "", fmt.Errorf("error GenerateLink for proxy %s of type %s, %v", m.GetRemark(), m.GetType(), err)
 		}
@@ -35,7 +36,7 @@ func (m *MihomoProxy) GenerateLink() (string, error) {
 	}
 }
 
-func (m *MihomoProxy) ProxyOptions() map[string]interface{} {
+func (m *MihomoProxy) ProxyOptions(opts *config.ExtraSetting) map[string]interface{} {
 	options, err := m.proxyOptions()
 	if err != nil {
 		log.Printf("failed to get proxy options: %v", err)

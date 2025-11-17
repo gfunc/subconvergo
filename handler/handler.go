@@ -181,9 +181,11 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		SortProxies:     config.Global.NodePref.SortFlag,
 		Emoji:           config.Global.Emojis,
 
-		ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
-		ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
-		SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
+		ExtraSetting: config.ExtraSetting{
+			ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
+			ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
+			SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
+		},
 	}
 
 	// Apply node preferences to generator options
