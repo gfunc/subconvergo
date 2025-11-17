@@ -51,14 +51,17 @@ type SubParser struct {
 	Index int
 	URL   string
 	Proxy string
+	Tag   string
 }
 
 func (sp *SubParser) Parse() (*SubContent, error) {
+	sp.parseURL()
 	sc := &SubContent{
 		Proxies:  make([]proxy.ProxyInterface, 0),
 		Groups:   make([]config.ProxyGroupConfig, 0),
 		RawRules: make([]string, 0),
 	}
+
 	if strings.HasPrefix(sp.URL, "http://") || strings.HasPrefix(sp.URL, "https://") {
 		// Parse subscription
 		custom, err := sp.ParseSubscription()
@@ -90,11 +93,25 @@ func (sp *SubParser) Parse() (*SubContent, error) {
 			return nil, fmt.Errorf("failed to parse proxy line: %w", err)
 		}
 		parserProxy.SetGroupId(sp.Index)
-		parserProxy.SetGroup(sp.URL)
+		parserProxy.SetGroup(parserProxy.GetRemark())
 		sc.Proxies = append(sc.Proxies, parserProxy)
 	}
 	log.Printf("[parser.SubParser.Parse] index=%d url=%s proxies=%d", sp.Index, sp.URL, len(sc.Proxies))
 	return sc, nil
+}
+
+func (sp *SubParser) parseURL() {
+	// get tag from url after #
+	u, err := url.Parse(sp.URL)
+	if err != nil {
+		return
+	}
+	sp.Tag = u.Fragment
+	
+	// remove tag from sp.URL
+	if idx := strings.Index(sp.URL, "#"); idx != -1 {
+		sp.URL = sp.URL[:idx]
+	}
 }
 
 // ParseSubscription parses a subscription URL and returns proxy list
@@ -112,7 +129,7 @@ func (sp *SubParser) ParseSubscription() (*SubContent, error) {
 	}
 	for _, p := range custom.Proxies {
 		p.SetGroupId(sp.Index)
-		p.SetGroup(sp.URL)
+		p.SetGroup(sp.Tag)
 	}
 	log.Printf("[parser.ParseSubscription] index=%d url=%s parsed=%d proxies", sp.Index, sp.URL, len(custom.Proxies))
 	return custom, nil
@@ -134,7 +151,10 @@ func (sp *SubParser) ParseSubscriptionFile() (*SubContent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subscription: %w", err)
 	}
-
+	for _, p := range custom.Proxies {
+		p.SetGroupId(sp.Index)
+		p.SetGroup(sp.Tag)
+	}
 	return custom, nil
 }
 

@@ -46,6 +46,7 @@ func (m *MihomoProxy) ProxyOptions() map[string]interface{} {
 
 func (m *MihomoProxy) proxyOptions() (map[string]interface{}, error) {
 	if m.Options != nil {
+		m.Options["name"] = m.GetRemark()
 		return m.Options, nil
 	}
 	// Fallback to marshalling the Clash proxy
