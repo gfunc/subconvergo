@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -46,6 +47,7 @@ type GeneratorOptions struct {
 
 // Generate converts proxies to target format
 func Generate(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
+	log.Printf("[generator.Generate] target=%s proxies=%d ruleGen=%t", opts.Target, len(proxies), opts.EnableRuleGen)
 	// Apply rename rules
 	proxies = applyRenameRules(proxies, opts.RenameNodes)
 
@@ -83,9 +85,15 @@ func Generate(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig 
 }
 
 func generateClash(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseConfig string) (string, error) {
-	// Parse base configuration
-	var base = C.RawConfig{}
+	var base = make(map[string]any)
 	if err := yaml.Unmarshal([]byte(baseConfig), &base); err != nil {
+		log.Printf("[generator.generateClash] failed to parse base config target=%s err=%v", opts.Target, err)
+		return "", fmt.Errorf("failed to parse base config: %w", err)
+	}
+	// Parse clash configuration
+	var clash = &C.RawConfig{}
+	if err := yaml.Unmarshal([]byte(baseConfig), clash); err != nil {
+		log.Printf("[generator.generateClash] failed to parse base config target=%s err=%v", opts.Target, err)
 		return "", fmt.Errorf("failed to parse base config: %w", err)
 	}
 	// Convert proxies to Clash format
@@ -97,17 +105,19 @@ func generateClash(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseCo
 		case proxy.SubconverterProxy:
 			clashProxies = append(clashProxies, c.ProxyOptions())
 		default:
-			log.Printf("unsupported proxy type for clash generation: %T", p)
+			log.Printf("[generator.generateClash] unsupported proxy type=%T remark=%s", p, p.GetRemark())
 		}
 	}
 
-	// Set proxies field name based on Clash version
-	base.Proxy = clashProxies
+	// Set proxies field name based on Clash config
+	clash.Proxy = clashProxies
+	base[getFieldTag("yaml", "Proxy", clash, "proxies")] = clashProxies
 
 	// Generate proxy groups
 	if len(opts.ProxyGroups) > 0 {
 		proxyGroups := generateClashProxyGroups(proxies, opts.ProxyGroups, opts)
-		base.ProxyGroup = proxyGroups
+		clash.ProxyGroup = proxyGroups
+		base[getFieldTag("yaml", "ProxyGroup", clash, "proxy-groups")] = proxyGroups
 	}
 
 	// Generate rules if enabled
@@ -119,7 +129,8 @@ func generateClash(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseCo
 		if len(opts.Rulesets) > 0 {
 			allRules = append(allRules, generateClashRules(opts.Rulesets)...)
 		}
-		base.Rule = allRules
+		clash.Rule = allRules
+		base[getFieldTag("yaml", "Rule", clash, "rules")] = allRules
 	}
 
 	// Marshal back to YAML
@@ -129,6 +140,15 @@ func generateClash(proxies []proxy.ProxyInterface, opts GeneratorOptions, baseCo
 	}
 
 	return string(output), nil
+}
+
+func getFieldTag(tag, field string, value any, defaultValue string) string {
+	f, ok := reflect.TypeOf(value).Elem().FieldByName(field)
+	if !ok {
+		return defaultValue
+	}
+	t := f.Tag.Get(tag)
+	return strings.Split(t, ",")[0]
 }
 
 func generateClashProxyGroups(proxies []proxy.ProxyInterface, groups []config.ProxyGroupConfig, opts GeneratorOptions) []map[string]interface{} {
@@ -364,24 +384,29 @@ func fetchRuleset(path string) (string, error) {
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		resp, err := http.Get(path)
 		if err != nil {
+			log.Printf("[generator.fetchRuleset] http fetch failed %s err=%v", path, err)
 			return "", fmt.Errorf("failed to fetch ruleset: %w", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			log.Printf("[generator.fetchRuleset] http status error path=%s status=%d", path, resp.StatusCode)
 			return "", fmt.Errorf("failed to fetch ruleset: status %d", resp.StatusCode)
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
+			log.Printf("[generator.fetchRuleset] http read failed %s err=%v", path, err)
 			return "", fmt.Errorf("failed to read ruleset: %w", err)
 		}
 		return string(body), nil
 	}
 
-	if data, err := os.ReadFile(path); err == nil {
+	data, err := os.ReadFile(path)
+	if err == nil {
 		return string(data), nil
 	}
+	log.Printf("[generator.fetchRuleset] file read failed %s err=%v", path, err)
 	return "", fmt.Errorf("ruleset not found: %s", path)
 }
 
@@ -499,6 +524,7 @@ func generateClashRules(rulesets []config.RulesetConfig) []string {
 		if ruleset.Ruleset != "" {
 			content, err := fetchRuleset(ruleset.Ruleset)
 			if err != nil {
+				log.Printf("[generator.generateClashRules] ruleset fetch failed %s err=%v", ruleset.Ruleset, err)
 				// If fetch fails, add as RULE-SET reference
 				rule := fmt.Sprintf("RULE-SET,%s,%s", ruleset.Ruleset, ruleset.Group)
 				rules = append(rules, rule)

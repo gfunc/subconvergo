@@ -93,6 +93,7 @@ func (sp *SubParser) Parse() (*SubContent, error) {
 		parserProxy.SetGroup(sp.URL)
 		sc.Proxies = append(sc.Proxies, parserProxy)
 	}
+	log.Printf("[parser.SubParser.Parse] index=%d url=%s proxies=%d", sp.Index, sp.URL, len(sc.Proxies))
 	return sc, nil
 }
 
@@ -113,6 +114,7 @@ func (sp *SubParser) ParseSubscription() (*SubContent, error) {
 		p.SetGroupId(sp.Index)
 		p.SetGroup(sp.URL)
 	}
+	log.Printf("[parser.ParseSubscription] index=%d url=%s parsed=%d proxies", sp.Index, sp.URL, len(custom.Proxies))
 	return custom, nil
 }
 
@@ -125,6 +127,7 @@ func (sp *SubParser) ParseSubscriptionFile() (*SubContent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read subscription file: %w", err)
 	}
+	log.Printf("[parser.ParseSubscriptionFile] index=%d path=%s size=%d", sp.Index, filePath, len(content))
 
 	// Try to detect subscription format and parse
 	custom, err := sp.parseContent(string(content))
@@ -152,19 +155,24 @@ func (sp *SubParser) fetchSubscription() (string, error) {
 
 	resp, err := client.Get(sp.URL)
 	if err != nil {
+		log.Printf("[parser.fetchSubscription] index=%d url=%s error=%v", sp.Index, sp.URL, err)
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		statusErr := fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		log.Printf("[parser.fetchSubscription] index=%d url=%s status=%d statusText=%s", sp.Index, sp.URL, resp.StatusCode, resp.Status)
+		return "", statusErr
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("[parser.fetchSubscription] index=%d url=%s read error=%v", sp.Index, sp.URL, err)
 		return "", err
 	}
 
+	log.Printf("[parser.fetchSubscription] index=%d url=%s size=%d", sp.Index, sp.URL, len(body))
 	return string(body), nil
 }
 
@@ -195,7 +203,7 @@ func (sp *SubParser) parseContent(content string) (*SubContent, error) {
 			if custom, err := ParseMihomoConfig(content); err == nil {
 				return custom, nil
 			} else {
-				log.Printf("Failed to parse line as proxy or mihomo config: %s, %v", line, err)
+				log.Printf("[parser.parseContent] url=%s line=%s err=%v", sp.URL, line, err)
 				break
 			}
 		}
@@ -204,6 +212,7 @@ func (sp *SubParser) parseContent(content string) (*SubContent, error) {
 	}
 
 	if len(proxies) == 0 {
+		log.Printf("[parser.parseContent] url=%s no valid proxies found", sp.URL)
 		return nil, fmt.Errorf("no valid proxies found")
 	}
 
@@ -277,7 +286,7 @@ func ParseProxyLine(line string) (proxy.SubconverterProxy, error) {
 		return nil, fmt.Errorf("invalid proxy link format")
 	}
 	protocol := line[:idx]
-	log.Printf("unsupported native proxy protocol: %s, trying mihomo package", protocol)
+	log.Printf("[parser.ParseProxyLine] unsupported native proxy protocol=%s line=%s", protocol, line)
 	return ParseMihomoProxy(protocol, line[idx:])
 }
 

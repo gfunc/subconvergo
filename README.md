@@ -38,6 +38,7 @@ curl http://localhost:25500/version
 - **Full Compatibility**: Same API and config format as C++ version
 - **Production Ready**: 50+ tests, comprehensive benchmarks, Docker support
 - **Extensible**: Fallback architecture for future protocols
+- **Improved Observability**: Parser, handler, and generator log contextual info/errors to simplify troubleshooting
 
 ---
 

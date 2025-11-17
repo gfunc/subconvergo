@@ -97,6 +97,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 			urlsToProcess = append(urlsToProcess, config.Global.Common.InsertURL...)
 		}
 	}
+	log.Printf("[handler.HandleSub] target=%s urls=%d urlLen=%d config=%s client=%s", target, len(urlsToProcess), len(urlParam), configParam, c.ClientIP())
 
 	// Load external config if specified
 	proxyGroups := config.Global.ProxyGroups.CustomProxyGroups
@@ -105,7 +106,10 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	if configParam != "" {
 		// Load external config (can be URL or file path)
 		extConfig, err := h.loadExternalConfig(configParam)
-		if err == nil {
+		if err != nil {
+			log.Printf("[handler.HandleSub] failed to load external config %s: %v", configParam, err)
+		} else if extConfig != nil {
+			log.Printf("[handler.HandleSub] loaded external config %s proxyGroups=%d rulesets=%d", configParam, len(extConfig.ProxyGroups), len(extConfig.Rulesets))
 			// Merge external config
 			if len(extConfig.ProxyGroups) > 0 {
 				proxyGroups = extConfig.ProxyGroups
@@ -140,17 +144,19 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription (%s): %v", url, err))
 			return
 		} else {
-			log.Printf("Failed to parse subscription (%s): %v", url, err)
+			log.Printf("[handler.HandleSub] failed to parse subscription (index=%d url=%s): %v", index, url, err)
 		}
 	}
 
 	if len(allProxies) == 0 {
+		log.Printf("[handler.HandleSub] no valid proxies parsed from %d url(s)", len(urlsToProcess))
 		c.String(http.StatusBadRequest, "No valid proxies found")
 		return
 	}
 
 	// Apply filters
 	allProxies = h.applyFilters(allProxies, c)
+	log.Printf("[handler.HandleSub] proxies after filters=%d", len(allProxies))
 
 	// Reload config on request if enabled
 	if config.Global.Common.ReloadConfOnRequest {
@@ -222,6 +228,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	// Load base configuration
 	baseConfig, err := h.loadBaseConfig(target, requestParams)
 	if err != nil {
+		log.Printf("[handler.HandleSub] loadBaseConfig target=%s err=%v", target, err)
 		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to load base config: %v", err))
 		return
 	}
@@ -229,6 +236,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	// Generate output
 	output, err := generator.Generate(allProxies, opts, baseConfig)
 	if err != nil {
+		log.Printf("[handler.HandleSub] generator failed target=%s proxies=%d err=%v", target, len(allProxies), err)
 		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to generate config: %v", err))
 		return
 	}
@@ -522,14 +530,17 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		resp, err := http.Get(path)
 		if err != nil {
+			log.Printf("[handler.loadExternalConfig] http fetch failed path=%s err=%v", path, err)
 			return nil, err
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			log.Printf("[handler.loadExternalConfig] http fetch path=%s status=%d", path, resp.StatusCode)
 			return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
 		}
 		data, err = io.ReadAll(resp.Body)
 		if err != nil {
+			log.Printf("[handler.loadExternalConfig] http read failed path=%s err=%v", path, err)
 			return nil, err
 		}
 	} else {
@@ -546,10 +557,12 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 				readErr = nil
 				break
 			} else {
+				log.Printf("[handler.loadExternalConfig] file read failed candidate=%s err=%v", p, err)
 				readErr = err
 			}
 		}
 		if data == nil {
+			log.Printf("[handler.loadExternalConfig] file candidates exhausted for path=%s lastErr=%v", path, readErr)
 			return nil, fmt.Errorf("external config not found: %v", readErr)
 		}
 	}
