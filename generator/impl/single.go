@@ -20,6 +20,7 @@ func init() {
 	core.RegisterGenerator(&SingleGenerator{Target: "ssr"})
 	core.RegisterGenerator(&SingleGenerator{Target: "v2ray"})
 	core.RegisterGenerator(&SingleGenerator{Target: "trojan"})
+	core.RegisterGenerator(&SingleGenerator{Target: "mixed"})
 }
 
 // Name returns the generator name
@@ -36,7 +37,14 @@ func (g *SingleGenerator) Generate(proxies []pc.ProxyInterface, groups []config.
 		if mixin, ok := p.(pc.SubconverterProxy); ok {
 
 			// Only include proxies matching the requested format
-			if g.Target == "v2ray" && (p.GetType() == "vmess" || p.GetType() == "vless") {
+			if g.Target == "mixed" {
+				link, err := mixin.ToShareLink(&opts.ProxySetting)
+				if err != nil {
+					log.Printf("Failed to generate link for proxy %s: %v", p.GetRemark(), err)
+					continue
+				}
+				lines = append(lines, link)
+			} else if g.Target == "v2ray" && (p.GetType() == "vmess" || p.GetType() == "vless") {
 				link, err := mixin.ToShareLink(&opts.ProxySetting)
 				if err != nil {
 					log.Printf("Failed to generate link for proxy: %v", err)

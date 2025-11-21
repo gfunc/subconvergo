@@ -68,7 +68,6 @@ func (g *SurgeGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 
 func convertToSurge(p pc.ProxyInterface, opts core.GeneratorOptions) string {
 	var parts []string
-	parts = append(parts, p.GetRemark())
 
 	switch t := p.(type) {
 	case *impl.ShadowsocksProxy:
@@ -138,12 +137,11 @@ func convertToSurge(p pc.ProxyInterface, opts core.GeneratorOptions) string {
 		return ""
 	}
 
-	return strings.Join(parts, ", ")
+	return fmt.Sprintf("%s = %s", p.GetRemark(), strings.Join(parts, ", "))
 }
 
 func convertGroupToSurge(group config.ProxyGroupConfig, proxies []pc.ProxyInterface) string {
 	var parts []string
-	parts = append(parts, group.Name)
 
 	// Map group types to Surge types
 	surgeType := strings.ToLower(group.Type)
@@ -173,5 +171,5 @@ func convertGroupToSurge(group config.ProxyGroupConfig, proxies []pc.ProxyInterf
 		}
 	}
 
-	return strings.Join(parts, ", ")
+	return fmt.Sprintf("%s = %s", group.Name, strings.Join(parts, ", "))
 }

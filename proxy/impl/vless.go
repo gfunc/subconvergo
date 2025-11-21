@@ -2,6 +2,7 @@ package impl
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/gfunc/subconvergo/config"
@@ -35,7 +36,7 @@ func (p *VLESSProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	}
 
 	if p.Network == "ws" && p.Path != "" {
-		params = append(params, fmt.Sprintf("path=%s", core.UrlEncode(p.Path)))
+		params = append(params, fmt.Sprintf("path=%s", url.QueryEscape(p.Path)))
 	}
 	if p.Host != "" && p.Network == "ws" {
 		params = append(params, fmt.Sprintf("host=%s", p.Host))

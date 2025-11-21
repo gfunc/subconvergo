@@ -1,8 +1,9 @@
 package utils
 
 import (
-	pc "github.com/gfunc/subconvergo/proxy/core"
 	"testing"
+
+	pc "github.com/gfunc/subconvergo/proxy/core"
 )
 
 func TestFetchRuleset(t *testing.T) {

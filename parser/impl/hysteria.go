@@ -65,6 +65,14 @@ func (p *HysteriaParser) Parse(line string) (core.SubconverterProxy, error) {
 		parts := strings.SplitN(line, "@", 2)
 		password = parts[0]
 		line = parts[1]
+	} else {
+		if pass := params.Get("password"); pass != "" {
+			password = pass
+			params.Del("password")
+		} else if pass := params.Get("auth"); pass != "" {
+			password = pass
+			params.Del("auth")
+		}
 	}
 
 	serverPort := strings.Split(line, ":")

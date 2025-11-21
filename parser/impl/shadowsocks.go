@@ -57,6 +57,8 @@ func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
 		}
 	}
 
+	line = strings.TrimSuffix(line, "/")
+
 	if strings.Contains(line, "@") {
 		parts := strings.Split(line, "@")
 		if len(parts) != 2 {

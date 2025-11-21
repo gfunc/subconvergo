@@ -3,6 +3,8 @@ package impl
 import (
 	"encoding/base64"
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/gfunc/subconvergo/config"
@@ -22,7 +24,22 @@ func (p *ShadowsocksProxy) ToShareLink(ext *config.ProxySetting) (string, error)
 	// Format: ss://base64(method:password)@server:port#remark
 	userInfo := fmt.Sprintf("%s:%s", p.EncryptMethod, p.Password)
 	encoded := base64.URLEncoding.EncodeToString([]byte(userInfo))
-	link := fmt.Sprintf("ss://%s@%s:%d#%s", encoded, p.Server, p.Port, core.UrlEncode(p.Remark))
+	link := fmt.Sprintf("ss://%s@%s:%d", encoded, p.Server, p.Port)
+
+	if p.Plugin != "" {
+		pluginStr := p.Plugin
+		if len(p.PluginOpts) > 0 {
+			var opts []string
+			for k, v := range p.PluginOpts {
+				opts = append(opts, fmt.Sprintf("%s=%v", k, v))
+			}
+			sort.Strings(opts)
+			pluginStr += ";" + strings.Join(opts, ";")
+		}
+		link += fmt.Sprintf("/?plugin=%s", url.QueryEscape(pluginStr))
+	}
+
+	link += fmt.Sprintf("#%s", core.UrlEncode(p.Remark))
 	return link, nil
 }
 
@@ -34,6 +51,10 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) map[string]in
 		"port":     p.Port,
 		"cipher":   p.EncryptMethod,
 		"password": p.Password,
+	}
+
+	if ext != nil && ext.UDP {
+		options["udp"] = true
 	}
 
 	if p.Plugin != "" {
@@ -59,75 +80,5 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) map[string]in
 		}
 	}
 
-	return options
-}
-
-// ShadowsocksRProxy represents a ShadowsocksR proxy
-type ShadowsocksRProxy struct {
-	core.BaseProxy `yaml:",inline"`
-	Password       string `yaml:"password" json:"password"`
-	EncryptMethod  string `yaml:"encrypt_method" json:"encrypt_method"`
-	Protocol       string `yaml:"protocol" json:"protocol"`
-	ProtocolParam  string `yaml:"protocol_param" json:"protocol_param"`
-	Obfs           string `yaml:"obfs" json:"obfs"`
-	ObfsParam      string `yaml:"obfs_param" json:"obfs_param"`
-}
-
-func (p *ShadowsocksRProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
-	// Format: ssr://base64(server:port:protocol:method:obfs:base64(password)/?...)
-	passEncoded := base64.URLEncoding.EncodeToString([]byte(p.Password))
-	mainPart := fmt.Sprintf("%s:%d:%s:%s:%s:%s",
-		p.Server,
-		p.Port,
-		p.Protocol,
-		p.EncryptMethod,
-		p.Obfs,
-		passEncoded,
-	)
-
-	// Add query parameters
-	params := []string{}
-	if p.ObfsParam != "" {
-		params = append(params, fmt.Sprintf("obfsparam=%s", base64.URLEncoding.EncodeToString([]byte(p.ObfsParam))))
-	}
-	if p.ProtocolParam != "" {
-		params = append(params, fmt.Sprintf("protoparam=%s", base64.URLEncoding.EncodeToString([]byte(p.ProtocolParam))))
-	}
-	if p.Remark != "" {
-		params = append(params, fmt.Sprintf("remarks=%s", base64.URLEncoding.EncodeToString([]byte(p.Remark))))
-	}
-
-	if len(params) > 0 {
-		mainPart += "/?" + strings.Join(params, "&")
-	}
-
-	encoded := base64.URLEncoding.EncodeToString([]byte(mainPart))
-	return "ssr://" + encoded, nil
-}
-
-func (p *ShadowsocksRProxy) ToClashConfig(ext *config.ProxySetting) (options map[string]interface{}) {
-	if p.Type == "ss" {
-		options = map[string]interface{}{
-			"type":     "ss",
-			"name":     p.Remark,
-			"server":   p.Server,
-			"port":     p.Port,
-			"cipher":   p.EncryptMethod,
-			"password": p.Password,
-		}
-	} else {
-		options = map[string]interface{}{
-			"type":           "ssr",
-			"name":           p.Remark,
-			"server":         p.Server,
-			"port":           p.Port,
-			"cipher":         p.EncryptMethod,
-			"password":       p.Password,
-			"protocol":       p.Protocol,
-			"obfs":           p.Obfs,
-			"protocol-param": p.ProtocolParam,
-			"obfs-param":     p.ObfsParam,
-		}
-	}
 	return options
 }

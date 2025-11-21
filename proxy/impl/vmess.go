@@ -62,6 +62,18 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) map[string]interfac
 		"network": p.Network,
 	}
 
+	if ext != nil {
+		if ext.UDP {
+			options["udp"] = true
+		}
+		if ext.SCV {
+			options["skip-cert-verify"] = true
+		}
+		if ext.TLS13 {
+			options["tls13"] = true
+		}
+	}
+
 	if p.TLS {
 		options["tls"] = true
 		if p.SNI != "" {

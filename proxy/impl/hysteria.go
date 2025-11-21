@@ -85,7 +85,13 @@ func (p *HysteriaProxy) ToClashConfig(ext *config.ProxySetting) map[string]inter
 			}
 
 			up := p.Params.Get("upmbps")
+			if up == "" {
+				up = p.Params.Get("up")
+			}
 			down := p.Params.Get("downmbps")
+			if down == "" {
+				down = p.Params.Get("down")
+			}
 			if up == "" {
 				up = "10"
 			}

@@ -2,6 +2,7 @@ package impl
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/gfunc/subconvergo/config"
@@ -30,7 +31,7 @@ func (p *TrojanProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	if p.Network == "ws" {
 		params = append(params, "type=ws")
 		if p.Path != "" {
-			params = append(params, fmt.Sprintf("path=%s", core.UrlEncode(p.Path)))
+			params = append(params, fmt.Sprintf("path=%s", url.QueryEscape(p.Path)))
 		}
 	}
 	if p.AllowInsecure {

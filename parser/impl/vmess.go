@@ -3,6 +3,7 @@ package impl
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -28,8 +29,110 @@ func (p *VMessParser) Parse(line string) (core.SubconverterProxy, error) {
 	}
 
 	line = line[8:]
+
+	// Check for standard VMess format (uuid@host:port)
+	if strings.Contains(line, "@") && !strings.Contains(line, "://") { // Avoid matching other protocols if any
+		return p.parseStdVMess(line)
+	}
+
 	decoded := urlSafeBase64Decode(line)
 
+	// Check if it's JSON
+	if strings.HasPrefix(strings.TrimSpace(decoded), "{") {
+		return p.parseJSONVMess(decoded)
+	}
+
+	// Check if it's base64 encoded standard VMess
+	if strings.Contains(decoded, "@") {
+		return p.parseStdVMess(decoded)
+	}
+
+	return nil, fmt.Errorf("unknown vmess format")
+}
+
+func (p *VMessParser) parseStdVMess(line string) (core.SubconverterProxy, error) {
+	parts := strings.SplitN(line, "@", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid standard vmess format")
+	}
+	uuid := parts[0]
+	rest := parts[1]
+
+	var remark string
+	var params url.Values
+
+	if idx := strings.Index(rest, "#"); idx != -1 {
+		remark = urlDecode(rest[idx+1:])
+		rest = rest[:idx]
+	}
+
+	if idx := strings.Index(rest, "?"); idx != -1 {
+		queryStr := rest[idx+1:]
+		rest = rest[:idx]
+		params, _ = url.ParseQuery(queryStr)
+	}
+
+	serverPort := strings.Split(rest, ":")
+	if len(serverPort) != 2 {
+		return nil, fmt.Errorf("invalid server:port")
+	}
+	server := serverPort[0]
+	portStr := serverPort[1]
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid port: %s", portStr)
+	}
+
+	if remark == "" {
+		remark = params.Get("remark")
+		if remark == "" {
+			remark = server + ":" + portStr
+		}
+	}
+
+	net := params.Get("network")
+	if net == "" {
+		net = "tcp"
+	}
+
+	aidStr := params.Get("aid")
+	aid := 0
+	if aidStr != "" {
+		aid, _ = strconv.Atoi(aidStr)
+	}
+
+	tls := params.Get("tls") == "1" || params.Get("tls") == "true" || params.Get("tls") == "tls"
+	sni := params.Get("sni")
+	if sni == "" {
+		sni = params.Get("peer")
+	}
+	path := params.Get("path")
+	host := params.Get("host")
+	if host == "" {
+		host = params.Get("obfsParam")
+	}
+
+	pObj := &impl.VMessProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vmess",
+			Remark: remark,
+			Server: server,
+			Port:   port,
+			Group:  "VMess",
+		},
+		UUID:    uuid,
+		AlterID: aid,
+		Network: net,
+		Path:    path,
+		Host:    host,
+		TLS:     tls,
+		SNI:     sni,
+	}
+	return p.toMihomoProxy(pObj)
+}
+
+func (p *VMessParser) parseJSONVMess(decoded string) (core.SubconverterProxy, error) {
 	var vmessData map[string]interface{}
 	if err := json.Unmarshal([]byte(decoded), &vmessData); err != nil {
 		return nil, fmt.Errorf("failed to parse vmess JSON: %w", err)
@@ -91,14 +194,19 @@ func (p *VMessParser) Parse(line string) (core.SubconverterProxy, error) {
 		TLS:     tls == "tls",
 		SNI:     sni,
 	}
-	mihomoProxy, err := adapter.ParseProxy(pObj.ToClashConfig(nil))
+	return p.toMihomoProxy(pObj)
+}
+
+func (p *VMessParser) toMihomoProxy(pObj *impl.VMessProxy) (core.SubconverterProxy, error) {
+	option := pObj.ToClashConfig(nil)
+	mihomoProxy, err := adapter.ParseProxy(option)
 	if err != nil {
 		return pObj, nil
 	} else {
 		return &impl.MihomoProxy{
 			ProxyInterface: pObj,
 			Clash:          mihomoProxy,
-			Options:        pObj.ToClashConfig(nil),
+			Options:        option,
 		}, nil
 	}
 }

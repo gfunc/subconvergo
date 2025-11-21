@@ -63,11 +63,19 @@ func (g *SingBoxGenerator) Generate(proxies []pc.ProxyInterface, groups []config
 
 	// Add clash_mode if enabled
 	if opts.ProxySetting.SingBoxAddClashMode {
-		if experimental, ok := base["experimental"].(map[string]interface{}); ok {
-			if clashApi, ok := experimental["clash_api"].(map[string]interface{}); ok {
-				clashApi["default_mode"] = "rule"
-			}
+		experimental, ok := base["experimental"].(map[string]interface{})
+		if !ok {
+			experimental = make(map[string]interface{})
+			base["experimental"] = experimental
 		}
+
+		clashApi, ok := experimental["clash_api"].(map[string]interface{})
+		if !ok {
+			clashApi = make(map[string]interface{})
+			experimental["clash_api"] = clashApi
+		}
+
+		clashApi["default_mode"] = "rule"
 	}
 
 	// Marshal back to JSON with proper indentation
