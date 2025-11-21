@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 	"gopkg.in/ini.v1"
@@ -217,19 +218,21 @@ type AdvancedConfig struct {
 	SkipFailedLinks        bool   `yaml:"skip_failed_links" toml:"skip_failed_links" ini:"skip_failed_links"`
 }
 
-type ExtraSetting struct {
-	ClashProxiesStyle   string
-	ClashGroupsStyle    string
+type ProxySetting struct {
+	ClashProxiesStyle string // deprecated
+	ClashGroupsStyle  string // deprecated
+	NodeList          bool   // deprecated
+
 	SingBoxAddClashMode bool
-	UDP                 *bool
-	TFO                 *bool
-	SkipCertVerify      *bool
-	TLS13               *bool
-	NodeList            bool
+	UDP                 bool
+	TFO                 bool
+	SCV                 bool
+	TLS13               bool
 }
 
 // Global settings instance
 var Global = &Settings{}
+var lock = &sync.Mutex{}
 
 func init() {
 	Global.init()
@@ -274,6 +277,8 @@ func (s *Settings) init() {
 
 // LoadConfig loads configuration from pref files
 func LoadConfig() (string, error) {
+	lock.Lock()
+	defer lock.Unlock()
 	// Check for config configFile existence in order: yml/yaml -> toml -> ini
 	configFileList := []string{
 		"pref.yml",

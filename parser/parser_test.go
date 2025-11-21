@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	P "github.com/gfunc/subconvergo/proxy"
+	P "github.com/gfunc/subconvergo/proxy/impl"
 )
 
-// TestProxyInterfaceGenerateLink tests that GenerateLink works correctly for all proxy types
+// TestProxyInterfaceGenerateLink tests that ToShareLink works correctly for all proxy types
 func TestProxyInterfaceGenerateLink(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -51,7 +51,7 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 			// Parse the link using the OOP interface
 			proxyInterface, err := ParseProxyLine(tt.inputLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLineWithInterface() error = %v", err)
+				t.Fatalf("ParseProxyLine() error = %v", err)
 			}
 
 			// Verify the type
@@ -60,15 +60,16 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 			}
 
 			// Generate a new link
-			generatedLink, _ := proxyInterface.GenerateLink(nil)
+			generatedLink, _ := proxyInterface.ToShareLink(nil)
+
 			if generatedLink == "" {
-				t.Errorf("GenerateLink() returned empty string")
+				t.Errorf("ToShareLink() returned empty string")
 			}
 
 			// Parse the generated link back and verify it matches
 			proxyInterface2, err := ParseProxyLine(generatedLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLineWithInterface() of generated link error = %v", err)
+				t.Fatalf("ParseProxyLine() of generated link error = %v", err)
 			}
 
 			// Verify key fields match
@@ -91,7 +92,7 @@ func TestProxyInterfaceSetters(t *testing.T) {
 
 	proxy, err := ParseProxyLine(inputLink)
 	if err != nil {
-		t.Fatalf("ParseProxyLineWithInterface() error = %v", err)
+		t.Fatalf("ParseProxyLine() error = %v", err)
 	}
 
 	// Test SetRemark
@@ -109,7 +110,6 @@ func TestProxyInterfaceSetters(t *testing.T) {
 	}
 }
 
-// TestProxyInterfaceToLegacyProxy tests conversion to legacy Proxy struct
 // TestShadowsocksProxyGenerateLink tests Shadowsocks link generation
 func TestShadowsocksProxyGenerateLink(t *testing.T) {
 	tests := []struct {
@@ -128,18 +128,19 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseShadowsocks(tt.inputLink)
+			proxy, err := ParseProxyLine(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseShadowsocks error = %v", err)
+				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink(nil)
+			link, _ := proxy.ToShareLink(nil)
+
 			if !strings.HasPrefix(link, "ss://") {
-				t.Errorf("GenerateLink() should start with ss://, got %v", link)
+				t.Errorf("ToShareLink() should start with ss://, got %v", link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseShadowsocks(link)
+			_, err = ParseProxyLine(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -151,31 +152,49 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 func TestVMessProxyGenerateLink(t *testing.T) {
 	inputLink := "vmess://eyJ2IjoiMiIsInBzIjoidGVzdCIsImFkZCI6ImV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoiMTIzNDU2NzgtMTIzNC0xMjM0LTEyMzQtMTIzNDU2Nzg5MDEyIiwiYWlkIjoiMCIsIm5ldCI6IndzIiwicGF0aCI6Ii9wYXRoIiwiaG9zdCI6ImV4YW1wbGUuY29tIiwidGxzIjoidGxzIn0="
 
-	proxy, err := parseVMess(inputLink)
+	proxy, err := ParseProxyLine(inputLink)
 	if err != nil {
-		t.Fatalf("parseVMess error = %v", err)
+		t.Fatalf("ParseProxyLine error = %v", err)
 	}
 
-	link, _ := proxy.GenerateLink(nil)
+	link, _ := proxy.ToShareLink(nil)
+
 	if !strings.HasPrefix(link, "vmess://") {
-		t.Errorf("GenerateLink() should start with vmess://, got %v", link)
+		t.Errorf("ToShareLink() should start with vmess://, got %v", link)
 	}
 
 	// Verify it can be parsed back
-	proxy2, err := parseVMess(link)
+	proxy2, err := ParseProxyLine(link)
 	if err != nil {
 		t.Errorf("Generated link cannot be parsed back: %v", err)
 	}
 
-	proxyVMess, err := proxy.(*P.MihomoProxy).GetVmessProxy()
-	if err != nil {
-		t.Fatalf("proxy is not of type *VMessProxy")
+	// Type assertion to check fields
+	proxyVMess, ok := proxy.(*P.VMessProxy)
+	if !ok {
+		// Try MihomoProxy if it wraps it
+		if mp, ok := proxy.(*P.MihomoProxy); ok {
+			proxyVMess, err = mp.GetVmessProxy()
+			if err != nil {
+				t.Fatalf("Failed to get VMess proxy from MihomoProxy: %v", err)
+			}
+		} else {
+			t.Fatalf("proxy is not of type *VMessProxy")
+		}
 	}
 
-	proxy2VMess, err := proxy2.(*P.MihomoProxy).GetVmessProxy()
-	if err != nil {
-		t.Fatalf("proxy2 is not of type *VMessProxy")
+	proxy2VMess, ok := proxy2.(*P.VMessProxy)
+	if !ok {
+		if mp, ok := proxy2.(*P.MihomoProxy); ok {
+			proxy2VMess, err = mp.GetVmessProxy()
+			if err != nil {
+				t.Fatalf("Failed to get VMess proxy from MihomoProxy: %v", err)
+			}
+		} else {
+			t.Fatalf("proxy2 is not of type *VMessProxy")
+		}
 	}
+
 	// Verify critical fields match
 	if proxy2VMess.UUID != proxyVMess.UUID {
 		t.Errorf("Re-parsed UUID = %v, want %v", proxy2VMess.UUID, proxyVMess.UUID)
@@ -203,18 +222,19 @@ func TestTrojanProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseTrojan(tt.inputLink)
+			proxy, err := ParseProxyLine(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseTrojan error = %v", err)
+				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink(nil)
+			link, _ := proxy.ToShareLink(nil)
+
 			if !strings.HasPrefix(link, "trojan://") {
-				t.Errorf("GenerateLink() should start with trojan://, got %v", link)
+				t.Errorf("ToShareLink() should start with trojan://, got %v", link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseTrojan(link)
+			_, err = ParseProxyLine(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -240,18 +260,19 @@ func TestVLESSProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseVLESS(tt.inputLink)
+			proxy, err := ParseProxyLine(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseVLESS error = %v", err)
+				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink(nil)
+			link, _ := proxy.ToShareLink(nil)
+
 			if !strings.HasPrefix(link, "vless://") {
-				t.Errorf("GenerateLink() should start with vless://, got %v", link)
+				t.Errorf("ToShareLink() should start with vless://, got %v", link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseVLESS(link)
+			_, err = ParseProxyLine(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -280,18 +301,19 @@ func TestHysteriaProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseHysteria(tt.inputLink)
+			proxy, err := ParseProxyLine(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseHysteria error = %v", err)
+				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink(nil)
+			link, _ := proxy.ToShareLink(nil)
+
 			if !strings.HasPrefix(link, tt.protocol+"://") {
-				t.Errorf("GenerateLink() should start with %s://, got %v", tt.protocol, link)
+				t.Errorf("ToShareLink() should start with %s://, got %v", tt.protocol, link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseHysteria(link)
+			_, err = ParseProxyLine(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -317,34 +339,23 @@ func TestTUICProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseTUIC(tt.inputLink)
+			proxy, err := ParseProxyLine(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseTUIC error = %v", err)
+				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink(nil)
+			link, _ := proxy.ToShareLink(nil)
+
 			if !strings.HasPrefix(link, "tuic://") {
-				t.Errorf("GenerateLink() should start with tuic://, got %v", link)
+				t.Errorf("ToShareLink() should start with tuic://, got %v", link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseTUIC(link)
+			_, err = ParseProxyLine(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
 		})
-	}
-}
-
-func TestUrlDecode(t *testing.T) {
-	if urlDecode("Hello+World") != "Hello World" {
-		t.Error("urlDecode failed")
-	}
-}
-
-func TestUrlSafeBase64Decode(t *testing.T) {
-	if urlSafeBase64Decode("SGVsbG8gV29ybGQ=") != "Hello World" {
-		t.Error("urlSafeBase64Decode failed")
 	}
 }
 
@@ -357,13 +368,6 @@ func TestProcessRemark(t *testing.T) {
 	// Second call appends _2 (count+1)
 	if ProcessRemark("Test", remarks) != "Test_2" {
 		t.Error("ProcessRemark duplicate failed")
-	}
-}
-
-func TestGetStringField(t *testing.T) {
-	data := map[string]interface{}{"key": "value", "num": 123}
-	if getStringField(data, "key") != "value" {
-		t.Error("getStringField failed")
 	}
 }
 

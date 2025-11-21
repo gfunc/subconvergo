@@ -10,16 +10,17 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 
 	"strings"
 	"text/template"
 
-	"github.com/gfunc/subconvergo/proxy"
+	pc "github.com/gfunc/subconvergo/proxy/core"
 
 	"github.com/BurntSushi/toml"
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator"
+	"github.com/gfunc/subconvergo/generator/core"
+	"github.com/gfunc/subconvergo/generator/transformers"
 	"github.com/gfunc/subconvergo/parser"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/ini.v1"
@@ -80,6 +81,13 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		return
 	}
 
+	// Reload config on request if enabled
+	if config.Global.Common.ReloadConfOnRequest {
+		if _, err := config.LoadConfig(); err == nil {
+			// Config reloaded successfully
+		}
+	}
+
 	// Handle insert URLs first if enabled
 	var urlsToProcess []string
 	if config.Global.Common.EnableInsert && len(config.Global.Common.InsertURL) > 0 {
@@ -121,7 +129,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	// Parse subscription URLs (support multiple URLs separated by |)
-	var allProxies []proxy.ProxyInterface
+	var allProxies []pc.ProxyInterface
 	var otherProxyGroups []config.ProxyGroupConfig
 	var rawRules []string
 	for index, url := range urlsToProcess {
@@ -154,15 +162,32 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		return
 	}
 
-	// Apply filters
-	allProxies = h.applyFilters(allProxies, c)
-	log.Printf("[handler.HandleSub] proxies after filters=%d", len(allProxies))
+	// Prepare filter patterns
+	include := getParam("include")
+	exclude := getParam("exclude")
 
-	// Reload config on request if enabled
-	if config.Global.Common.ReloadConfOnRequest {
-		if _, err := config.LoadConfig(); err == nil {
-			// Config reloaded successfully
-		}
+	var includePatterns []string
+	if len(config.Global.Common.IncludeRemarks) > 0 {
+		includePatterns = append(includePatterns, config.Global.Common.IncludeRemarks...)
+	}
+	if include != "" {
+		includePatterns = append(includePatterns, include)
+	}
+
+	var excludePatterns []string
+	if len(config.Global.Common.ExcludeRemarks) > 0 {
+		excludePatterns = append(excludePatterns, config.Global.Common.ExcludeRemarks...)
+	}
+	if exclude != "" {
+		excludePatterns = append(excludePatterns, exclude)
+	}
+
+	// Construct transformation pipeline
+	pipeline := []transformers.Transformer{
+		transformers.NewFilterTransformer(includePatterns, excludePatterns),
+		transformers.NewRenameTransformer(config.Global.NodePref.RenameNodes),
+		transformers.NewEmojiTransformer(config.Global.Emojis),
+		transformers.NewSortTransformer(config.Global.NodePref.SortFlag),
 	}
 
 	if len(otherProxyGroups) > 0 {
@@ -170,18 +195,16 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	// Prepare generator options
-	opts := generator.GeneratorOptions{
+	opts := core.GeneratorOptions{
 		Target:          target,
 		ProxyGroups:     proxyGroups,
 		Rulesets:        rulesets,
 		RawRules:        rawRules,
 		AppendProxyType: config.Global.Common.AppendProxyType,
 		EnableRuleGen:   config.Global.Rulesets.Enabled,
-		RenameNodes:     config.Global.NodePref.RenameNodes,
-		SortProxies:     config.Global.NodePref.SortFlag,
-		Emoji:           config.Global.Emojis,
+		Pipelines:       pipeline,
 
-		ExtraSetting: config.ExtraSetting{
+		ProxySetting: config.ProxySetting{
 			ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
 			ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
 			SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
@@ -190,30 +213,27 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 
 	// Apply node preferences to generator options
 	if config.Global.NodePref.UDPFlag != nil {
-		opts.UDP = config.Global.NodePref.UDPFlag
+		opts.UDP = *config.Global.NodePref.UDPFlag
 	}
 	if config.Global.NodePref.TCPFastOpenFlag != nil {
-		opts.TFO = config.Global.NodePref.TCPFastOpenFlag
+		opts.TFO = *config.Global.NodePref.TCPFastOpenFlag
 	}
 	if config.Global.NodePref.SkipCertVerifyFlag != nil {
-		opts.SkipCertVerify = config.Global.NodePref.SkipCertVerifyFlag
+		opts.SCV = *config.Global.NodePref.SkipCertVerifyFlag
 	}
 	if config.Global.NodePref.TLS13Flag != nil {
-		opts.TLS13 = config.Global.NodePref.TLS13Flag
+		opts.TLS13 = *config.Global.NodePref.TLS13Flag
 	}
 
 	// Parse boolean options
 	if udp := getParam("udp"); udp != "" {
-		val := udp == "true"
-		opts.UDP = &val
+		opts.UDP = udp == "true"
 	}
 	if tfo := getParam("tfo"); tfo != "" {
-		val := tfo == "true"
-		opts.TFO = &val
+		opts.TFO = tfo == "true"
 	}
 	if scv := getParam("scv"); scv != "" {
-		val := scv == "true"
-		opts.SkipCertVerify = &val
+		opts.SCV = scv == "true"
 	}
 
 	// Prepare request parameters for template rendering
@@ -279,81 +299,6 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	c.Data(http.StatusOK, contentType, []byte(output))
-}
-
-func (h *SubHandler) applyFilters(proxies []proxy.ProxyInterface, c *gin.Context) []proxy.ProxyInterface {
-	// Get filter params
-	include := c.Query("include")
-	exclude := c.Query("exclude")
-
-	// Apply exclude filter
-	if exclude != "" || len(config.Global.Common.ExcludeRemarks) > 0 {
-		patterns := append(config.Global.Common.ExcludeRemarks, exclude)
-		proxies = filterProxies(proxies, patterns, false)
-	}
-
-	// Apply include filter
-	if include != "" || len(config.Global.Common.IncludeRemarks) > 0 {
-		patterns := append(config.Global.Common.IncludeRemarks, include)
-		proxies = filterProxies(proxies, patterns, true)
-	}
-
-	return proxies
-}
-
-func filterProxies(proxies []proxy.ProxyInterface, patterns []string, include bool) []proxy.ProxyInterface {
-	if len(patterns) == 0 {
-		return proxies
-	}
-
-	// Pre-compile regexes for all patterns
-	type compiledPat struct {
-		raw string
-		re  *regexp.Regexp
-	}
-	compiled := make([]compiledPat, len(patterns))
-	for i, p := range patterns {
-		compiled[i].raw = p
-		if p == "" {
-			continue
-		}
-		var expr string
-		if strings.HasPrefix(p, "/") && strings.HasSuffix(p, "/") && len(p) > 2 {
-			expr = p[1 : len(p)-1]
-		} else {
-			expr = regexp.QuoteMeta(p)
-		}
-		if re, err := regexp.Compile(expr); err == nil {
-			compiled[i].re = re
-		}
-	}
-
-	var result []proxy.ProxyInterface
-	for _, pr := range proxies {
-		matched := false
-		for i, p := range patterns {
-			if p == "" {
-				continue
-			}
-			if compiled[i].re != nil {
-				if compiled[i].re.MatchString(pr.GetRemark()) {
-					matched = true
-					break
-				}
-			} else {
-				// regex failed to compile; fallback to substring contains
-				if strings.Contains(pr.GetRemark(), p) {
-					matched = true
-					break
-				}
-			}
-		}
-		if include == matched {
-			result = append(result, pr)
-		}
-	}
-
-	return result
 }
 
 func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]string) (string, error) {

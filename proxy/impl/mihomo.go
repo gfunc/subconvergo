@@ -1,42 +1,42 @@
-package proxy
+package impl
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-
 	"log"
 
 	"github.com/gfunc/subconvergo/config"
+	"github.com/gfunc/subconvergo/proxy/core"
 	"github.com/metacubex/mihomo/constant"
 
 	"gopkg.in/yaml.v3"
 )
 
 type MihomoProxy struct {
-	ProxyInterface
+	core.ProxyInterface
 	Clash   constant.Proxy         `yaml:"-" json:"-"`
 	Options map[string]interface{} `yaml:"-" json:"-"`
 }
 
-func (m *MihomoProxy) GenerateLink(opts *config.ExtraSetting) (string, error) {
+func (m *MihomoProxy) ToShareLink(opts *config.ProxySetting) (string, error) {
 	if m.ProxyInterface == nil {
 		return "", fmt.Errorf("Plain proxy is not set")
 	}
 	switch p := m.ProxyInterface.(type) {
-	case SubconverterProxy:
-		return p.GenerateLink(opts)
+	case core.SubconverterProxy:
+		return p.ToShareLink(opts)
 	default:
-		b, err := json.Marshal(m.ProxyOptions(opts))
+		b, err := json.Marshal(m.ToClashConfig(opts))
 		if err != nil {
-			return "", fmt.Errorf("error GenerateLink for proxy %s of type %s, %v", m.GetRemark(), m.GetType(), err)
+			return "", fmt.Errorf("error ToShareLink for proxy %s of type %s, %v", m.GetRemark(), m.GetType(), err)
 		}
 		content := base64.StdEncoding.EncodeToString(b)
 		return fmt.Sprintf("%s://%s", m.GetType(), content), nil
 	}
 }
 
-func (m *MihomoProxy) ProxyOptions(opts *config.ExtraSetting) map[string]interface{} {
+func (m *MihomoProxy) ToClashConfig(opts *config.ProxySetting) map[string]interface{} {
 	options, err := m.proxyOptions()
 	if err != nil {
 		log.Printf("failed to get proxy options: %v", err)

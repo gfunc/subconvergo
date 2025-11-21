@@ -22,27 +22,26 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-
-	"gopkg.in/yaml.v3"
-
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gfunc/subconvergo/config"
-	"github.com/gfunc/subconvergo/proxy"
+	"github.com/gfunc/subconvergo/parser/core"
+	proxyCore "github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/proxy/impl"
 	"github.com/metacubex/mihomo/adapter"
 	C "github.com/metacubex/mihomo/config"
+	"gopkg.in/yaml.v3"
 )
 
 type SubContent struct {
-	Proxies  []proxy.ProxyInterface
+	Proxies  []proxyCore.ProxyInterface
 	Groups   []config.ProxyGroupConfig
 	RawRules []string
 }
@@ -57,7 +56,7 @@ type SubParser struct {
 func (sp *SubParser) Parse() (*SubContent, error) {
 	sp.parseURL()
 	sc := &SubContent{
-		Proxies:  make([]proxy.ProxyInterface, 0),
+		Proxies:  make([]proxyCore.ProxyInterface, 0),
 		Groups:   make([]config.ProxyGroupConfig, 0),
 		RawRules: make([]string, 0),
 	}
@@ -203,7 +202,7 @@ func (sp *SubParser) parseContent(content string) (*SubContent, error) {
 		content = string(decoded)
 	}
 
-	var proxies []proxy.ProxyInterface
+	var proxies []proxyCore.ProxyInterface
 	lines := strings.Split(content, "\n")
 
 	for _, line := range lines {
@@ -253,23 +252,14 @@ func ProcessRemark(remark string, existingRemarks map[string]int) string {
 }
 
 // ParseProxyLine parses a proxy line and returns a ProxyInterface
-func ParseProxyLine(line string) (proxy.SubconverterProxy, error) {
-	if strings.HasPrefix(line, "ss://") {
-		return parseShadowsocks(line)
-	} else if strings.HasPrefix(line, "ssr://") {
-		return parseShadowsocksR(line)
-	} else if strings.HasPrefix(line, "vmess://") {
-		return parseVMess(line)
-	} else if strings.HasPrefix(line, "trojan://") {
-		return parseTrojan(line)
-	} else if strings.HasPrefix(line, "vless://") {
-		return parseVLESS(line)
-	} else if strings.HasPrefix(line, "hysteria://") || strings.HasPrefix(line, "hysteria2://") || strings.HasPrefix(line, "hy2://") {
-		return parseHysteria(line)
-	} else if strings.HasPrefix(line, "tuic://") {
-		return parseTUIC(line)
+func ParseProxyLine(line string) (proxyCore.SubconverterProxy, error) {
+	// Use the registry to find a matching parser
+	p, err := core.ParseLine(line)
+	if err == nil {
+		return p, nil
 	}
 
+	// Fallback to Mihomo generic parser if no specific parser found
 	// Extract protocol prefix for error message
 	idx := strings.Index(line, "://")
 	if idx == -1 {
@@ -278,708 +268,6 @@ func ParseProxyLine(line string) (proxy.SubconverterProxy, error) {
 	protocol := line[:idx]
 	log.Printf("[parser.ParseProxyLine] unsupported native proxy protocol=%s line=%s", protocol, line)
 	return ParseMihomoProxy(protocol, line[idx:])
-}
-
-func parseShadowsocks(line string) (proxy.SubconverterProxy, error) {
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "ss://") {
-		return nil, fmt.Errorf("not a valid ss:// link")
-	}
-
-	line = line[5:]
-
-	var remark, password, method, server, port, plugin, pluginOpts, group string
-
-	if idx := strings.Index(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
-		line = line[:idx]
-	}
-
-	if idx := strings.Index(line, "?"); idx != -1 {
-		queryStr := line[idx+1:]
-		line = line[:idx]
-
-		params, _ := url.ParseQuery(queryStr)
-		if pluginStr := params.Get("plugin"); pluginStr != "" {
-			pluginStr = urlDecode(pluginStr)
-			if idx := strings.Index(pluginStr, ";"); idx != -1 {
-				plugin = pluginStr[:idx]
-				pluginOpts = pluginStr[idx+1:]
-			} else {
-				plugin = pluginStr
-			}
-		}
-
-		if groupStr := params.Get("group"); groupStr != "" {
-			group = urlSafeBase64Decode(groupStr)
-		}
-	}
-
-	if strings.Contains(line, "@") {
-		parts := strings.Split(line, "@")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid ss link format")
-		}
-
-		userInfo := urlSafeBase64Decode(parts[0])
-		methodPass := strings.SplitN(userInfo, ":", 2)
-		if len(methodPass) != 2 {
-			return nil, fmt.Errorf("invalid userinfo format")
-		}
-		method = methodPass[0]
-		password = methodPass[1]
-
-		serverInfo := parts[1]
-
-		if strings.HasPrefix(serverInfo, "[") {
-			endIdx := strings.Index(serverInfo, "]")
-			if endIdx == -1 {
-				return nil, fmt.Errorf("invalid IPv6 format")
-			}
-			server = serverInfo[:endIdx+1]
-			if endIdx+1 < len(serverInfo) && serverInfo[endIdx+1] == ':' {
-				port = serverInfo[endIdx+2:]
-			} else {
-				return nil, fmt.Errorf("invalid server:port format")
-			}
-		} else {
-			serverPort := strings.Split(serverInfo, ":")
-			if len(serverPort) != 2 {
-				return nil, fmt.Errorf("invalid server:port format")
-			}
-			server = serverPort[0]
-			port = serverPort[1]
-		}
-	} else {
-		decoded := urlSafeBase64Decode(line)
-
-		atIdx := strings.Index(decoded, "@")
-		if atIdx == -1 {
-			return nil, fmt.Errorf("invalid ss link format")
-		}
-
-		userInfo := decoded[:atIdx]
-		serverInfo := decoded[atIdx+1:]
-
-		methodPass := strings.SplitN(userInfo, ":", 2)
-		if len(methodPass) != 2 {
-			return nil, fmt.Errorf("invalid userinfo format")
-		}
-		method = methodPass[0]
-		password = methodPass[1]
-
-		serverPort := strings.Split(serverInfo, ":")
-		if len(serverPort) != 2 {
-			return nil, fmt.Errorf("invalid server:port format")
-		}
-		server = serverPort[0]
-		port = serverPort[1]
-	}
-
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum == 0 {
-		return nil, fmt.Errorf("invalid port: %s", port)
-	}
-
-	if remark == "" {
-		remark = server + ":" + port
-	}
-
-	if group == "" {
-		group = "SS"
-	}
-
-	p := &proxy.ShadowsocksProxy{
-		BaseProxy: proxy.BaseProxy{
-			Type:   "ss",
-			Remark: remark,
-			Server: server,
-			Port:   portNum,
-			Group:  group,
-		},
-		Password:      password,
-		EncryptMethod: method,
-		Plugin:        plugin,
-		PluginOpts:    parsePluginOpts(pluginOpts),
-	}
-
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
-	if err != nil {
-		return p, nil
-	} else {
-		return &proxy.MihomoProxy{
-			ProxyInterface: p,
-			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(nil),
-		}, nil
-	}
-
-}
-
-func parseShadowsocksR(line string) (proxy.SubconverterProxy, error) {
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "ssr://") {
-		return nil, fmt.Errorf("not a valid ssr:// link")
-	}
-
-	line = strings.ReplaceAll(line[6:], "\r", "")
-	line = urlSafeBase64Decode(line)
-
-	var remarks, group, server, port, method, password, protocol, protocolParam, obfs, obfsParam string
-
-	if idx := strings.Index(line, "/?"); idx != -1 {
-		queryStr := line[idx+2:]
-		line = line[:idx]
-
-		params, _ := url.ParseQuery(queryStr)
-		group = urlSafeBase64Decode(params.Get("group"))
-		remarks = urlSafeBase64Decode(params.Get("remarks"))
-		obfsParam = strings.TrimSpace(urlSafeBase64Decode(params.Get("obfsparam")))
-		protocolParam = strings.TrimSpace(urlSafeBase64Decode(params.Get("protoparam")))
-	}
-
-	re := regexp.MustCompile(`(\S+):(\d+?):(\S+?):(\S+?):(\S+?):(\S+)`)
-	matches := re.FindStringSubmatch(line)
-	if len(matches) != 7 {
-		return nil, fmt.Errorf("invalid ssr link format")
-	}
-
-	server = matches[1]
-	port = matches[2]
-	protocol = matches[3]
-	method = matches[4]
-	obfs = matches[5]
-	password = urlSafeBase64Decode(matches[6])
-
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum == 0 {
-		return nil, fmt.Errorf("invalid port: %s", port)
-	}
-
-	if group == "" {
-		group = "SSR"
-	}
-	if remarks == "" {
-		remarks = server + ":" + port
-	}
-
-	ssCiphers := []string{"rc4-md5", "aes-128-gcm", "aes-192-gcm", "aes-256-gcm", "aes-128-cfb",
-		"aes-192-cfb", "aes-256-cfb", "aes-128-ctr", "aes-192-ctr", "aes-256-ctr", "chacha20-ietf-poly1305",
-		"xchacha20-ietf-poly1305", "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm"}
-
-	isSS := false
-	for _, cipher := range ssCiphers {
-		if cipher == method && (obfs == "" || obfs == "plain") && (protocol == "" || protocol == "origin") {
-			isSS = true
-			break
-		}
-	}
-	var p *proxy.ShadowsocksRProxy
-	if isSS {
-		p = &proxy.ShadowsocksRProxy{
-			BaseProxy: proxy.BaseProxy{
-				Type:   "ss",
-				Remark: remarks,
-				Server: server,
-				Port:   portNum,
-				Group:  group,
-			},
-			Password:      password,
-			EncryptMethod: method,
-		}
-	} else {
-		p = &proxy.ShadowsocksRProxy{
-			BaseProxy: proxy.BaseProxy{
-				Type:   "ssr",
-				Remark: remarks,
-				Server: server,
-				Port:   portNum,
-				Group:  group,
-			},
-			Password:      password,
-			EncryptMethod: method,
-			Protocol:      protocol,
-			ProtocolParam: protocolParam,
-			Obfs:          obfs,
-			ObfsParam:     obfsParam,
-		}
-	}
-
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
-	if err != nil {
-		log.Printf("mihomo proxy parse failed %v", err)
-		return p, nil
-	} else {
-		return &proxy.MihomoProxy{
-			ProxyInterface: p,
-			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(nil),
-		}, nil
-	}
-}
-
-func parseVMess(line string) (proxy.SubconverterProxy, error) {
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "vmess://") {
-		return nil, fmt.Errorf("not a valid vmess:// link")
-	}
-
-	line = line[8:]
-	decoded := urlSafeBase64Decode(line)
-
-	var vmessData map[string]interface{}
-	if err := json.Unmarshal([]byte(decoded), &vmessData); err != nil {
-		return nil, fmt.Errorf("failed to parse vmess JSON: %w", err)
-	}
-
-	ps := getStringField(vmessData, "ps")
-	add := getStringField(vmessData, "add")
-	port := getStringField(vmessData, "port")
-	id := getStringField(vmessData, "id")
-	aid := getStringField(vmessData, "aid")
-	net := getStringField(vmessData, "net")
-	host := getStringField(vmessData, "host")
-	path := getStringField(vmessData, "path")
-	tls := getStringField(vmessData, "tls")
-	sni := getStringField(vmessData, "sni")
-
-	if net == "" {
-		net = "tcp"
-	}
-	if aid == "" {
-		aid = "0"
-	}
-
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum == 0 {
-		return nil, fmt.Errorf("invalid port: %s", port)
-	}
-
-	alterID, _ := strconv.Atoi(aid)
-
-	if ps == "" {
-		ps = add + ":" + port
-	}
-
-	version := getStringField(vmessData, "v")
-	if version == "1" || version == "" {
-		if host != "" && strings.Contains(host, ";") {
-			parts := strings.SplitN(host, ";", 2)
-			host = parts[0]
-			if path == "" {
-				path = parts[1]
-			}
-		}
-	}
-
-	p := &proxy.VMessProxy{
-		BaseProxy: proxy.BaseProxy{
-			Type:   "vmess",
-			Remark: ps,
-			Server: add,
-			Port:   portNum,
-			Group:  "VMess",
-		},
-		UUID:    id,
-		AlterID: alterID,
-		Network: net,
-		Path:    path,
-		Host:    host,
-		TLS:     tls == "tls",
-		SNI:     sni,
-	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
-	if err != nil {
-		log.Printf("mihomo proxy parse failed %v", err)
-		return p, nil
-	} else {
-		return &proxy.MihomoProxy{
-			ProxyInterface: p,
-			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(nil),
-		}, nil
-	}
-
-}
-
-func parseTrojan(line string) (proxy.SubconverterProxy, error) {
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "trojan://") {
-		return nil, fmt.Errorf("not a valid trojan:// link")
-	}
-
-	line = line[9:]
-
-	var remark, password, server, port, sni, network, path, group string
-	var allowInsecure bool
-
-	if idx := strings.LastIndex(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
-		line = line[:idx]
-	}
-
-	if idx := strings.Index(line, "?"); idx != -1 {
-		queryStr := line[idx+1:]
-		line = line[:idx]
-
-		params, _ := url.ParseQuery(queryStr)
-
-		sni = params.Get("sni")
-		if sni == "" {
-			sni = params.Get("peer")
-		}
-
-		if params.Get("allowInsecure") == "1" || params.Get("allowInsecure") == "true" {
-			allowInsecure = true
-		}
-
-		group = urlDecode(params.Get("group"))
-
-		if params.Get("ws") == "1" {
-			network = "ws"
-			path = params.Get("wspath")
-		} else if params.Get("type") == "ws" {
-			network = "ws"
-			path = params.Get("path")
-			if strings.HasPrefix(path, "%2F") {
-				path = urlDecode(path)
-			}
-		} else if params.Get("type") == "grpc" {
-			network = "grpc"
-			path = params.Get("serviceName")
-			if path == "" {
-				path = params.Get("path")
-			}
-		}
-	}
-
-	re := regexp.MustCompile(`(.*?)@(.*):(.*)`)
-	matches := re.FindStringSubmatch(line)
-	if len(matches) != 4 {
-		return nil, fmt.Errorf("invalid trojan link format")
-	}
-
-	password = matches[1]
-	server = matches[2]
-	port = matches[3]
-
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum == 0 {
-		return nil, fmt.Errorf("invalid port: %s", port)
-	}
-
-	if remark == "" {
-		remark = server + ":" + port
-	}
-	if group == "" {
-		group = "Trojan"
-	}
-
-	p := &proxy.TrojanProxy{
-		BaseProxy: proxy.BaseProxy{
-			Type:   "trojan",
-			Remark: remark,
-			Server: server,
-			Port:   portNum,
-			Group:  group,
-		},
-		Password:      password,
-		Network:       network,
-		Path:          path,
-		Host:          sni,
-		TLS:           true, // Trojan always uses TLS
-		AllowInsecure: allowInsecure,
-	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
-	if err != nil {
-		log.Printf("mihomo proxy parse failed %v", err)
-
-		return p, nil
-	} else {
-		return &proxy.MihomoProxy{
-			ProxyInterface: p,
-			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(nil),
-		}, nil
-	}
-}
-
-func parseVLESS(line string) (proxy.SubconverterProxy, error) {
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "vless://") {
-		return nil, fmt.Errorf("not a valid vless:// link")
-	}
-
-	line = line[8:]
-
-	var remark, uuid, server, port, network, flow, security, sni, path, host, group string
-	var allowInsecure bool
-
-	if idx := strings.LastIndex(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
-		line = line[:idx]
-	}
-
-	if idx := strings.Index(line, "?"); idx != -1 {
-		queryStr := line[idx+1:]
-		line = line[:idx]
-
-		params, _ := url.ParseQuery(queryStr)
-
-		network = params.Get("type")
-		if network == "" {
-			network = "tcp"
-		}
-
-		security = params.Get("security")
-		flow = params.Get("flow")
-		sni = params.Get("sni")
-
-		if params.Get("allowInsecure") == "1" || params.Get("allowInsecure") == "true" {
-			allowInsecure = true
-		}
-
-		group = urlDecode(params.Get("group"))
-
-		switch network {
-		case "ws":
-			path = params.Get("path")
-			host = params.Get("host")
-		case "grpc":
-			path = params.Get("serviceName")
-			if path == "" {
-				path = params.Get("path")
-			}
-		case "http", "h2":
-			path = params.Get("path")
-			host = params.Get("host")
-		case "quic":
-			host = params.Get("quicSecurity")
-			path = params.Get("key")
-		}
-	}
-
-	re := regexp.MustCompile(`(.*?)@(.*):(.*)`)
-	matches := re.FindStringSubmatch(line)
-	if len(matches) != 4 {
-		return nil, fmt.Errorf("invalid vless link format")
-	}
-
-	uuid = matches[1]
-	server = matches[2]
-	port = matches[3]
-
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum == 0 {
-		return nil, fmt.Errorf("invalid port: %s", port)
-	}
-
-	if remark == "" {
-		remark = server + ":" + port
-	}
-	if group == "" {
-		group = "VLESS"
-	}
-
-	p := &proxy.VLESSProxy{
-		BaseProxy: proxy.BaseProxy{
-			Type:   "vless",
-			Remark: remark,
-			Server: server,
-			Port:   portNum,
-			Group:  group,
-		},
-		UUID:          uuid,
-		Network:       network,
-		Path:          path,
-		Host:          host,
-		TLS:           security == "tls" || security == "reality",
-		AllowInsecure: allowInsecure,
-		Flow:          flow,
-		SNI:           sni,
-	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
-	if err != nil {
-		log.Printf("mihomo proxy parse failed %v", err)
-		return p, nil
-	} else {
-		return &proxy.MihomoProxy{
-			ProxyInterface: p,
-			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(nil),
-		}, nil
-	}
-
-}
-
-func parseHysteria(line string) (proxy.SubconverterProxy, error) {
-	line = strings.TrimSpace(line)
-
-	var protocol string
-	if strings.HasPrefix(line, "hysteria2://") || strings.HasPrefix(line, "hy2://") {
-		protocol = "hysteria2"
-		if strings.HasPrefix(line, "hy2://") {
-			line = "hysteria2://" + line[6:]
-		}
-	} else if strings.HasPrefix(line, "hysteria://") {
-		protocol = "hysteria"
-	} else {
-		return nil, fmt.Errorf("not a valid hysteria link")
-	}
-
-	prefixLen := len(protocol) + 3
-	line = line[prefixLen:]
-
-	var remark, server, port, password, obfs string
-	var insecure bool
-
-	if idx := strings.LastIndex(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
-		line = line[:idx]
-	}
-
-	var params url.Values
-	if idx := strings.Index(line, "?"); idx != -1 {
-		queryStr := line[idx+1:]
-		line = line[:idx]
-		params, _ = url.ParseQuery(queryStr)
-
-		if params.Get("insecure") == "1" || params.Get("insecure") == "true" {
-			insecure = true
-		}
-		params.Del("insecure")
-		obfs = params.Get("obfs")
-		params.Del("obfs")
-	}
-
-	if strings.Contains(line, "@") {
-		parts := strings.SplitN(line, "@", 2)
-		password = parts[0]
-		line = parts[1]
-	}
-
-	serverPort := strings.Split(line, ":")
-	if len(serverPort) != 2 {
-		return nil, fmt.Errorf("invalid server:port format")
-	}
-	server = serverPort[0]
-	port = serverPort[1]
-
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum == 0 {
-		return nil, fmt.Errorf("invalid port: %s", port)
-	}
-
-	if remark == "" {
-		remark = server + ":" + port
-	}
-
-	p := &proxy.HysteriaProxy{
-		BaseProxy: proxy.BaseProxy{
-			Type:   protocol,
-			Remark: remark,
-			Server: server,
-			Port:   portNum,
-			Group:  strings.ToUpper(protocol),
-		},
-		Password:      password,
-		Obfs:          obfs,
-		AllowInsecure: insecure,
-		Params:        params,
-	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
-	if err != nil {
-		log.Printf("mihomo proxy parse failed %v", err)
-		return p, nil
-	} else {
-		return &proxy.MihomoProxy{
-			ProxyInterface: p,
-			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(nil),
-		}, nil
-	}
-}
-
-func parseTUIC(line string) (proxy.SubconverterProxy, error) {
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "tuic://") {
-		return nil, fmt.Errorf("not a valid tuic link")
-	}
-
-	line = line[7:]
-
-	var remark, uuid, password, server, port string
-	var insecure bool
-
-	if idx := strings.LastIndex(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
-		line = line[:idx]
-	}
-
-	var params url.Values
-	if idx := strings.Index(line, "?"); idx != -1 {
-		queryStr := line[idx+1:]
-		line = line[:idx]
-		params, _ = url.ParseQuery(queryStr)
-
-		if params.Get("allow_insecure") == "1" || params.Get("allow_insecure") == "true" {
-			insecure = true
-		}
-		params.Del("allow_insecure")
-	}
-
-	if strings.Contains(line, "@") {
-		parts := strings.SplitN(line, "@", 2)
-		auth := parts[0]
-		line = parts[1]
-
-		authParts := strings.SplitN(auth, ":", 2)
-		uuid = authParts[0]
-		if len(authParts) == 2 {
-			password = authParts[1]
-		}
-	}
-
-	serverPort := strings.Split(line, ":")
-	if len(serverPort) != 2 {
-		return nil, fmt.Errorf("invalid server:port format")
-	}
-	server = serverPort[0]
-	port = serverPort[1]
-
-	portNum, err := strconv.Atoi(port)
-	if err != nil || portNum == 0 {
-		return nil, fmt.Errorf("invalid port: %s", port)
-	}
-
-	if remark == "" {
-		remark = server + ":" + port
-	}
-
-	p := &proxy.TUICProxy{
-		BaseProxy: proxy.BaseProxy{
-			Type:   "tuic",
-			Remark: remark,
-			Server: server,
-			Port:   portNum,
-			Group:  "TUIC",
-		},
-		UUID:          uuid,
-		Password:      password,
-		AllowInsecure: insecure,
-		Params:        params,
-	}
-	mihomoProxy, err := adapter.ParseProxy(p.ProxyOptions(nil))
-	if err != nil {
-		log.Printf("mihomo proxy parse failed %v", err)
-		return p, nil
-	} else {
-		return &proxy.MihomoProxy{
-			ProxyInterface: p,
-			Clash:          mihomoProxy,
-			Options:        p.ProxyOptions(nil),
-		}, nil
-	}
 }
 
 // ParseMihomoConfig parses Clash YAML format and returns proxies
@@ -994,7 +282,7 @@ func ParseMihomoConfig(content string) (*SubContent, error) {
 	if len(clashConfig.Proxy) == 0 {
 		return nil, fmt.Errorf("no proxies found in clash format")
 	}
-	custom := &SubContent{Proxies: make([]proxy.ProxyInterface, 0)}
+	custom := &SubContent{Proxies: make([]proxyCore.ProxyInterface, 0)}
 
 	for _, proxyMap := range clashConfig.Proxy {
 		mihomoProxy, err := parseMihomoProxy(proxyMap)
@@ -1033,7 +321,7 @@ func ParseMihomoConfig(content string) (*SubContent, error) {
 	return custom, nil
 }
 
-func ParseMihomoProxy(protocol, content string) (*proxy.MihomoProxy, error) {
+func ParseMihomoProxy(protocol, content string) (*impl.MihomoProxy, error) {
 	// Try base64 decode first (standard subscription format)
 	decoded, err := base64.StdEncoding.DecodeString(content)
 	if err != nil {
@@ -1049,7 +337,7 @@ func ParseMihomoProxy(protocol, content string) (*proxy.MihomoProxy, error) {
 	return parseMihomoProxy(options)
 }
 
-func parseMihomoProxy(options map[string]any) (*proxy.MihomoProxy, error) {
+func parseMihomoProxy(options map[string]any) (*impl.MihomoProxy, error) {
 	mihomoProxy, err := adapter.ParseProxy(options)
 	if err != nil {
 		return nil, err
@@ -1065,8 +353,8 @@ func parseMihomoProxy(options map[string]any) (*proxy.MihomoProxy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid port in address: %s", addr)
 	}
-	return &proxy.MihomoProxy{
-		ProxyInterface: &proxy.BaseProxy{
+	return &impl.MihomoProxy{
+		ProxyInterface: &proxyCore.BaseProxy{
 			Type:   options["type"].(string),
 			Remark: mihomoProxy.Name(),
 			Server: server,
@@ -1075,65 +363,4 @@ func parseMihomoProxy(options map[string]any) (*proxy.MihomoProxy, error) {
 		Clash:   mihomoProxy,
 		Options: options,
 	}, nil
-}
-
-// Helper functions for URL encoding/decoding
-func urlDecode(s string) string {
-	decoded, err := url.QueryUnescape(s)
-	if err != nil {
-		return s
-	}
-	return decoded
-}
-
-func urlSafeBase64Decode(s string) string {
-	// Replace URL-safe characters
-	s = strings.ReplaceAll(s, "-", "+")
-	s = strings.ReplaceAll(s, "_", "/")
-
-	// Add padding if necessary
-	if m := len(s) % 4; m != 0 {
-		s += strings.Repeat("=", 4-m)
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		// Try without padding
-		decoded, err = base64.RawStdEncoding.DecodeString(s)
-		if err != nil {
-			return s
-		}
-	}
-	return string(decoded)
-}
-
-func getStringField(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case string:
-			return val
-		case float64:
-			return strconv.FormatFloat(val, 'f', -1, 64)
-		case int:
-			return strconv.Itoa(val)
-		}
-	}
-	return ""
-}
-
-func parsePluginOpts(opts string) map[string]interface{} {
-	result := make(map[string]interface{})
-	pairs := strings.Split(opts, ";")
-	for _, pair := range pairs {
-		if pair == "" {
-			continue
-		}
-		kv := strings.SplitN(pair, "=", 2)
-		if len(kv) == 2 {
-			result[kv[0]] = urlDecode(kv[1])
-		} else {
-			result[kv[0]] = "true"
-		}
-	}
-	return result
 }

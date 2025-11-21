@@ -25,8 +25,8 @@ type ProxyInterface interface {
 
 type SubconverterProxy interface {
 	ProxyInterface
-	GenerateLink(ext *config.ExtraSetting) (string, error)
-	ProxyOptions(ext *config.ExtraSetting) map[string]interface{}
+	ToShareLink(ext *config.ProxySetting) (string, error)
+	ToClashConfig(ext *config.ProxySetting) map[string]interface{}
 }
 
 // BaseProxy contains common fields shared by all proxy types
@@ -84,7 +84,7 @@ type ShadowsocksProxy struct {
 	PluginOpts    map[string]interface{} `yaml:"plugin_opts" json:"plugin_opts"`
 }
 
-func (p *ShadowsocksProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
+func (p *ShadowsocksProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	// Format: ss://base64(method:password)@server:port#remark
 	userInfo := fmt.Sprintf("%s:%s", p.EncryptMethod, p.Password)
 	encoded := base64.URLEncoding.EncodeToString([]byte(userInfo))
@@ -92,7 +92,7 @@ func (p *ShadowsocksProxy) GenerateLink(ext *config.ExtraSetting) (string, error
 	return link, nil
 }
 
-func (p *ShadowsocksProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
+func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":     "ss",
 		"name":     p.Remark,
@@ -119,10 +119,8 @@ func (p *ShadowsocksProxy) ProxyOptions(ext *config.ExtraSetting) map[string]int
 				opts["path"] = p.PluginOpts["path"]
 				opts["tls"] = p.PluginOpts["tls"]
 				opts["mux"] = p.PluginOpts["mux"]
-				if ext != nil {
-					if ext.SkipCertVerify != nil {
-						opts["skip-cert-verify"] = *ext.SkipCertVerify
-					}
+				if ext.SCV {
+					opts["skip-cert-verify"] = ext.SCV
 				}
 			}
 			options["plugin-opts"] = opts
@@ -143,7 +141,7 @@ type ShadowsocksRProxy struct {
 	ObfsParam     string `yaml:"obfs_param" json:"obfs_param"`
 }
 
-func (p *ShadowsocksRProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
+func (p *ShadowsocksRProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	// Format: ssr://base64(server:port:protocol:method:obfs:base64(password)/?...)
 	passEncoded := base64.URLEncoding.EncodeToString([]byte(p.Password))
 	mainPart := fmt.Sprintf("%s:%d:%s:%s:%s:%s",
@@ -175,7 +173,7 @@ func (p *ShadowsocksRProxy) GenerateLink(ext *config.ExtraSetting) (string, erro
 	return "ssr://" + encoded, nil
 }
 
-func (p *ShadowsocksRProxy) ProxyOptions(ext *config.ExtraSetting) (options map[string]interface{}) {
+func (p *ShadowsocksRProxy) ToClashConfig(ext *config.ProxySetting) (options map[string]interface{}) {
 	if p.Type == "ss" {
 		options = map[string]interface{}{
 			"type":     "ss",
@@ -214,7 +212,7 @@ type VMessProxy struct {
 	SNI       string `yaml:"sni" json:"sni"`
 }
 
-func (p *VMessProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
+func (p *VMessProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	// VMess JSON format
 	vmessData := map[string]interface{}{
 		"v":    "2",
@@ -243,7 +241,7 @@ func (p *VMessProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	return "vmess://" + encoded, nil
 }
 
-func (p *VMessProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
+func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":    "vmess",
 		"name":    p.Remark,
@@ -333,7 +331,7 @@ type TrojanProxy struct {
 	AllowInsecure bool   `yaml:"allow_insecure" json:"allow_insecure"`
 }
 
-func (p *TrojanProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
+func (p *TrojanProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	// Format: trojan://password@server:port?params#remark
 	link := fmt.Sprintf("trojan://%s@%s:%d", p.Password, p.Server, p.Port)
 
@@ -362,7 +360,7 @@ func (p *TrojanProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	return link, nil
 }
 
-func (p *TrojanProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
+func (p *TrojanProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":     "trojan",
 		"name":     p.Remark,
@@ -413,7 +411,7 @@ type VLESSProxy struct {
 	SNI           string `yaml:"sni" json:"sni"`
 }
 
-func (p *VLESSProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
+func (p *VLESSProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	// Format: vless://uuid@server:port?params#remark
 	link := fmt.Sprintf("vless://%s@%s:%d", p.UUID, p.Server, p.Port)
 
@@ -442,7 +440,7 @@ func (p *VLESSProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	return link, nil
 }
 
-func (p *VLESSProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
+func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":    "vless",
 		"name":    p.Remark,
@@ -510,7 +508,7 @@ type HysteriaProxy struct {
 	Params        url.Values `yaml:"-" json:"params"`
 }
 
-func (p *HysteriaProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
+func (p *HysteriaProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	protocol := p.Type
 	link := fmt.Sprintf("%s://%s@%s:%d", protocol, p.Password, p.Server, p.Port)
 
@@ -532,7 +530,7 @@ func (p *HysteriaProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	return link, nil
 }
 
-func (p *HysteriaProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
+func (p *HysteriaProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":   p.Type,
 		"name":   p.Remark,
@@ -612,7 +610,7 @@ type TUICProxy struct {
 	Params        url.Values `yaml:"-" json:"params"`
 }
 
-func (p *TUICProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
+func (p *TUICProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	link := fmt.Sprintf("tuic://%s", p.UUID)
 	if p.Password != "" {
 		link += ":" + p.Password
@@ -634,7 +632,7 @@ func (p *TUICProxy) GenerateLink(ext *config.ExtraSetting) (string, error) {
 	return link, nil
 }
 
-func (p *TUICProxy) ProxyOptions(ext *config.ExtraSetting) map[string]interface{} {
+func (p *TUICProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
 	options := map[string]interface{}{
 		"type":   "tuic",
 		"name":   p.Remark,

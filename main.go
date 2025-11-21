@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/gfunc/subconvergo/config"
+	_ "github.com/gfunc/subconvergo/generator/impl"
 	"github.com/gfunc/subconvergo/handler"
 	"github.com/gin-gonic/gin"
 )

@@ -11,37 +11,8 @@ import (
 	"testing"
 
 	"github.com/gfunc/subconvergo/config"
-	P "github.com/gfunc/subconvergo/proxy"
 	"github.com/gin-gonic/gin"
 )
-
-func TestApplyFilters(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	h := NewSubHandler()
-
-	// Prepare proxies
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "HK A"},
-		&P.BaseProxy{Remark: "US B"},
-		&P.BaseProxy{Remark: "JP C"},
-	}
-
-	// Set global include/exclude to exercise merging
-	config.Global.Common.IncludeRemarks = []string{"HK"}
-	config.Global.Common.ExcludeRemarks = []string{"JP"}
-
-	// Build request with explicit include that should override exclude for HK
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	req := httptest.NewRequest(http.MethodGet, "/sub?include=US&exclude=HK", nil)
-	c.Request = req
-
-	filtered := h.applyFilters(proxies, c)
-	// include=US should keep US, global include adds HK but query excludes HK, exclude removes JP
-	if len(filtered) != 1 {
-		t.Fatalf("expected 1 proxies after filtering, got %d", len(filtered))
-	}
-}
 
 func TestRenderTemplateWithContext(t *testing.T) {
 	h := NewSubHandler()
@@ -119,48 +90,6 @@ func TestHandleReadConf(t *testing.T) {
 	// May return 500 if config files not present
 	if w.Code != http.StatusOK && w.Code != http.StatusInternalServerError {
 		t.Errorf("Expected 200 or 500, got %d", w.Code)
-	}
-}
-
-func TestFilterProxiesFunc(t *testing.T) {
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "HK Node"},
-		&P.BaseProxy{Remark: "US Node"},
-	}
-	filtered := filterProxies(proxies, []string{"HK"}, true)
-	if len(filtered) != 1 {
-		t.Errorf("Expected 1 proxy, got %d", len(filtered))
-	}
-}
-
-func TestFilterProxiesRegexInclude(t *testing.T) {
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "HK Node"},
-		&P.BaseProxy{Remark: "US Node"},
-		&P.BaseProxy{Remark: "HK Server"},
-	}
-	// Include remarks that start with HK using regex
-	filtered := filterProxies(proxies, []string{"/^HK/"}, true)
-	if len(filtered) != 2 {
-		t.Fatalf("expected 2 proxies starting with HK, got %d", len(filtered))
-	}
-	for _, p := range filtered {
-		if !strings.HasPrefix(p.GetRemark(), "HK") {
-			t.Fatalf("unexpected remark in regex include: %s", p.GetRemark())
-		}
-	}
-}
-
-func TestFilterProxiesRegexExclude(t *testing.T) {
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "HK Node"},
-		&P.BaseProxy{Remark: "US Node"},
-		&P.BaseProxy{Remark: "JP Node"},
-	}
-	// Exclude remarks matching US or JP
-	filtered := filterProxies(proxies, []string{"/(US|JP)/"}, false)
-	if len(filtered) != 1 || !strings.Contains(filtered[0].GetRemark(), "HK") {
-		t.Fatalf("expected only HK to remain, got %v", filtered)
 	}
 }
 
@@ -346,25 +275,6 @@ func TestLoadBaseConfigDifferentTargets(t *testing.T) {
 		if err != nil {
 			t.Logf("%s base config load error (acceptable): %v", target, err)
 		}
-	}
-}
-
-func TestFilterProxiesWithIncludeExclude(t *testing.T) {
-	proxies := []P.ProxyInterface{
-		&P.BaseProxy{Remark: "HK Node"},
-		&P.BaseProxy{Remark: "US Node"},
-		&P.BaseProxy{Remark: "JP Node"},
-	}
-
-	// Test filterProxies function (package-level, not method)
-	filtered := filterProxies(proxies, []string{"HK", "US"}, true)
-	if len(filtered) == 0 {
-		t.Error("Filter should not empty all proxies with includes")
-	}
-
-	excluded := filterProxies(proxies, []string{"HK"}, false)
-	if len(excluded) == 0 {
-		t.Error("Exclude should keep some proxies")
 	}
 }
 
