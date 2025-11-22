@@ -21,6 +21,7 @@ func Generate(proxies []pc.ProxyInterface, opts core.GeneratorOptions, baseConfi
 			return "", fmt.Errorf("transformation failed: %v", err)
 		}
 	}
+	log.Printf("[generator.Generate] After pipeline: proxies=%d", len(proxies))
 
 	// Append proxy type to remark if enabled
 	if opts.AppendProxyType {
@@ -43,6 +44,9 @@ func Generate(proxies []pc.ProxyInterface, opts core.GeneratorOptions, baseConfi
 	opts.Base = baseConfig
 	opts.Type = target
 	opts.Rule = opts.EnableRuleGen
+
+	// Generate content based on target type
+	log.Printf("[generator.Generate] Generating content for target=%s", opts.Type)
 
 	return gen.Generate(proxies, opts.ProxyGroups, opts.RawRules, config.Global, opts)
 }

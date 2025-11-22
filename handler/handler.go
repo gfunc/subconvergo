@@ -56,6 +56,8 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	urlParam := getParam("url")
 	configParam := getParam("config")
 
+	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s", target, urlParam, configParam)
+
 	// Validate required parameters
 	if target == "" {
 		c.String(http.StatusBadRequest, "Invalid target!")
@@ -144,6 +146,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		}
 		custom, err := sp.Parse()
 		if err == nil {
+			log.Printf("[handler.HandleSub] Parsed URL %s: %d proxies, %d groups, %d rules", url, len(custom.Proxies), len(custom.Groups), len(custom.RawRules))
 			allProxies = append(allProxies, custom.Proxies...)
 			otherProxyGroups = append(otherProxyGroups, custom.Groups...)
 			rawRules = append(rawRules, custom.RawRules...)
@@ -155,6 +158,8 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 			log.Printf("[handler.HandleSub] failed to parse subscription (index=%d url=%s): %v", index, url, err)
 		}
 	}
+
+	log.Printf("[handler.HandleSub] Parsed %d proxies, %d groups from %d URLs", len(allProxies), len(proxyGroups), len(urlsToProcess))
 
 	if len(allProxies) == 0 {
 		log.Printf("[handler.HandleSub] no valid proxies parsed from %d url(s)", len(urlsToProcess))

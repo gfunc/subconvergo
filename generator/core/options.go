@@ -18,35 +18,8 @@ type GeneratorOptions struct {
 	EnableRuleGen   bool
 	Pipelines       []transformers.Transformer
 
-	// Legacy options (to be deprecated)
-	// SortProxies     bool
-	// RenameNodes     []config.RenameNodeConfig
-	// Emoji           config.EmojiConfig
-
 	// Additional options from legacy core
-	Type      string
-	Sort      string
-	Filter    string
-	Include   string
-	Exclude   string
-	Config    string
-	Upload    bool
-	Token     string
-	EmojiFlag bool // Renamed from Emoji to avoid conflict
-	List      bool
-	Expand    bool
-	Classic   bool
-	NewName   bool
-	Append    string
-	Insert    string
-	Fd        bool
-	SortFlag  bool
-	Rename    string
-
-	Base     string
-	IncludeR string
-	ExcludeR string
-	Rule     bool
-	Style    string
-	Inserts  string
+	Type string
+	Base string
+	Rule bool
 }
