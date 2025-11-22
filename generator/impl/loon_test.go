@@ -58,5 +58,5 @@ func TestLoonGenerator_Generate_WithGroups(t *testing.T) {
 
 	assert.Contains(t, output, "[Proxy Group]")
 	assert.Contains(t, output, "Select Group = select, ss-proxy, vmess-proxy")
-	assert.Contains(t, output, "URL Test Group = url-test, ss-proxy, ssr-proxy, vmess-proxy, vless-proxy, trojan-proxy, hysteria2-proxy, tuic-proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Proxy.png")
+	assert.Contains(t, output, "URL Test Group = url-test, ss-proxy, ssr-proxy, vmess-proxy, vless-proxy, trojan-proxy, hysteria2-proxy, tuic-proxy, anytls-proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Proxy.png")
 }

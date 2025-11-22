@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gfunc/subconvergo/parser/utils"
 	"github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
 	"github.com/metacubex/mihomo/adapter"
@@ -43,7 +44,7 @@ func (p *HysteriaParser) Parse(line string) (core.SubconverterProxy, error) {
 	var insecure bool
 
 	if idx := strings.LastIndex(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
+		remark = utils.UrlDecode(line[idx+1:])
 		line = line[:idx]
 	}
 

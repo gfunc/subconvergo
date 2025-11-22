@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gfunc/subconvergo/parser/utils"
 	"github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
-	"github.com/metacubex/mihomo/adapter"
 )
 
 type VLESSParser struct{}
@@ -34,7 +34,7 @@ func (p *VLESSParser) Parse(line string) (core.SubconverterProxy, error) {
 	var allowInsecure bool
 
 	if idx := strings.LastIndex(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
+		remark = utils.UrlDecode(line[idx+1:])
 		line = line[:idx]
 	}
 
@@ -57,7 +57,7 @@ func (p *VLESSParser) Parse(line string) (core.SubconverterProxy, error) {
 			allowInsecure = true
 		}
 
-		group = urlDecode(params.Get("group"))
+		group = utils.UrlDecode(params.Get("group"))
 
 		switch network {
 		case "ws":
@@ -116,14 +116,5 @@ func (p *VLESSParser) Parse(line string) (core.SubconverterProxy, error) {
 		Flow:          flow,
 		SNI:           sni,
 	}
-	mihomoProxy, err := adapter.ParseProxy(pObj.ToClashConfig(nil))
-	if err != nil {
-		return pObj, nil
-	} else {
-		return &impl.MihomoProxy{
-			ProxyInterface: pObj,
-			Clash:          mihomoProxy,
-			Options:        pObj.ToClashConfig(nil),
-		}, nil
-	}
+	return utils.ToMihomoProxy(pObj)
 }

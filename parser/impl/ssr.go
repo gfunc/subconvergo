@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gfunc/subconvergo/parser/utils"
 	"github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
-	"github.com/metacubex/mihomo/adapter"
 )
 
 type ShadowsocksRParser struct{}
@@ -29,7 +29,7 @@ func (p *ShadowsocksRParser) Parse(line string) (core.SubconverterProxy, error) 
 	}
 
 	line = strings.ReplaceAll(line[6:], "\r", "")
-	line = urlSafeBase64Decode(line)
+	line = utils.UrlSafeBase64Decode(line)
 
 	var remarks, group, server, port, method, password, protocol, protocolParam, obfs, obfsParam string
 
@@ -38,10 +38,10 @@ func (p *ShadowsocksRParser) Parse(line string) (core.SubconverterProxy, error) 
 		line = line[:idx]
 
 		params, _ := url.ParseQuery(queryStr)
-		group = urlSafeBase64Decode(params.Get("group"))
-		remarks = urlSafeBase64Decode(params.Get("remarks"))
-		obfsParam = strings.TrimSpace(urlSafeBase64Decode(params.Get("obfsparam")))
-		protocolParam = strings.TrimSpace(urlSafeBase64Decode(params.Get("protoparam")))
+		group = utils.UrlSafeBase64Decode(params.Get("group"))
+		remarks = utils.UrlSafeBase64Decode(params.Get("remarks"))
+		obfsParam = strings.TrimSpace(utils.UrlSafeBase64Decode(params.Get("obfsparam")))
+		protocolParam = strings.TrimSpace(utils.UrlSafeBase64Decode(params.Get("protoparam")))
 	}
 
 	re := regexp.MustCompile(`(\S+):(\d+?):(\S+?):(\S+?):(\S+?):(\S+)`)
@@ -55,7 +55,7 @@ func (p *ShadowsocksRParser) Parse(line string) (core.SubconverterProxy, error) 
 	protocol = matches[3]
 	method = matches[4]
 	obfs = matches[5]
-	password = urlSafeBase64Decode(matches[6])
+	password = utils.UrlSafeBase64Decode(matches[6])
 
 	portNum, err := strconv.Atoi(port)
 	if err != nil || portNum == 0 {
@@ -111,14 +111,5 @@ func (p *ShadowsocksRParser) Parse(line string) (core.SubconverterProxy, error) 
 		}
 	}
 
-	mihomoProxy, err := adapter.ParseProxy(pObj.ToClashConfig(nil))
-	if err != nil {
-		return pObj, nil
-	} else {
-		return &impl.MihomoProxy{
-			ProxyInterface: pObj,
-			Clash:          mihomoProxy,
-			Options:        pObj.ToClashConfig(nil),
-		}, nil
-	}
+	return utils.ToMihomoProxy(pObj)
 }

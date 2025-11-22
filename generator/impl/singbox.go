@@ -159,6 +159,33 @@ func convertToSingBox(p pc.ProxyInterface, opts core.GeneratorOptions) map[strin
 			}
 			outbound["transport"] = transport
 		}
+
+	case *impl.AnyTLSProxy:
+		outbound["type"] = "anytls"
+		outbound["password"] = t.Password
+		if t.SNI != "" {
+			outbound["sni"] = t.SNI
+		}
+		if t.IdleSessionCheckInterval > 0 {
+			outbound["idle_session_check_interval"] = fmt.Sprintf("%ds", t.IdleSessionCheckInterval)
+		}
+		if t.IdleSessionTimeout > 0 {
+			outbound["idle_session_timeout"] = fmt.Sprintf("%ds", t.IdleSessionTimeout)
+		}
+		if t.MinIdleSession > 0 {
+			outbound["min_idle_session"] = fmt.Sprintf("%ds", t.MinIdleSession)
+		}
+
+		tls := map[string]interface{}{
+			"enabled": true,
+		}
+		if opts.SCV || t.AllowInsecure || t.Fingerprint != "" {
+			tls["insecure"] = true
+		}
+		if len(t.Alpn) > 0 {
+			tls["alpn"] = t.Alpn
+		}
+		outbound["tls"] = tls
 	}
 
 	return outbound

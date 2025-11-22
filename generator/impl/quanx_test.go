@@ -55,5 +55,5 @@ func TestQuantumultXGenerator_Generate_WithGroups(t *testing.T) {
 
 	assert.Contains(t, output, "[policy]")
 	assert.Contains(t, output, "static=Select Group, ss-proxy, vmess-proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Proxy.png")
-	assert.Contains(t, output, "available=URL Test Group, ss-proxy, ssr-proxy, vmess-proxy, vless-proxy, trojan-proxy, hysteria2-proxy, tuic-proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Proxy.png")
+	assert.Contains(t, output, "available=URL Test Group, ss-proxy, ssr-proxy, vmess-proxy, vless-proxy, trojan-proxy, hysteria2-proxy, tuic-proxy, anytls-proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Proxy.png")
 }

@@ -13,4 +13,5 @@ func init() {
 	core.RegisterParser(&impl.VLESSParser{})
 	core.RegisterParser(&impl.HysteriaParser{})
 	core.RegisterParser(&impl.TUICParser{})
+	core.RegisterParser(&impl.AnyTLSParser{})
 }

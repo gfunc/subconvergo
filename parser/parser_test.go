@@ -174,8 +174,8 @@ func TestVMessProxyGenerateLink(t *testing.T) {
 	if !ok {
 		// Try MihomoProxy if it wraps it
 		if mp, ok := proxy.(*P.MihomoProxy); ok {
-			proxyVMess, err = mp.GetVmessProxy()
-			if err != nil {
+			proxyVMess, ok = mp.ProxyInterface.(*P.VMessProxy)
+			if !ok {
 				t.Fatalf("Failed to get VMess proxy from MihomoProxy: %v", err)
 			}
 		} else {
@@ -186,8 +186,8 @@ func TestVMessProxyGenerateLink(t *testing.T) {
 	proxy2VMess, ok := proxy2.(*P.VMessProxy)
 	if !ok {
 		if mp, ok := proxy2.(*P.MihomoProxy); ok {
-			proxy2VMess, err = mp.GetVmessProxy()
-			if err != nil {
+			proxy2VMess, ok = mp.ProxyInterface.(*P.VMessProxy)
+			if !ok {
 				t.Fatalf("Failed to get VMess proxy from MihomoProxy: %v", err)
 			}
 		} else {

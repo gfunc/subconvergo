@@ -1,15 +1,14 @@
 package impl
 
 import (
-	"encoding/base64"
 	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/gfunc/subconvergo/parser/utils"
 	"github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
-	"github.com/metacubex/mihomo/adapter"
 )
 
 type ShadowsocksParser struct{}
@@ -33,7 +32,7 @@ func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
 	var remark, password, method, server, port, plugin, pluginOpts, group string
 
 	if idx := strings.Index(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
+		remark = utils.UrlDecode(line[idx+1:])
 		line = line[:idx]
 	}
 
@@ -43,7 +42,7 @@ func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
 
 		params, _ := url.ParseQuery(queryStr)
 		if pluginStr := params.Get("plugin"); pluginStr != "" {
-			pluginStr = urlDecode(pluginStr)
+			pluginStr = utils.UrlDecode(pluginStr)
 			if idx := strings.Index(pluginStr, ";"); idx != -1 {
 				plugin = pluginStr[:idx]
 				pluginOpts = pluginStr[idx+1:]
@@ -53,7 +52,7 @@ func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
 		}
 
 		if groupStr := params.Get("group"); groupStr != "" {
-			group = urlSafeBase64Decode(groupStr)
+			group = utils.UrlSafeBase64Decode(groupStr)
 		}
 	}
 
@@ -65,7 +64,7 @@ func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
 			return nil, fmt.Errorf("invalid ss link format")
 		}
 
-		userInfo := urlSafeBase64Decode(parts[0])
+		userInfo := utils.UrlSafeBase64Decode(parts[0])
 		methodPass := strings.SplitN(userInfo, ":", 2)
 		if len(methodPass) != 2 {
 			return nil, fmt.Errorf("invalid userinfo format")
@@ -95,7 +94,7 @@ func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
 			port = serverPort[1]
 		}
 	} else {
-		decoded := urlSafeBase64Decode(line)
+		decoded := utils.UrlSafeBase64Decode(line)
 
 		atIdx := strings.Index(decoded, "@")
 		if atIdx == -1 {
@@ -144,59 +143,7 @@ func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
 		Password:      password,
 		EncryptMethod: method,
 		Plugin:        plugin,
-		PluginOpts:    parsePluginOpts(pluginOpts),
+		PluginOpts:    utils.ParsePluginOpts(pluginOpts),
 	}
-
-	mihomoProxy, err := adapter.ParseProxy(pObj.ToClashConfig(nil))
-	if err != nil {
-		return pObj, nil
-	} else {
-		return &impl.MihomoProxy{
-			ProxyInterface: pObj,
-			Clash:          mihomoProxy,
-			Options:        pObj.ToClashConfig(nil),
-		}, nil
-	}
-}
-
-// Helper functions (duplicated for now, should be in a shared utils package)
-func urlDecode(s string) string {
-	decoded, err := url.QueryUnescape(s)
-	if err != nil {
-		return s
-	}
-	return decoded
-}
-
-func urlSafeBase64Decode(s string) string {
-	s = strings.ReplaceAll(s, "-", "+")
-	s = strings.ReplaceAll(s, "_", "/")
-	if m := len(s) % 4; m != 0 {
-		s += strings.Repeat("=", 4-m)
-	}
-	decoded, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		decoded, err = base64.RawStdEncoding.DecodeString(s)
-		if err != nil {
-			return s
-		}
-	}
-	return string(decoded)
-}
-
-func parsePluginOpts(opts string) map[string]interface{} {
-	result := make(map[string]interface{})
-	pairs := strings.Split(opts, ";")
-	for _, pair := range pairs {
-		if pair == "" {
-			continue
-		}
-		kv := strings.SplitN(pair, "=", 2)
-		if len(kv) == 2 {
-			result[kv[0]] = urlDecode(kv[1])
-		} else {
-			result[kv[0]] = "true"
-		}
-	}
-	return result
+	return utils.ToMihomoProxy(pObj)
 }

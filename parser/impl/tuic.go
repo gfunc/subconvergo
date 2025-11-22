@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gfunc/subconvergo/parser/utils"
 	"github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
-	"github.com/metacubex/mihomo/adapter"
 )
 
 type TUICParser struct{}
@@ -33,7 +33,7 @@ func (p *TUICParser) Parse(line string) (core.SubconverterProxy, error) {
 	var insecure bool
 
 	if idx := strings.LastIndex(line, "#"); idx != -1 {
-		remark = urlDecode(line[idx+1:])
+		remark = utils.UrlDecode(line[idx+1:])
 		line = line[:idx]
 	}
 
@@ -90,14 +90,5 @@ func (p *TUICParser) Parse(line string) (core.SubconverterProxy, error) {
 		AllowInsecure: insecure,
 		Params:        params,
 	}
-	mihomoProxy, err := adapter.ParseProxy(pObj.ToClashConfig(nil))
-	if err != nil {
-		return pObj, nil
-	} else {
-		return &impl.MihomoProxy{
-			ProxyInterface: pObj,
-			Clash:          mihomoProxy,
-			Options:        pObj.ToClashConfig(nil),
-		}, nil
-	}
+	return utils.ToMihomoProxy(pObj)
 }

@@ -94,5 +94,20 @@ func getTestProxies() []pc.ProxyInterface {
 			Password: "password",
 			Params:   url.Values{"congestion_control": []string{"bbr"}},
 		},
+		&impl.AnyTLSProxy{
+			BaseProxy: pc.BaseProxy{
+				Type:   "anytls",
+				Remark: "anytls-proxy",
+				Server: "25.26.27.28",
+				Port:   443,
+			},
+			Password:                 "password",
+			SNI:                      "example.com",
+			Alpn:                     []string{"h2", "http/1.1"},
+			Fingerprint:              "chrome",
+			IdleSessionCheckInterval: 30,
+			IdleSessionTimeout:       60,
+			MinIdleSession:           5,
+		},
 	}
 }

@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gfunc/subconvergo/parser/utils"
 	"github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
-	"github.com/metacubex/mihomo/adapter"
 )
 
 type VMessParser struct{}
@@ -35,7 +35,7 @@ func (p *VMessParser) Parse(line string) (core.SubconverterProxy, error) {
 		return p.parseStdVMess(line)
 	}
 
-	decoded := urlSafeBase64Decode(line)
+	decoded := utils.UrlSafeBase64Decode(line)
 
 	// Check if it's JSON
 	if strings.HasPrefix(strings.TrimSpace(decoded), "{") {
@@ -62,7 +62,7 @@ func (p *VMessParser) parseStdVMess(line string) (core.SubconverterProxy, error)
 	var params url.Values
 
 	if idx := strings.Index(rest, "#"); idx != -1 {
-		remark = urlDecode(rest[idx+1:])
+		remark = utils.UrlDecode(rest[idx+1:])
 		rest = rest[:idx]
 	}
 
@@ -129,7 +129,7 @@ func (p *VMessParser) parseStdVMess(line string) (core.SubconverterProxy, error)
 		TLS:     tls,
 		SNI:     sni,
 	}
-	return p.toMihomoProxy(pObj)
+	return utils.ToMihomoProxy(pObj)
 }
 
 func (p *VMessParser) parseJSONVMess(decoded string) (core.SubconverterProxy, error) {
@@ -138,16 +138,16 @@ func (p *VMessParser) parseJSONVMess(decoded string) (core.SubconverterProxy, er
 		return nil, fmt.Errorf("failed to parse vmess JSON: %w", err)
 	}
 
-	ps := getStringField(vmessData, "ps")
-	add := getStringField(vmessData, "add")
-	port := getStringField(vmessData, "port")
-	id := getStringField(vmessData, "id")
-	aid := getStringField(vmessData, "aid")
-	net := getStringField(vmessData, "net")
-	host := getStringField(vmessData, "host")
-	path := getStringField(vmessData, "path")
-	tls := getStringField(vmessData, "tls")
-	sni := getStringField(vmessData, "sni")
+	ps := utils.GetStringField(vmessData, "ps")
+	add := utils.GetStringField(vmessData, "add")
+	port := utils.GetStringField(vmessData, "port")
+	id := utils.GetStringField(vmessData, "id")
+	aid := utils.GetStringField(vmessData, "aid")
+	net := utils.GetStringField(vmessData, "net")
+	host := utils.GetStringField(vmessData, "host")
+	path := utils.GetStringField(vmessData, "path")
+	tls := utils.GetStringField(vmessData, "tls")
+	sni := utils.GetStringField(vmessData, "sni")
 
 	if net == "" {
 		net = "tcp"
@@ -167,7 +167,7 @@ func (p *VMessParser) parseJSONVMess(decoded string) (core.SubconverterProxy, er
 		ps = add + ":" + port
 	}
 
-	version := getStringField(vmessData, "v")
+	version := utils.GetStringField(vmessData, "v")
 	if version == "1" || version == "" {
 		if host != "" && strings.Contains(host, ";") {
 			parts := strings.SplitN(host, ";", 2)
@@ -194,33 +194,5 @@ func (p *VMessParser) parseJSONVMess(decoded string) (core.SubconverterProxy, er
 		TLS:     tls == "tls",
 		SNI:     sni,
 	}
-	return p.toMihomoProxy(pObj)
-}
-
-func (p *VMessParser) toMihomoProxy(pObj *impl.VMessProxy) (core.SubconverterProxy, error) {
-	option := pObj.ToClashConfig(nil)
-	mihomoProxy, err := adapter.ParseProxy(option)
-	if err != nil {
-		return pObj, nil
-	} else {
-		return &impl.MihomoProxy{
-			ProxyInterface: pObj,
-			Clash:          mihomoProxy,
-			Options:        option,
-		}, nil
-	}
-}
-
-func getStringField(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case string:
-			return val
-		case float64:
-			return strconv.FormatFloat(val, 'f', -1, 64)
-		case int:
-			return strconv.Itoa(val)
-		}
-	}
-	return ""
+	return utils.ToMihomoProxy(pObj)
 }
