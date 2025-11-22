@@ -65,3 +65,36 @@ func TestTUICProxy_ToShareLink(t *testing.T) {
 	assert.Contains(t, linkParams, "congestion_control=bbr")
 	assert.Contains(t, linkParams, "udp_relay_mode=native")
 }
+
+func TestTUICProxy_ToClashConfig(t *testing.T) {
+	params := url.Values{}
+	params.Set("sni", "example.com")
+	params.Set("congestion_control", "bbr")
+	params.Set("udp_relay_mode", "native")
+
+	proxy := &TUICProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "tuic",
+			Remark: "test-tuic",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:          "uuid",
+		Password:      "password",
+		AllowInsecure: true,
+		Params:        params,
+	}
+
+	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NotNil(t, clashConfig)
+	assert.Equal(t, "tuic", clashConfig["type"])
+	assert.Equal(t, "test-tuic", clashConfig["name"])
+	assert.Equal(t, "1.2.3.4", clashConfig["server"])
+	assert.Equal(t, 443, clashConfig["port"])
+	assert.Equal(t, "uuid", clashConfig["uuid"])
+	assert.Equal(t, "password", clashConfig["password"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+	assert.Equal(t, "example.com", clashConfig["sni"])
+	assert.Equal(t, "bbr", clashConfig["congestion-controller"])
+	assert.Equal(t, "native", clashConfig["udp-relay-mode"])
+}

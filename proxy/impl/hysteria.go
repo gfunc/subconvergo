@@ -8,6 +8,7 @@ import (
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/proxy/utils"
 )
 
 // HysteriaProxy represents a Hysteria or Hysteria2 proxy
@@ -35,7 +36,7 @@ func (p *HysteriaProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	}
 
 	if p.Remark != "" {
-		link += "#" + core.UrlEncode(p.Remark)
+		link += "#" + utils.UrlEncode(p.Remark)
 	}
 
 	return link, nil

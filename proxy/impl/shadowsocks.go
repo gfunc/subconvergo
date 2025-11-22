@@ -9,6 +9,7 @@ import (
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/proxy/utils"
 )
 
 // ShadowsocksProxy represents a Shadowsocks proxy
@@ -39,7 +40,7 @@ func (p *ShadowsocksProxy) ToShareLink(ext *config.ProxySetting) (string, error)
 		link += fmt.Sprintf("/?plugin=%s", url.QueryEscape(pluginStr))
 	}
 
-	link += fmt.Sprintf("#%s", core.UrlEncode(p.Remark))
+	link += fmt.Sprintf("#%s", utils.UrlEncode(p.Remark))
 	return link, nil
 }
 

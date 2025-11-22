@@ -81,3 +81,25 @@ func TestShadowsocksProxy_ToShareLink(t *testing.T) {
 	assert.Contains(t, linkEmpty, "#")
 	assert.False(t, len(linkEmpty) > len("ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@1.2.3.4:8388#"))
 }
+
+func TestShadowsocksProxy_ToClashConfig(t *testing.T) {
+	proxy := &ShadowsocksProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "ss",
+			Remark: "test-ss",
+			Server: "1.2.3.4",
+			Port:   8388,
+		},
+		Password:      "password",
+		EncryptMethod: "aes-256-gcm",
+	}
+
+	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NotNil(t, clashConfig)
+	assert.Equal(t, "ss", clashConfig["type"])
+	assert.Equal(t, "test-ss", clashConfig["name"])
+	assert.Equal(t, "1.2.3.4", clashConfig["server"])
+	assert.Equal(t, 8388, clashConfig["port"])
+	assert.Equal(t, "password", clashConfig["password"])
+	assert.Equal(t, "aes-256-gcm", clashConfig["cipher"])
+}

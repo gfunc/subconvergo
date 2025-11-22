@@ -7,6 +7,7 @@ import (
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/proxy/utils"
 )
 
 // VLESSProxy represents a VLESS proxy
@@ -45,7 +46,7 @@ func (p *VLESSProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	link += "?" + strings.Join(params, "&")
 
 	if p.Remark != "" {
-		link += "#" + core.UrlEncode(p.Remark)
+		link += "#" + utils.UrlEncode(p.Remark)
 	}
 
 	return link, nil

@@ -84,3 +84,38 @@ func TestVLESSProxy_ToShareLink(t *testing.T) {
 	// So for grpc, path is ignored.
 	assert.NotContains(t, linkGRPC, "path=")
 }
+
+func TestVLESSProxy_ToClashConfig(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:    "uuid",
+		Network: "ws",
+		Path:    "/path",
+		Host:    "example.com",
+		TLS:     true,
+		SNI:     "example.com",
+	}
+
+	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NotNil(t, clashConfig)
+	assert.Equal(t, "vless", clashConfig["type"])
+	assert.Equal(t, "test-vless", clashConfig["name"])
+	assert.Equal(t, "1.2.3.4", clashConfig["server"])
+	assert.Equal(t, 443, clashConfig["port"])
+	assert.Equal(t, "uuid", clashConfig["uuid"])
+	assert.Equal(t, "ws", clashConfig["network"])
+	assert.Equal(t, true, clashConfig["tls"])
+	assert.Equal(t, "example.com", clashConfig["servername"])
+
+	wsOpts, ok := clashConfig["ws-opts"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "/path", wsOpts["path"])
+	headers, ok := wsOpts["headers"].(map[string]string)
+	assert.True(t, ok)
+	assert.Equal(t, "example.com", headers["Host"])
+}

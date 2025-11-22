@@ -37,6 +37,9 @@ func (m *MihomoProxy) ToShareLink(opts *config.ProxySetting) (string, error) {
 }
 
 func (m *MihomoProxy) ToClashConfig(opts *config.ProxySetting) map[string]interface{} {
+	if p, ok := m.ProxyInterface.(core.SubconverterProxy); ok {
+		return p.ToClashConfig(opts)
+	}
 	options, err := m.proxyOptions()
 	if err != nil {
 		log.Printf("failed to get proxy options: %v", err)

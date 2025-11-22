@@ -86,3 +86,33 @@ func TestShadowsocksRProxy_ToShareLink(t *testing.T) {
 	// test ssr #1 -> dGVzdCBzc3IgIzE=
 	assert.Contains(t, decodedSpecial, "remarks=dGVzdCBzc3IgIzE=")
 }
+
+func TestShadowsocksRProxy_ToClashConfig(t *testing.T) {
+	proxy := &ShadowsocksRProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "ssr",
+			Remark: "test-ssr",
+			Server: "1.2.3.4",
+			Port:   8388,
+		},
+		Password:      "password",
+		EncryptMethod: "aes-256-cfb",
+		Protocol:      "origin",
+		Obfs:          "plain",
+		ProtocolParam: "param1",
+		ObfsParam:     "param2",
+	}
+
+	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NotNil(t, clashConfig)
+	assert.Equal(t, "ssr", clashConfig["type"])
+	assert.Equal(t, "test-ssr", clashConfig["name"])
+	assert.Equal(t, "1.2.3.4", clashConfig["server"])
+	assert.Equal(t, 8388, clashConfig["port"])
+	assert.Equal(t, "password", clashConfig["password"])
+	assert.Equal(t, "aes-256-cfb", clashConfig["cipher"])
+	assert.Equal(t, "origin", clashConfig["protocol"])
+	assert.Equal(t, "plain", clashConfig["obfs"])
+	assert.Equal(t, "param1", clashConfig["protocol-param"])
+	assert.Equal(t, "param2", clashConfig["obfs-param"])
+}

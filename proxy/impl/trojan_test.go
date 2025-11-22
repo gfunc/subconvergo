@@ -67,3 +67,35 @@ func TestTrojanProxy_ToShareLink(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, linkSpecialPath, "path=%2Fpath+with+spaces")
 }
+
+func TestTrojanProxy_ToClashConfig(t *testing.T) {
+	proxy := &TrojanProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "trojan",
+			Remark: "test-trojan",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		Password:      "password",
+		Network:       "ws",
+		Path:          "/path",
+		Host:          "example.com",
+		TLS:           true,
+		AllowInsecure: true,
+	}
+
+	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NotNil(t, clashConfig)
+	assert.Equal(t, "trojan", clashConfig["type"])
+	assert.Equal(t, "test-trojan", clashConfig["name"])
+	assert.Equal(t, "1.2.3.4", clashConfig["server"])
+	assert.Equal(t, 443, clashConfig["port"])
+	assert.Equal(t, "password", clashConfig["password"])
+	assert.Equal(t, "ws", clashConfig["network"])
+	assert.Equal(t, "example.com", clashConfig["sni"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+
+	wsOpts, ok := clashConfig["ws-opts"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "/path", wsOpts["path"])
+}

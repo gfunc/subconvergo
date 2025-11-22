@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	P "github.com/gfunc/subconvergo/proxy/impl"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestProxyInterfaceGenerateLink tests that ToShareLink works correctly for all proxy types
@@ -399,4 +400,15 @@ ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test`
 	if len(result.Proxies) != 1 {
 		t.Fatalf("expected 1 proxy, got %d", len(result.Proxies))
 	}
+}
+
+func TestSubParser_Parse_RawLine(t *testing.T) {
+	sp := &SubParser{
+		Index: 1,
+		URL:   "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test",
+	}
+	sc, err := sp.Parse()
+	assert.NoError(t, err)
+	assert.Len(t, sc.Proxies, 1)
+	assert.Equal(t, "Test", sc.Proxies[0].GetRemark())
 }

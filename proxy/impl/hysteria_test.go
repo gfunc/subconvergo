@@ -71,3 +71,34 @@ func TestHysteriaProxy_ToShareLink(t *testing.T) {
 	assert.NotContains(t, linkEmpty, "?")
 	assert.Contains(t, linkEmpty, "#test-empty")
 }
+
+func TestHysteriaProxy_ToClashConfig(t *testing.T) {
+	params := url.Values{}
+	params.Set("obfs-password", "secret")
+	params.Set("sni", "example.com")
+
+	proxy := &HysteriaProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "hysteria2",
+			Remark: "test-hysteria2",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		Password:      "password",
+		Obfs:          "salamander",
+		AllowInsecure: true,
+		Params:        params,
+	}
+
+	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NotNil(t, clashConfig)
+	assert.Equal(t, "hysteria2", clashConfig["type"])
+	assert.Equal(t, "test-hysteria2", clashConfig["name"])
+	assert.Equal(t, "1.2.3.4", clashConfig["server"])
+	assert.Equal(t, 443, clashConfig["port"])
+	assert.Equal(t, "password", clashConfig["password"])
+	assert.Equal(t, "salamander", clashConfig["obfs"])
+	assert.Equal(t, "secret", clashConfig["obfs-password"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+	assert.Equal(t, "example.com", clashConfig["sni"])
+}

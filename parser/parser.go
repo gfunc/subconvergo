@@ -91,6 +91,9 @@ func (sp *SubParser) Parse() (*SubContent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse proxy line: %w", err)
 		}
+		if sp.Tag != "" {
+			parserProxy.SetRemark(sp.Tag)
+		}
 		parserProxy.SetGroupId(sp.Index)
 		parserProxy.SetGroup(parserProxy.GetRemark())
 		sc.Proxies = append(sc.Proxies, parserProxy)
