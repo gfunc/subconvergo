@@ -9,7 +9,6 @@ import (
 	"github.com/gfunc/subconvergo/parser/utils"
 	"github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
-	"github.com/metacubex/mihomo/adapter"
 )
 
 type HysteriaParser struct{}
@@ -19,26 +18,18 @@ func (p *HysteriaParser) Name() string {
 }
 
 func (p *HysteriaParser) CanParse(line string) bool {
-	return strings.HasPrefix(line, "hysteria://") || strings.HasPrefix(line, "hysteria2://") || strings.HasPrefix(line, "hy2://")
+	return strings.HasPrefix(line, "hysteria://")
 }
 
 func (p *HysteriaParser) Parse(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 
-	var protocol string
-	if strings.HasPrefix(line, "hysteria2://") || strings.HasPrefix(line, "hy2://") {
-		protocol = "hysteria2"
-		if strings.HasPrefix(line, "hy2://") {
-			line = "hysteria2://" + line[6:]
-		}
-	} else if strings.HasPrefix(line, "hysteria://") {
-		protocol = "hysteria"
-	} else {
+	if !strings.HasPrefix(line, "hysteria://") {
 		return nil, fmt.Errorf("not a valid hysteria link")
 	}
 
-	prefixLen := len(protocol) + 3
-	line = line[prefixLen:]
+	protocol := "hysteria"
+	line = line[11:] // len("hysteria://")
 
 	var remark, server, port, password, obfs string
 	var insecure bool
@@ -105,14 +96,5 @@ func (p *HysteriaParser) Parse(line string) (core.SubconverterProxy, error) {
 		AllowInsecure: insecure,
 		Params:        params,
 	}
-	mihomoProxy, err := adapter.ParseProxy(pObj.ToClashConfig(nil))
-	if err != nil {
-		return pObj, nil
-	} else {
-		return &impl.MihomoProxy{
-			ProxyInterface: pObj,
-			Clash:          mihomoProxy,
-			Options:        pObj.ToClashConfig(nil),
-		}, nil
-	}
+	return utils.ToMihomoProxy(pObj)
 }

@@ -126,6 +126,29 @@ func convertToQuantumultX(p pc.ProxyInterface, opts core.GeneratorOptions) strin
 		}
 		parts = append(parts, fmt.Sprintf("tag=%s", t.Remark))
 
+	case *impl.HttpProxy:
+		// Format: http=server:port, username=user, password=pass, over-tls=true/false, tag=name
+		parts = append(parts, "http="+fmt.Sprintf("%s:%d", t.Server, t.Port))
+		if t.Username != "" {
+			parts = append(parts, fmt.Sprintf("username=%s", t.Username))
+		} else {
+			parts = append(parts, "username=none")
+		}
+		if t.Password != "" {
+			parts = append(parts, fmt.Sprintf("password=%s", t.Password))
+		} else {
+			parts = append(parts, "password=none")
+		}
+		if t.Tls {
+			parts = append(parts, "over-tls=true")
+		} else {
+			parts = append(parts, "over-tls=false")
+		}
+		if opts.TFO {
+			parts = append(parts, "fast-open=true")
+		}
+		parts = append(parts, fmt.Sprintf("tag=%s", t.Remark))
+
 	default:
 		return ""
 	}

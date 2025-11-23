@@ -7,7 +7,7 @@ import (
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator/core"
 	pc "github.com/gfunc/subconvergo/proxy/core"
-	"github.com/gfunc/subconvergo/proxy/impl"
+	pimpl "github.com/gfunc/subconvergo/proxy/impl"
 )
 
 // SingBoxGenerator implements the Generator interface for sing-box
@@ -96,7 +96,7 @@ func convertToSingBox(p pc.ProxyInterface, opts core.GeneratorOptions) map[strin
 	}
 
 	switch t := p.(type) {
-	case *impl.ShadowsocksProxy:
+	case *pimpl.ShadowsocksProxy:
 		outbound["type"] = "shadowsocks"
 		outbound["method"] = t.EncryptMethod
 		outbound["password"] = t.Password
@@ -105,7 +105,7 @@ func convertToSingBox(p pc.ProxyInterface, opts core.GeneratorOptions) map[strin
 			outbound["plugin_opts"] = t.PluginOpts
 		}
 
-	case *impl.VMessProxy:
+	case *pimpl.VMessProxy:
 		outbound["uuid"] = t.UUID
 		outbound["alter_id"] = t.AlterID
 		outbound["security"] = "auto"
@@ -134,7 +134,7 @@ func convertToSingBox(p pc.ProxyInterface, opts core.GeneratorOptions) map[strin
 			outbound["transport"] = transport
 		}
 
-	case *impl.TrojanProxy:
+	case *pimpl.TrojanProxy:
 		outbound["password"] = t.Password
 		tls := map[string]interface{}{
 			"enabled": true,
@@ -160,7 +160,48 @@ func convertToSingBox(p pc.ProxyInterface, opts core.GeneratorOptions) map[strin
 			outbound["transport"] = transport
 		}
 
-	case *impl.AnyTLSProxy:
+	case *pimpl.HttpProxy:
+		outbound["type"] = "http"
+		outbound["username"] = t.Username
+		outbound["password"] = t.Password
+		if t.Tls {
+			outbound["tls"] = map[string]interface{}{
+				"enabled":  true,
+				"insecure": opts.SCV,
+			}
+		}
+
+	case *pimpl.WireGuardProxy:
+		outbound["type"] = "wireguard"
+		outbound["local_address"] = []string{t.Ip}
+		if t.Ipv6 != "" {
+			outbound["local_address"] = append(outbound["local_address"].([]string), t.Ipv6)
+		}
+		outbound["private_key"] = t.PrivateKey
+		outbound["peer_public_key"] = t.PublicKey
+		outbound["pre_shared_key"] = t.PreSharedKey
+		if t.Mtu > 0 {
+			outbound["mtu"] = t.Mtu
+		}
+
+	case *pimpl.Hysteria2Proxy:
+		outbound["type"] = "hysteria2"
+		outbound["password"] = t.Password
+		if t.Sni != "" {
+			outbound["tls"] = map[string]interface{}{
+				"enabled":     true,
+				"server_name": t.Sni,
+				"insecure":    t.SkipCertVerify,
+			}
+		}
+		if t.Obfs != "" {
+			outbound["obfs"] = map[string]interface{}{
+				"type":     t.Obfs,
+				"password": t.ObfsPassword,
+			}
+		}
+
+	case *pimpl.AnyTLSProxy:
 		outbound["type"] = "anytls"
 		outbound["password"] = t.Password
 		if t.SNI != "" {

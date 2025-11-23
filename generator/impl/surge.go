@@ -90,6 +90,76 @@ func convertToSurge(p pc.ProxyInterface, opts core.GeneratorOptions) string {
 			}
 		}
 
+	case *impl.HttpProxy:
+		if t.Tls {
+			parts = append(parts, "https")
+		} else {
+			parts = append(parts, "http")
+		}
+		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
+		parts = append(parts, fmt.Sprintf("username=%s", t.Username))
+		parts = append(parts, fmt.Sprintf("password=%s", t.Password))
+		if opts.TFO {
+			parts = append(parts, "tfo=true")
+		}
+
+	case *impl.SnellProxy:
+		parts = append(parts, "snell")
+		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
+		parts = append(parts, fmt.Sprintf("psk=%s", t.Psk))
+		if t.Obfs != "" {
+			parts = append(parts, fmt.Sprintf("obfs=%s", t.Obfs))
+			if t.ObfsParam != "" {
+				parts = append(parts, fmt.Sprintf("obfs-host=%s", t.ObfsParam))
+			}
+		}
+		if t.Version > 0 {
+			parts = append(parts, fmt.Sprintf("version=%d", t.Version))
+		}
+		if opts.TFO {
+			parts = append(parts, "tfo=true")
+		}
+
+	case *impl.WireGuardProxy:
+		parts = append(parts, "wireguard")
+		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
+		parts = append(parts, fmt.Sprintf("private-key=%s", t.PrivateKey))
+		if t.Ip != "" {
+			parts = append(parts, fmt.Sprintf("self-ip=%s", t.Ip))
+		}
+		if t.Ipv6 != "" {
+			parts = append(parts, fmt.Sprintf("self-ip-v6=%s", t.Ipv6))
+		}
+		if len(t.Dns) > 0 {
+			parts = append(parts, fmt.Sprintf("dns-server=%s", strings.Join(t.Dns, ", ")))
+		}
+		if t.Mtu > 0 {
+			parts = append(parts, fmt.Sprintf("mtu=%d", t.Mtu))
+		}
+		if t.PreSharedKey != "" {
+			parts = append(parts, fmt.Sprintf("psk=%s", t.PreSharedKey))
+		}
+
+	case *impl.Hysteria2Proxy:
+		parts = append(parts, "hysteria2")
+		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
+		parts = append(parts, fmt.Sprintf("password=%s", t.Password))
+		if t.Sni != "" {
+			parts = append(parts, fmt.Sprintf("sni=%s", t.Sni))
+		}
+		if t.SkipCertVerify {
+			parts = append(parts, "skip-cert-verify=true")
+		}
+		if t.Obfs != "" {
+			parts = append(parts, fmt.Sprintf("obfs=%s", t.Obfs))
+			if t.ObfsPassword != "" {
+				parts = append(parts, fmt.Sprintf("obfs-password=%s", t.ObfsPassword))
+			}
+		}
+		if opts.TFO {
+			parts = append(parts, "tfo=true")
+		}
+
 	case *impl.VMessProxy:
 		parts = append(parts, "vmess")
 		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
