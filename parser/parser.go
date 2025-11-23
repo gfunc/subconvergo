@@ -30,6 +30,7 @@ import (
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/parser/core"
+	"github.com/gfunc/subconvergo/parser/proxy"
 	"github.com/gfunc/subconvergo/parser/sub"
 	proxyCore "github.com/gfunc/subconvergo/proxy/core"
 )
@@ -81,7 +82,7 @@ func (sp *SubParser) Parse() (*core.SubContent, error) {
 
 	if strings.HasPrefix(sp.URL, "https://t.me/") || strings.HasPrefix(sp.URL, "tg://") {
 		// Telegram links are treated as single proxies
-		parserProxy, err := ParseProxyLine(sp.URL)
+		parserProxy, err := ParseProxy(sp.URL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse telegram proxy line: %w", err)
 		}
@@ -133,7 +134,7 @@ func (sp *SubParser) Parse() (*core.SubContent, error) {
 			sc.RawRules = append(sc.RawRules, custom.RawRules...)
 		}
 	} else {
-		parserProxy, err := ParseProxyLine(sp.URL)
+		parserProxy, err := ParseProxy(sp.URL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse proxy line: %w", err)
 		}
@@ -173,7 +174,7 @@ func (sp *SubParser) ParseSubscription() (*core.SubContent, error) {
 	}
 
 	// Try to detect subscription format and parse
-	custom, err := core.ParseSubscription(content)
+	custom, err := sub.ParseSubscription(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subscription: %w", err)
 	}
@@ -193,7 +194,7 @@ func (sp *SubParser) ParseSubscriptionFile() (*core.SubContent, error) {
 	log.Printf("[parser.ParseSubscriptionFile] index=%d path=%s size=%d", sp.Index, filePath, len(content))
 
 	// Try to detect subscription format and parse
-	custom, err := core.ParseSubscription(string(content))
+	custom, err := sub.ParseSubscription(string(content))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subscription: %w", err)
 	}
@@ -264,10 +265,10 @@ func ProcessRemark(remark string, existingRemarks map[string]int) string {
 	return remark
 }
 
-// ParseProxyLine parses a proxy line and returns a ProxyInterface
-func ParseProxyLine(line string) (proxyCore.SubconverterProxy, error) {
-	// Use the registry to find a matching parser
-	p, err := core.ParseProxy(line)
+// ParseProxy parses a proxy line and returns a ProxyInterface
+func ParseProxy(line string) (proxyCore.SubconverterProxy, error) {
+	// Use the explicit routing logic
+	p, err := proxy.ParseProxy(line)
 	if err == nil {
 		return p, nil
 	}
@@ -279,6 +280,6 @@ func ParseProxyLine(line string) (proxyCore.SubconverterProxy, error) {
 		return nil, fmt.Errorf("invalid proxy link format")
 	}
 	protocol := line[:idx]
-	log.Printf("[parser.ParseProxyLine] unsupported native proxy protocol=%s line=%s", protocol, line)
+	log.Printf("[parser.ParseProxy] unsupported native proxy protocol=%s line=%s", protocol, line)
 	return sub.ParseMihomoProxy(protocol, line[idx:])
 }

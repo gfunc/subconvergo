@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gfunc/subconvergo/parser/core"
+	"github.com/gfunc/subconvergo/parser/proxy"
 	proxyCore "github.com/gfunc/subconvergo/proxy/core"
 )
 
@@ -20,25 +21,25 @@ func (p *Base64SubscriptionParser) CanParse(content string) bool {
 	// We can try to decode a small part to check if it's base64
 	// But for now, let's assume it's a fallback or we check if it's NOT clash/etc.
 	// Or we can just return true and let Parse fail.
-    // However, ParseSubscription iterates and returns the first one that CanParse.
-    // So we should be careful.
-    // Let's try to decode the first line or the whole content if short.
-    trimmed := strings.TrimSpace(content)
-    if len(trimmed) == 0 {
-        return false
-    }
-    // Check if it contains spaces (base64 usually doesn't, unless it's multiple lines of base64?)
-    // Standard subscription is one big base64 string.
-    if strings.ContainsAny(trimmed, " \t") {
-        return false
-    }
-    // Try decoding a chunk
-    chunk := trimmed
-    if len(chunk) > 100 {
-        chunk = chunk[:100]
-    }
-    _, err := base64.StdEncoding.DecodeString(chunk)
-    return err == nil
+	// However, ParseSubscription iterates and returns the first one that CanParse.
+	// So we should be careful.
+	// Let's try to decode the first line or the whole content if short.
+	trimmed := strings.TrimSpace(content)
+	if len(trimmed) == 0 {
+		return false
+	}
+	// Check if it contains spaces (base64 usually doesn't, unless it's multiple lines of base64?)
+	// Standard subscription is one big base64 string.
+	if strings.ContainsAny(trimmed, " \t") {
+		return false
+	}
+	// Try decoding a chunk
+	chunk := trimmed
+	if len(chunk) > 100 {
+		chunk = chunk[:100]
+	}
+	_, err := base64.StdEncoding.DecodeString(chunk)
+	return err == nil
 }
 
 func (p *Base64SubscriptionParser) Parse(content string) (*core.SubContent, error) {
@@ -56,14 +57,24 @@ func (p *Base64SubscriptionParser) Parse(content string) (*core.SubContent, erro
 			continue
 		}
 
-		if proxy, err := core.ParseProxy(line); err == nil {
-			proxies = append(proxies, proxy)
+		p, err := proxy.ParseProxy(line)
+		if err != nil {
+			// Fallback to Mihomo
+			idx := strings.Index(line, "://")
+			if idx != -1 {
+				protocol := line[:idx]
+				p, err = ParseMihomoProxy(protocol, line[idx:])
+			}
+		}
+
+		if err == nil && p != nil {
+			proxies = append(proxies, p)
 		}
 	}
 
-    if len(proxies) == 0 {
-        return nil, fmt.Errorf("no proxies found in base64 subscription")
-    }
+	if len(proxies) == 0 {
+		return nil, fmt.Errorf("no proxies found in base64 subscription")
+	}
 
 	return &core.SubContent{
 		Proxies: proxies,
@@ -92,8 +103,18 @@ func (p *PlainSubscriptionParser) Parse(content string) (*core.SubContent, error
 			continue
 		}
 
-		if proxy, err := core.ParseProxy(line); err == nil {
-			proxies = append(proxies, proxy)
+		p, err := proxy.ParseProxy(line)
+		if err != nil {
+			// Fallback to Mihomo
+			idx := strings.Index(line, "://")
+			if idx != -1 {
+				protocol := line[:idx]
+				p, err = ParseMihomoProxy(protocol, line[idx:])
+			}
+		}
+
+		if err == nil && p != nil {
+			proxies = append(proxies, p)
 		}
 	}
 

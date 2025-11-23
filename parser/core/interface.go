@@ -54,6 +54,6 @@ type SSSourceParserMixin interface {
 type SSTapSourceParserMixin interface {
 	ParseSSTap(config map[string]interface{}) (core.SubconverterProxy, error)
 }
-type SSAndroidSubscriptionParser interface{
+type SSAndroidSubscriptionParser interface {
 	ParseSSAndroid(config map[string]interface{}) (core.SubconverterProxy, error)
 }

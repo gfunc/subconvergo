@@ -78,7 +78,7 @@ func (p *SSSubscriptionParser) Parse(content string) (*core.SubContent, error) {
 		}
 
 		cfg["group"] = group
-		
+
 		if ss, err := p.parseSSConf(cfg); err == nil {
 			proxies = append(proxies, ss)
 		}
@@ -88,7 +88,6 @@ func (p *SSSubscriptionParser) Parse(content string) (*core.SubContent, error) {
 		Proxies: proxies,
 	}, nil
 }
-
 
 func (p *SSSubscriptionParser) parseSSConf(config map[string]interface{}) (*impl.ShadowsocksProxy, error) {
 	server := utils.GetStringField(config, "server")

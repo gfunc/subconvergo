@@ -18,7 +18,7 @@ func TestSSAndroidSubscriptionParser_Parse(t *testing.T) {
 	// Let's check subconverter logic.
 	// subconverter: `std::string content = "{\"nodes\":" + body + "}";`
 	// So body is expected to be a JSON array `[...]`.
-	
+
 	content := `[
 		{
 			"server": "1.2.3.4",
@@ -47,7 +47,7 @@ func TestSSAndroidSubscriptionParser_Parse(t *testing.T) {
 	if p.Plugin != "obfs-local" {
 		t.Errorf("Expected plugin obfs-local, got %s", p.Plugin)
 	}
-	
+
 	if len(p.PluginOpts) != 2 {
 		t.Errorf("Expected 2 plugin opts, got %d", len(p.PluginOpts))
 	}

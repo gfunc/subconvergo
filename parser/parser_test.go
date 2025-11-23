@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gfunc/subconvergo/parser/core"
+	"github.com/gfunc/subconvergo/parser/sub"
 	P "github.com/gfunc/subconvergo/proxy/impl"
 	"github.com/stretchr/testify/assert"
 )
@@ -53,9 +53,9 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Parse the link using the OOP interface
-			proxyInterface, err := ParseProxyLine(tt.inputLink)
+			proxyInterface, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLine() error = %v", err)
+				t.Fatalf("ParseProxy() error = %v", err)
 			}
 
 			// Verify the type
@@ -71,9 +71,9 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 			}
 
 			// Parse the generated link back and verify it matches
-			proxyInterface2, err := ParseProxyLine(generatedLink)
+			proxyInterface2, err := ParseProxy(generatedLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLine() of generated link error = %v", err)
+				t.Fatalf("ParseProxy() of generated link error = %v", err)
 			}
 
 			// Verify key fields match
@@ -94,9 +94,9 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 func TestProxyInterfaceSetters(t *testing.T) {
 	inputLink := "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:8388#Test"
 
-	proxy, err := ParseProxyLine(inputLink)
+	proxy, err := ParseProxy(inputLink)
 	if err != nil {
-		t.Fatalf("ParseProxyLine() error = %v", err)
+		t.Fatalf("ParseProxy() error = %v", err)
 	}
 
 	// Test SetRemark
@@ -132,9 +132,9 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := ParseProxyLine(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLine error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
 			link, _ := proxy.ToSingleConfig(nil)
@@ -144,7 +144,7 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 			}
 
 			// Verify it can be parsed back
-			_, err = ParseProxyLine(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -156,9 +156,9 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 func TestVMessProxyGenerateLink(t *testing.T) {
 	inputLink := "vmess://eyJ2IjoiMiIsInBzIjoidGVzdCIsImFkZCI6ImV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoiMTIzNDU2NzgtMTIzNC0xMjM0LTEyMzQtMTIzNDU2Nzg5MDEyIiwiYWlkIjoiMCIsIm5ldCI6IndzIiwicGF0aCI6Ii9wYXRoIiwiaG9zdCI6ImV4YW1wbGUuY29tIiwidGxzIjoidGxzIn0="
 
-	proxy, err := ParseProxyLine(inputLink)
+	proxy, err := ParseProxy(inputLink)
 	if err != nil {
-		t.Fatalf("ParseProxyLine error = %v", err)
+		t.Fatalf("ParseProxy error = %v", err)
 	}
 
 	link, _ := proxy.ToSingleConfig(nil)
@@ -168,7 +168,7 @@ func TestVMessProxyGenerateLink(t *testing.T) {
 	}
 
 	// Verify it can be parsed back
-	proxy2, err := ParseProxyLine(link)
+	proxy2, err := ParseProxy(link)
 	if err != nil {
 		t.Errorf("Generated link cannot be parsed back: %v", err)
 	}
@@ -226,9 +226,9 @@ func TestTrojanProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := ParseProxyLine(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLine error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
 			link, _ := proxy.ToSingleConfig(nil)
@@ -238,7 +238,7 @@ func TestTrojanProxyGenerateLink(t *testing.T) {
 			}
 
 			// Verify it can be parsed back
-			_, err = ParseProxyLine(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -264,9 +264,9 @@ func TestVLESSProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := ParseProxyLine(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLine error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
 			link, _ := proxy.ToSingleConfig(nil)
@@ -276,7 +276,7 @@ func TestVLESSProxyGenerateLink(t *testing.T) {
 			}
 
 			// Verify it can be parsed back
-			_, err = ParseProxyLine(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -305,9 +305,9 @@ func TestHysteriaProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := ParseProxyLine(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLine error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
 			link, _ := proxy.ToSingleConfig(nil)
@@ -317,7 +317,7 @@ func TestHysteriaProxyGenerateLink(t *testing.T) {
 			}
 
 			// Verify it can be parsed back
-			_, err = ParseProxyLine(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -343,9 +343,9 @@ func TestTUICProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := ParseProxyLine(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLine error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
 			link, _ := proxy.ToSingleConfig(nil)
@@ -355,7 +355,7 @@ func TestTUICProxyGenerateLink(t *testing.T) {
 			}
 
 			// Verify it can be parsed back
-			_, err = ParseProxyLine(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -375,15 +375,15 @@ func TestProcessRemark(t *testing.T) {
 	}
 }
 
-func TestParseProxyLine(t *testing.T) {
+func TestParseProxy(t *testing.T) {
 	lines := []string{
 		"ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test",
 		"trojan://password@example.com:443#Test",
 	}
 	for _, line := range lines {
-		proxy, err := ParseProxyLine(line)
+		proxy, err := ParseProxy(line)
 		if err != nil || proxy == nil {
-			t.Errorf("ParseProxyLine failed for %s", line[:10])
+			t.Errorf("ParseProxy failed for %s", line[:10])
 		}
 	}
 }
@@ -391,7 +391,7 @@ func TestParseProxyLine(t *testing.T) {
 func TestParseContentSkipsComments(t *testing.T) {
 	content := `# comment line
 ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test`
-	result, err := core.ParseSubscription(content)
+	result, err := sub.ParseSubscription(content)
 	if err != nil {
 		t.Fatalf("parseContent returned error: %v", err)
 	}
