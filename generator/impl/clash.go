@@ -47,14 +47,22 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 	// Convert proxies to Clash format
 	var clashProxies []map[string]interface{}
 	for _, p := range proxies {
+		var config map[string]interface{}
+		var err error
 		switch c := p.(type) {
 		case *impl.MihomoProxy:
-			clashProxies = append(clashProxies, c.ToClashConfig(&opts.ProxySetting))
+			config, err = c.ToClashConfig(&opts.ProxySetting)
 		case pc.SubconverterProxy:
-			clashProxies = append(clashProxies, c.ToClashConfig(&opts.ProxySetting))
+			config, err = c.ToClashConfig(&opts.ProxySetting)
 		default:
 			log.Printf("[ClashGenerator] unsupported proxy type=%T remark=%s", p, p.GetRemark())
+			continue
 		}
+		if err != nil {
+			log.Printf("[ClashGenerator] failed to convert proxy %s: %v", p.GetRemark(), err)
+			continue
+		}
+		clashProxies = append(clashProxies, config)
 	}
 
 	// Set proxies field name based on Clash config

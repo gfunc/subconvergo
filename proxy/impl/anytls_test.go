@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAnyTLSProxy_ToShareLink(t *testing.T) {
+func TestAnyTLSProxy_ToSingleConfig(t *testing.T) {
 	proxy := &AnyTLSProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "anytls",
@@ -27,7 +27,7 @@ func TestAnyTLSProxy_ToShareLink(t *testing.T) {
 		AllowInsecure:            true,
 	}
 
-	link, err := proxy.ToShareLink(&config.ProxySetting{})
+	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 
 	assert.Contains(t, link, "anytls://password@1.2.3.4:443")
@@ -61,7 +61,8 @@ func TestAnyTLSProxy_ToClashConfig(t *testing.T) {
 		AllowInsecure:            true,
 	}
 
-	config := proxy.ToClashConfig(&config.ProxySetting{})
+	config, err := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
 
 	assert.Equal(t, "anytls", config["type"])
 	assert.Equal(t, "anytls-proxy", config["name"])

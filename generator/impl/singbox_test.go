@@ -26,8 +26,8 @@ func TestSingBoxGenerator_Generate(t *testing.T) {
 	assert.NoError(t, err)
 
 	outbounds := result["outbounds"].([]interface{})
-	// DIRECT, REJECT, + 7 proxies
-	assert.GreaterOrEqual(t, len(outbounds), 9)
+	// DIRECT, REJECT, + 6 proxies (SSR and AnyTLS are not supported)
+	assert.GreaterOrEqual(t, len(outbounds), 8)
 
 	checkProxy := func(tag, pType string) {
 		var found bool
@@ -42,7 +42,7 @@ func TestSingBoxGenerator_Generate(t *testing.T) {
 	}
 
 	checkProxy("ss-proxy", "shadowsocks")
-	checkProxy("ssr-proxy", "ssr") // SingBox might not support SSR natively or uses different type
+	// checkProxy("ssr-proxy", "ssr") // SingBox does not support SSR
 	checkProxy("vmess-proxy", "vmess")
 	checkProxy("vless-proxy", "vless")
 	checkProxy("trojan-proxy", "trojan")

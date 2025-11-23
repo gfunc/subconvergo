@@ -21,7 +21,7 @@ type ShadowsocksProxy struct {
 	PluginOpts     map[string]interface{} `yaml:"plugin_opts" json:"plugin_opts"`
 }
 
-func (p *ShadowsocksProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
+func (p *ShadowsocksProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 	// Format: ss://base64(method:password)@server:port#remark
 	userInfo := fmt.Sprintf("%s:%s", p.EncryptMethod, p.Password)
 	encoded := base64.URLEncoding.EncodeToString([]byte(userInfo))
@@ -44,7 +44,7 @@ func (p *ShadowsocksProxy) ToShareLink(ext *config.ProxySetting) (string, error)
 	return link, nil
 }
 
-func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
+func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
 	options := map[string]interface{}{
 		"type":     "ss",
 		"name":     p.Remark,
@@ -81,5 +81,69 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) map[string]in
 		}
 	}
 
-	return options
+	return options, nil
+}
+
+func (p *ShadowsocksProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	parts := []string{"ss", fmt.Sprintf("%s:%d", p.Server, p.Port)}
+	parts = append(parts, fmt.Sprintf("encrypt-method=%s", p.EncryptMethod))
+	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+	if ext.UDP {
+		parts = append(parts, "udp-relay=true")
+	}
+	if ext.TFO {
+		parts = append(parts, "tfo=true")
+	}
+	if p.Plugin == "obfs-local" || p.Plugin == "simple-obfs" {
+		if mode, ok := p.PluginOpts["obfs"]; ok {
+			parts = append(parts, fmt.Sprintf("obfs=%s", mode))
+		}
+		if host, ok := p.PluginOpts["obfs-host"]; ok {
+			parts = append(parts, fmt.Sprintf("obfs-host=%s", host))
+		}
+	}
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
+}
+
+func (p *ShadowsocksProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
+	return p.ToSurgeConfig(ext)
+}
+
+func (p *ShadowsocksProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
+	var parts []string
+	parts = append(parts, "shadowsocks="+fmt.Sprintf("%s:%d", p.Server, p.Port))
+	parts = append(parts, fmt.Sprintf("method=%s", p.EncryptMethod))
+	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+	if ext.UDP {
+		parts = append(parts, "udp-relay=true")
+	}
+	if ext.TFO {
+		parts = append(parts, "fast-open=true")
+	}
+	if p.Plugin == "obfs-local" || p.Plugin == "simple-obfs" {
+		if mode, ok := p.PluginOpts["obfs"]; ok {
+			parts = append(parts, fmt.Sprintf("obfs=%s", mode))
+		}
+		if host, ok := p.PluginOpts["obfs-host"]; ok {
+			parts = append(parts, fmt.Sprintf("obfs-host=%s", host))
+		}
+	}
+	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))
+	return strings.Join(parts, ", "), nil
+}
+
+func (p *ShadowsocksProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	outbound := map[string]interface{}{
+		"type":        "shadowsocks",
+		"tag":         p.Remark,
+		"server":      p.Server,
+		"server_port": p.Port,
+		"method":      p.EncryptMethod,
+		"password":    p.Password,
+	}
+	if p.Plugin != "" {
+		outbound["plugin"] = p.Plugin
+		outbound["plugin_opts"] = p.PluginOpts
+	}
+	return outbound, nil
 }

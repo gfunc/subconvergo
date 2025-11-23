@@ -21,7 +21,7 @@ type TrojanProxy struct {
 	AllowInsecure  bool   `yaml:"allow_insecure" json:"allow_insecure"`
 }
 
-func (p *TrojanProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
+func (p *TrojanProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 	// Format: trojan://password@server:port?params#remark
 	link := fmt.Sprintf("trojan://%s@%s:%d", p.Password, p.Server, p.Port)
 
@@ -50,7 +50,7 @@ func (p *TrojanProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	return link, nil
 }
 
-func (p *TrojanProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
+func (p *TrojanProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
 	options := map[string]interface{}{
 		"type":     "trojan",
 		"name":     p.Remark,
@@ -85,5 +85,132 @@ func (p *TrojanProxy) ToClashConfig(ext *config.ProxySetting) map[string]interfa
 			options["grpc-opts"] = grpcOpts
 		}
 	}
-	return options
+	return options, nil
+}
+
+func (p *TrojanProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	parts := []string{"trojan", fmt.Sprintf("%s:%d", p.Server, p.Port), fmt.Sprintf("password=%s", p.Password)}
+
+	if p.Network == "ws" {
+		parts = append(parts, "ws=true")
+		if p.Path != "" {
+			parts = append(parts, fmt.Sprintf("ws-path=%s", p.Path))
+		}
+		if p.Host != "" {
+			parts = append(parts, fmt.Sprintf("ws-headers=Host:%s", p.Host))
+		}
+	}
+
+	if p.Host != "" {
+		parts = append(parts, fmt.Sprintf("sni=%s", p.Host))
+	}
+	if p.AllowInsecure {
+		parts = append(parts, "skip-cert-verify=true")
+	}
+
+	if ext.TFO {
+		parts = append(parts, "tfo=true")
+	}
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
+}
+
+func (p *TrojanProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
+	parts := []string{"trojan", fmt.Sprintf("%s:%d", p.Server, p.Port), fmt.Sprintf("password=%s", p.Password)}
+
+	if p.Network == "ws" {
+		parts = append(parts, "ws=true")
+		if p.Path != "" {
+			parts = append(parts, fmt.Sprintf("ws-path=%s", p.Path))
+		}
+		if p.Host != "" {
+			parts = append(parts, fmt.Sprintf("ws-headers=Host:%s", p.Host))
+		}
+	}
+
+	if p.Host != "" {
+		parts = append(parts, fmt.Sprintf("sni=%s", p.Host))
+	}
+	if p.AllowInsecure {
+		parts = append(parts, "skip-cert-verify=true")
+	}
+
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
+}
+
+func (p *TrojanProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
+	// Format: trojan=server:port, password=password, over-tls=true, tls-host=host, fast-open=true/false, udp-relay=true/false, tag=tag
+	parts := []string{fmt.Sprintf("trojan=%s:%d", p.Server, p.Port)}
+	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+	// parts = append(parts, "over-tls=true") // Removed to match original generator
+	if p.Host != "" {
+		parts = append(parts, fmt.Sprintf("tls-host=%s", p.Host))
+	}
+	if p.AllowInsecure {
+		parts = append(parts, "tls-verification=false")
+	}
+	// if p.Network == "ws" {
+	// 	parts = append(parts, "obfs=wss")
+	// 	if p.Path != "" {
+	// 		parts = append(parts, fmt.Sprintf("obfs-uri=%s", p.Path))
+	// 	}
+	// 	if p.Host != "" {
+	// 		parts = append(parts, fmt.Sprintf("obfs-host=%s", p.Host))
+	// 	}
+	// }
+	if ext != nil {
+		if ext.TFO {
+			parts = append(parts, "fast-open=true")
+		}
+		if ext.UDP {
+			parts = append(parts, "udp-relay=true")
+		}
+	}
+	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))
+	return strings.Join(parts, ", "), nil
+}
+
+func (p *TrojanProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	outbound := map[string]interface{}{
+		"type":        "trojan",
+		"tag":         p.Remark,
+		"server":      p.Server,
+		"server_port": p.Port,
+		"password":    p.Password,
+	}
+
+	tls := map[string]interface{}{
+		"enabled": true,
+	}
+	if p.Host != "" {
+		tls["server_name"] = p.Host
+	}
+	if p.AllowInsecure {
+		tls["insecure"] = true
+	}
+	outbound["tls"] = tls
+
+	if p.Network == "ws" {
+		transport := map[string]interface{}{
+			"type": "ws",
+		}
+		if p.Path != "" {
+			transport["path"] = p.Path
+		}
+		if p.Host != "" {
+			transport["headers"] = map[string]string{
+				"Host": p.Host,
+			}
+		}
+		outbound["transport"] = transport
+	} else if p.Network == "grpc" {
+		transport := map[string]interface{}{
+			"type": "grpc",
+		}
+		if p.Path != "" {
+			transport["service_name"] = p.Path
+		}
+		outbound["transport"] = transport
+	}
+
+	return outbound, nil
 }

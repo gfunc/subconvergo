@@ -3,6 +3,7 @@ package impl
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
@@ -18,7 +19,7 @@ type Hysteria2Proxy struct {
 	ObfsPassword   string `yaml:"obfs-password" json:"obfs-password"`
 }
 
-func (p *Hysteria2Proxy) ToShareLink(ext *config.ProxySetting) (string, error) {
+func (p *Hysteria2Proxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 	// hysteria2://password@server:port?sni=...&obfs=...&obfs-password=...
 	link := fmt.Sprintf("hysteria2://%s@%s:%d", p.Password, p.Server, p.Port)
 	params := url.Values{}
@@ -42,7 +43,7 @@ func (p *Hysteria2Proxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	return link, nil
 }
 
-func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
+func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
 	options := map[string]interface{}{
 		"type":     "hysteria2",
 		"name":     p.Remark,
@@ -62,5 +63,88 @@ func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) map[string]inte
 			options["obfs-password"] = p.ObfsPassword
 		}
 	}
-	return options
+	return options, nil
+}
+
+func (p *Hysteria2Proxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	parts := []string{"hysteria2", fmt.Sprintf("%s:%d", p.Server, p.Port)}
+	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+	if p.Sni != "" {
+		parts = append(parts, fmt.Sprintf("sni=%s", p.Sni))
+	}
+	if p.SkipCertVerify {
+		parts = append(parts, "skip-cert-verify=true")
+	}
+	if p.Obfs != "" {
+		parts = append(parts, fmt.Sprintf("obfs=%s", p.Obfs))
+		if p.ObfsPassword != "" {
+			parts = append(parts, fmt.Sprintf("obfs-password=%s", p.ObfsPassword))
+		}
+	}
+	if ext.TFO {
+		parts = append(parts, "tfo=true")
+	}
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
+}
+
+func (p *Hysteria2Proxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
+	// Format: hysteria2,server,port,"password"
+	parts := []string{"hysteria2", p.Server, fmt.Sprintf("%d", p.Port), fmt.Sprintf("\"%s\"", p.Password)}
+	if p.Sni != "" {
+		parts = append(parts, fmt.Sprintf("sni=%s", p.Sni))
+	}
+	if p.SkipCertVerify {
+		parts = append(parts, "skip-cert-verify=true")
+	}
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
+}
+
+func (p *Hysteria2Proxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
+	// Format: hysteria2=server:port, password=password, sni=sni, obfs=obfs, obfs-password=obfs-password, fast-open=true/false, udp-relay=true/false, tag=tag
+	parts := []string{fmt.Sprintf("hysteria2=%s:%d", p.Server, p.Port)}
+	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+	if p.Sni != "" {
+		parts = append(parts, fmt.Sprintf("sni=%s", p.Sni))
+	}
+	if p.Obfs != "" {
+		parts = append(parts, fmt.Sprintf("obfs=%s", p.Obfs))
+		if p.ObfsPassword != "" {
+			parts = append(parts, fmt.Sprintf("obfs-password=%s", p.ObfsPassword))
+		}
+	}
+	if p.SkipCertVerify {
+		parts = append(parts, "tls-verification=false")
+	}
+	if ext.TFO {
+		parts = append(parts, "fast-open=true")
+	}
+	if ext.UDP {
+		parts = append(parts, "udp-relay=true")
+	}
+	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))
+	return strings.Join(parts, ", "), nil
+}
+
+func (p *Hysteria2Proxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	outbound := map[string]interface{}{
+		"type":        "hysteria2",
+		"tag":         p.Remark,
+		"server":      p.Server,
+		"server_port": p.Port,
+		"password":    p.Password,
+	}
+	if p.Sni != "" {
+		outbound["tls"] = map[string]interface{}{
+			"enabled":     true,
+			"server_name": p.Sni,
+			"insecure":    p.SkipCertVerify,
+		}
+	}
+	if p.Obfs != "" {
+		outbound["obfs"] = map[string]interface{}{
+			"type":     p.Obfs,
+			"password": p.ObfsPassword,
+		}
+	}
+	return outbound, nil
 }

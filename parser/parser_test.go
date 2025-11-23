@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestProxyInterfaceGenerateLink tests that ToShareLink works correctly for all proxy types
+// TestProxyInterfaceGenerateLink tests that ToSingleConfig works correctly for all proxy types
 func TestProxyInterfaceGenerateLink(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -61,10 +61,10 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 			}
 
 			// Generate a new link
-			generatedLink, _ := proxyInterface.ToShareLink(nil)
+			generatedLink, _ := proxyInterface.ToSingleConfig(nil)
 
 			if generatedLink == "" {
-				t.Errorf("ToShareLink() returned empty string")
+				t.Errorf("ToSingleConfig() returned empty string")
 			}
 
 			// Parse the generated link back and verify it matches
@@ -134,10 +134,10 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.ToShareLink(nil)
+			link, _ := proxy.ToSingleConfig(nil)
 
 			if !strings.HasPrefix(link, "ss://") {
-				t.Errorf("ToShareLink() should start with ss://, got %v", link)
+				t.Errorf("ToSingleConfig() should start with ss://, got %v", link)
 			}
 
 			// Verify it can be parsed back
@@ -158,10 +158,10 @@ func TestVMessProxyGenerateLink(t *testing.T) {
 		t.Fatalf("ParseProxyLine error = %v", err)
 	}
 
-	link, _ := proxy.ToShareLink(nil)
+	link, _ := proxy.ToSingleConfig(nil)
 
 	if !strings.HasPrefix(link, "vmess://") {
-		t.Errorf("ToShareLink() should start with vmess://, got %v", link)
+		t.Errorf("ToSingleConfig() should start with vmess://, got %v", link)
 	}
 
 	// Verify it can be parsed back
@@ -228,10 +228,10 @@ func TestTrojanProxyGenerateLink(t *testing.T) {
 				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.ToShareLink(nil)
+			link, _ := proxy.ToSingleConfig(nil)
 
 			if !strings.HasPrefix(link, "trojan://") {
-				t.Errorf("ToShareLink() should start with trojan://, got %v", link)
+				t.Errorf("ToSingleConfig() should start with trojan://, got %v", link)
 			}
 
 			// Verify it can be parsed back
@@ -266,10 +266,10 @@ func TestVLESSProxyGenerateLink(t *testing.T) {
 				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.ToShareLink(nil)
+			link, _ := proxy.ToSingleConfig(nil)
 
 			if !strings.HasPrefix(link, "vless://") {
-				t.Errorf("ToShareLink() should start with vless://, got %v", link)
+				t.Errorf("ToSingleConfig() should start with vless://, got %v", link)
 			}
 
 			// Verify it can be parsed back
@@ -307,10 +307,10 @@ func TestHysteriaProxyGenerateLink(t *testing.T) {
 				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.ToShareLink(nil)
+			link, _ := proxy.ToSingleConfig(nil)
 
 			if !strings.HasPrefix(link, tt.protocol+"://") {
-				t.Errorf("ToShareLink() should start with %s://, got %v", tt.protocol, link)
+				t.Errorf("ToSingleConfig() should start with %s://, got %v", tt.protocol, link)
 			}
 
 			// Verify it can be parsed back
@@ -345,10 +345,10 @@ func TestTUICProxyGenerateLink(t *testing.T) {
 				t.Fatalf("ParseProxyLine error = %v", err)
 			}
 
-			link, _ := proxy.ToShareLink(nil)
+			link, _ := proxy.ToSingleConfig(nil)
 
 			if !strings.HasPrefix(link, "tuic://") {
-				t.Errorf("ToShareLink() should start with tuic://, got %v", link)
+				t.Errorf("ToSingleConfig() should start with tuic://, got %v", link)
 			}
 
 			// Verify it can be parsed back

@@ -3,8 +3,26 @@ package core
 import (
 	"testing"
 
+	"github.com/gfunc/subconvergo/config"
 	"github.com/stretchr/testify/assert"
 )
+
+type MockSubconverterProxy struct {
+	BaseProxy
+}
+
+func (m *MockSubconverterProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
+	return "", nil
+}
+
+func (m *MockSubconverterProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	return nil, nil
+}
+
+func TestSubconverterProxy_Implements_SingleConvertableMixin(t *testing.T) {
+	var _ SingleConvertableMixin = (*MockSubconverterProxy)(nil)
+	var _ SubconverterProxy = (*MockSubconverterProxy)(nil)
+}
 
 func TestBaseProxy_GettersAndSetters(t *testing.T) {
 	p := &BaseProxy{

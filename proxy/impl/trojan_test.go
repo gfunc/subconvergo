@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTrojanProxy_ToShareLink(t *testing.T) {
+func TestTrojanProxy_ToSingleConfig(t *testing.T) {
 	proxy := &TrojanProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "trojan",
@@ -24,7 +24,7 @@ func TestTrojanProxy_ToShareLink(t *testing.T) {
 		AllowInsecure: true,
 	}
 
-	link, err := proxy.ToShareLink(&config.ProxySetting{})
+	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	// trojan://password@1.2.3.4:443?allowInsecure=1&path=%2Fpath&sni=example.com&type=ws#test-trojan
 	assert.Contains(t, link, "trojan://password@1.2.3.4:443")
@@ -44,7 +44,7 @@ func TestTrojanProxy_ToShareLink(t *testing.T) {
 		},
 		Password: "password",
 	}
-	linkTCP, err := proxyTCP.ToShareLink(&config.ProxySetting{})
+	linkTCP, err := proxyTCP.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, linkTCP, "trojan://password@1.2.3.4:443")
 	assert.NotContains(t, linkTCP, "type=")
@@ -63,7 +63,7 @@ func TestTrojanProxy_ToShareLink(t *testing.T) {
 		Network:  "ws",
 		Path:     "/path with spaces",
 	}
-	linkSpecialPath, err := proxySpecialPath.ToShareLink(&config.ProxySetting{})
+	linkSpecialPath, err := proxySpecialPath.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, linkSpecialPath, "path=%2Fpath+with+spaces")
 }
@@ -84,7 +84,8 @@ func TestTrojanProxy_ToClashConfig(t *testing.T) {
 		AllowInsecure: true,
 	}
 
-	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	clashConfig, err := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
 	assert.NotNil(t, clashConfig)
 	assert.Equal(t, "trojan", clashConfig["type"])
 	assert.Equal(t, "test-trojan", clashConfig["name"])

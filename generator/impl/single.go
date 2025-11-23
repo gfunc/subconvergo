@@ -33,26 +33,26 @@ func (g *SingleGenerator) Generate(proxies []pc.ProxyInterface, groups []config.
 	// Generate simple subscription (base64 encoded links)
 	var lines []string
 	for _, p := range proxies {
-		// if SubconverterProxy
-		if mixin, ok := p.(pc.SubconverterProxy); ok {
+		// if SingleConvertableMixin
+		if mixin, ok := p.(pc.SingleConvertableMixin); ok {
 
 			// Only include proxies matching the requested format
 			if g.Target == "mixed" {
-				link, err := mixin.ToShareLink(&opts.ProxySetting)
+				link, err := mixin.ToSingleConfig(&opts.ProxySetting)
 				if err != nil {
 					log.Printf("Failed to generate link for proxy %s: %v", p.GetRemark(), err)
 					continue
 				}
 				lines = append(lines, link)
 			} else if g.Target == "v2ray" && (p.GetType() == "vmess" || p.GetType() == "vless") {
-				link, err := mixin.ToShareLink(&opts.ProxySetting)
+				link, err := mixin.ToSingleConfig(&opts.ProxySetting)
 				if err != nil {
 					log.Printf("Failed to generate link for proxy: %v", err)
 					continue
 				}
 				lines = append(lines, link)
 			} else if g.Target == p.GetType() {
-				link, err := mixin.ToShareLink(&opts.ProxySetting)
+				link, err := mixin.ToSingleConfig(&opts.ProxySetting)
 				if err != nil {
 					log.Printf("Failed to generate link for proxy: %v", err)
 					continue

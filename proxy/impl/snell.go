@@ -3,6 +3,7 @@ package impl
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
@@ -17,7 +18,7 @@ type SnellProxy struct {
 	Version        int    `yaml:"version" json:"version"`
 }
 
-func (p *SnellProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
+func (p *SnellProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 	// snell://server:port?psk=...&obfs=...
 	params := url.Values{}
 	if p.Psk != "" {
@@ -38,7 +39,7 @@ func (p *SnellProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	return link, nil
 }
 
-func (p *SnellProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
+func (p *SnellProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
 	options := map[string]interface{}{
 		"type":   "snell",
 		"name":   p.Remark,
@@ -55,5 +56,34 @@ func (p *SnellProxy) ToClashConfig(ext *config.ProxySetting) map[string]interfac
 			"host": p.ObfsParam,
 		}
 	}
-	return options
+	return options, nil
+}
+
+func (p *SnellProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	parts := []string{"snell", p.Server, fmt.Sprintf("%d", p.Port), fmt.Sprintf("psk=%s", p.Psk)}
+	if p.Obfs != "" {
+		parts = append(parts, fmt.Sprintf("obfs=%s", p.Obfs))
+		if p.ObfsParam != "" {
+			parts = append(parts, fmt.Sprintf("obfs-host=%s", p.ObfsParam))
+		}
+	}
+	if p.Version > 0 {
+		parts = append(parts, fmt.Sprintf("version=%d", p.Version))
+	}
+	if ext.TFO {
+		parts = append(parts, "tfo=true")
+	}
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
+}
+
+func (p *SnellProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
+	return "", fmt.Errorf("snell not supported in Loon")
+}
+
+func (p *SnellProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
+	return "", fmt.Errorf("snell not supported in Quantumult X")
+}
+
+func (p *SnellProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	return nil, fmt.Errorf("snell not supported in sing-box")
 }

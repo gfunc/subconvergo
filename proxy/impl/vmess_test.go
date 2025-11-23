@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestVMessProxy_ToShareLink(t *testing.T) {
+func TestVMessProxy_ToSingleConfig(t *testing.T) {
 	proxy := &VMessProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "vmess",
@@ -27,7 +27,7 @@ func TestVMessProxy_ToShareLink(t *testing.T) {
 		TLS:     true,
 	}
 
-	link, err := proxy.ToShareLink(&config.ProxySetting{})
+	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.True(t, strings.HasPrefix(link, "vmess://"))
 
@@ -61,7 +61,7 @@ func TestVMessProxy_ToShareLink(t *testing.T) {
 		AlterID: 0,
 		Network: "tcp",
 	}
-	linkNoTLS, err := proxyNoTLS.ToShareLink(&config.ProxySetting{})
+	linkNoTLS, err := proxyNoTLS.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	decodedNoTLSBytes, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(linkNoTLS, "vmess://"))
 	assert.NoError(t, err)
@@ -85,7 +85,7 @@ func TestVMessProxy_ToShareLink(t *testing.T) {
 		Path:    "serviceName",
 		TLS:     true,
 	}
-	linkGRPC, err := proxyGRPC.ToShareLink(&config.ProxySetting{})
+	linkGRPC, err := proxyGRPC.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	decodedGRPCBytes, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(linkGRPC, "vmess://"))
 	assert.NoError(t, err)
@@ -113,7 +113,8 @@ func TestVMessProxy_ToClashConfig(t *testing.T) {
 		SNI:     "example.com",
 	}
 
-	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	clashConfig, err := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
 	assert.NotNil(t, clashConfig)
 	assert.Equal(t, "vmess", clashConfig["type"])
 	assert.Equal(t, "test-vmess", clashConfig["name"])

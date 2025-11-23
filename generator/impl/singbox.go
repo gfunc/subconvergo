@@ -3,11 +3,11 @@ package impl
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator/core"
 	pc "github.com/gfunc/subconvergo/proxy/core"
-	pimpl "github.com/gfunc/subconvergo/proxy/impl"
 )
 
 // SingBoxGenerator implements the Generator interface for sing-box
@@ -24,6 +24,7 @@ func (g *SingBoxGenerator) Name() string {
 
 // Generate produces the sing-box configuration
 func (g *SingBoxGenerator) Generate(proxies []pc.ProxyInterface, groups []config.ProxyGroupConfig, rules []string, global *config.Settings, opts core.GeneratorOptions) (string, error) {
+	log.Printf("Generating sing-box config for %d proxies", len(proxies))
 	// Parse base configuration as JSON
 	var base map[string]interface{}
 	if err := json.Unmarshal([]byte(opts.Base), &base); err != nil {
@@ -48,6 +49,8 @@ func (g *SingBoxGenerator) Generate(proxies []pc.ProxyInterface, groups []config
 		outbound := convertToSingBox(proxy, opts)
 		if outbound != nil {
 			outbounds = append(outbounds, outbound)
+		} else {
+			log.Printf("Proxy %s skipped for sing-box (not supported)", proxy.GetRemark())
 		}
 	}
 
@@ -88,148 +91,16 @@ func (g *SingBoxGenerator) Generate(proxies []pc.ProxyInterface, groups []config
 }
 
 func convertToSingBox(p pc.ProxyInterface, opts core.GeneratorOptions) map[string]interface{} {
-	outbound := map[string]interface{}{
-		"tag":         p.GetRemark(),
-		"type":        p.GetType(),
-		"server":      p.GetServer(),
-		"server_port": p.GetPort(),
+	if mixin, ok := p.(pc.SingboxConvertableMixin); ok {
+		config, err := mixin.ToSingboxConfig(&opts.ProxySetting)
+		if err != nil {
+			log.Printf("Failed to convert proxy %s to sing-box: %v", p.GetRemark(), err)
+			return nil
+		}
+		return config
 	}
-
-	switch t := p.(type) {
-	case *pimpl.ShadowsocksProxy:
-		outbound["type"] = "shadowsocks"
-		outbound["method"] = t.EncryptMethod
-		outbound["password"] = t.Password
-		if t.Plugin != "" {
-			outbound["plugin"] = t.Plugin
-			outbound["plugin_opts"] = t.PluginOpts
-		}
-
-	case *pimpl.VMessProxy:
-		outbound["uuid"] = t.UUID
-		outbound["alter_id"] = t.AlterID
-		outbound["security"] = "auto"
-		if t.TLS {
-			tls := map[string]interface{}{
-				"enabled": true,
-			}
-			if t.SNI != "" {
-				tls["server_name"] = t.SNI
-			}
-			if opts.SCV {
-				tls["insecure"] = true
-			}
-			outbound["tls"] = tls
-		}
-		if t.Network == "ws" {
-			transport := map[string]interface{}{
-				"type": "ws",
-				"path": t.Path,
-			}
-			if t.Host != "" {
-				transport["headers"] = map[string]string{
-					"Host": t.Host,
-				}
-			}
-			outbound["transport"] = transport
-		}
-
-	case *pimpl.TrojanProxy:
-		outbound["password"] = t.Password
-		tls := map[string]interface{}{
-			"enabled": true,
-		}
-		if t.Host != "" {
-			tls["server_name"] = t.Host
-		}
-		if opts.SCV || t.AllowInsecure {
-			tls["insecure"] = true
-		}
-		outbound["tls"] = tls
-
-		if t.Network == "ws" {
-			transport := map[string]interface{}{
-				"type": "ws",
-				"path": t.Path,
-			}
-			if t.Host != "" {
-				transport["headers"] = map[string]string{
-					"Host": t.Host,
-				}
-			}
-			outbound["transport"] = transport
-		}
-
-	case *pimpl.HttpProxy:
-		outbound["type"] = "http"
-		outbound["username"] = t.Username
-		outbound["password"] = t.Password
-		if t.Tls {
-			outbound["tls"] = map[string]interface{}{
-				"enabled":  true,
-				"insecure": opts.SCV,
-			}
-		}
-
-	case *pimpl.WireGuardProxy:
-		outbound["type"] = "wireguard"
-		outbound["local_address"] = []string{t.Ip}
-		if t.Ipv6 != "" {
-			outbound["local_address"] = append(outbound["local_address"].([]string), t.Ipv6)
-		}
-		outbound["private_key"] = t.PrivateKey
-		outbound["peer_public_key"] = t.PublicKey
-		outbound["pre_shared_key"] = t.PreSharedKey
-		if t.Mtu > 0 {
-			outbound["mtu"] = t.Mtu
-		}
-
-	case *pimpl.Hysteria2Proxy:
-		outbound["type"] = "hysteria2"
-		outbound["password"] = t.Password
-		if t.Sni != "" {
-			outbound["tls"] = map[string]interface{}{
-				"enabled":     true,
-				"server_name": t.Sni,
-				"insecure":    t.SkipCertVerify,
-			}
-		}
-		if t.Obfs != "" {
-			outbound["obfs"] = map[string]interface{}{
-				"type":     t.Obfs,
-				"password": t.ObfsPassword,
-			}
-		}
-
-	case *pimpl.AnyTLSProxy:
-		outbound["type"] = "anytls"
-		outbound["password"] = t.Password
-		if t.SNI != "" {
-			outbound["sni"] = t.SNI
-		}
-		if t.IdleSessionCheckInterval > 0 {
-			outbound["idle_session_check_interval"] = fmt.Sprintf("%ds", t.IdleSessionCheckInterval)
-		}
-		if t.IdleSessionTimeout > 0 {
-			outbound["idle_session_timeout"] = fmt.Sprintf("%ds", t.IdleSessionTimeout)
-		}
-		if t.MinIdleSession > 0 {
-			outbound["min_idle_session"] = fmt.Sprintf("%ds", t.MinIdleSession)
-		}
-
-		tls := map[string]interface{}{
-			"enabled": true,
-		}
-		if opts.SCV || t.AllowInsecure || t.Fingerprint != "" {
-			tls["insecure"] = true
-		}
-		if len(t.Alpn) > 0 {
-			tls["alpn"] = t.Alpn
-		}
-		outbound["tls"] = tls
-	}
-
-	return outbound
+	log.Printf("Proxy %s skipped for sing-box (not supported)", p.GetRemark())
+	return nil
 }
 
 func generateSingBoxRules(rulesets []config.RulesetConfig) []map[string]interface{} {

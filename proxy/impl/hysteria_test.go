@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHysteriaProxy_ToShareLink(t *testing.T) {
+func TestHysteriaProxy_ToSingleConfig(t *testing.T) {
 	proxy := &HysteriaProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "hysteria2",
@@ -24,7 +24,7 @@ func TestHysteriaProxy_ToShareLink(t *testing.T) {
 	}
 	proxy.Params.Add("sni", "example.com")
 
-	link, err := proxy.ToShareLink(&config.ProxySetting{})
+	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	// hysteria2://password@1.2.3.4:443?insecure=1&obfs=salamander&sni=example.com#test-hysteria2
 	assert.Contains(t, link, "hysteria2://password@1.2.3.4:443")
@@ -47,7 +47,7 @@ func TestHysteriaProxy_ToShareLink(t *testing.T) {
 	proxyH1.Params.Add("down", "100")
 	proxyH1.Params.Add("auth", "myauth")
 
-	linkH1, err := proxyH1.ToShareLink(&config.ProxySetting{})
+	linkH1, err := proxyH1.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, linkH1, "hysteria://@1.2.3.4:443") // Password is empty in struct, but auth param is present
 	assert.Contains(t, linkH1, "up=100")
@@ -65,7 +65,7 @@ func TestHysteriaProxy_ToShareLink(t *testing.T) {
 		Password: "pass",
 		Params:   url.Values{},
 	}
-	linkEmpty, err := proxyEmpty.ToShareLink(&config.ProxySetting{})
+	linkEmpty, err := proxyEmpty.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, linkEmpty, "hysteria2://pass@1.2.3.4:443")
 	assert.NotContains(t, linkEmpty, "?")
@@ -90,7 +90,8 @@ func TestHysteriaProxy_ToClashConfig(t *testing.T) {
 		Params:        params,
 	}
 
-	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	clashConfig, err := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
 	assert.NotNil(t, clashConfig)
 	assert.Equal(t, "hysteria2", clashConfig["type"])
 	assert.Equal(t, "test-hysteria2", clashConfig["name"])

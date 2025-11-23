@@ -3,11 +3,13 @@ package generator
 import (
 	"testing"
 
+	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator/core"
-	_ "github.com/gfunc/subconvergo/generator/impl"
+	gimpl "github.com/gfunc/subconvergo/generator/impl"
 	"github.com/gfunc/subconvergo/generator/utils"
 	pc "github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestApplyMatcher(t *testing.T) {
@@ -226,4 +228,109 @@ func TestGenerate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGenerators_SkipUnsupportedProxies(t *testing.T) {
+	// Create proxies that are known to be unsupported in certain generators
+	ssrProxy := &impl.ShadowsocksRProxy{
+		BaseProxy: pc.BaseProxy{
+			Type:   "ssr",
+			Remark: "ssr-proxy",
+			Server: "1.2.3.4",
+			Port:   8388,
+		},
+		Password:      "password",
+		EncryptMethod: "aes-256-gcm",
+		Protocol:      "auth_aes128_md5",
+		Obfs:          "tls1.2_ticket_auth",
+	}
+
+	vlessProxy := &impl.VLESSProxy{
+		BaseProxy: pc.BaseProxy{
+			Type:   "vless",
+			Remark: "vless-proxy",
+			Server: "9.10.11.12",
+			Port:   443,
+		},
+		UUID:    "uuid",
+		Network: "ws",
+		Path:    "/path",
+		TLS:     true,
+		SNI:     "example.com",
+	}
+
+	wireguardProxy := &impl.WireGuardProxy{
+		BaseProxy: pc.BaseProxy{
+			Type:   "wireguard",
+			Remark: "wg-proxy",
+			Server: "1.1.1.1",
+			Port:   51820,
+		},
+		Ip:         "10.0.0.1",
+		PrivateKey: "private",
+		PublicKey:  "public",
+	}
+
+	proxies := []pc.ProxyInterface{ssrProxy, vlessProxy, wireguardProxy}
+	opts := core.GeneratorOptions{
+		Base:         "[General]",
+		ProxySetting: config.ProxySetting{},
+	}
+
+	// Test Surge Generator
+	t.Run("SurgeGenerator", func(t *testing.T) {
+		gen := &gimpl.SurgeGenerator{}
+		output, err := gen.Generate(proxies, nil, nil, nil, opts)
+		assert.NoError(t, err)
+		// Surge does not support SSR or VLESS (in our implementation)
+		assert.NotContains(t, output, "ssr-proxy")
+		assert.NotContains(t, output, "vless-proxy")
+		// WireGuard is also not supported in our implementation for Surge
+		assert.NotContains(t, output, "wg-proxy")
+	})
+
+	// Test Quantumult X Generator
+	t.Run("QuantumultXGenerator", func(t *testing.T) {
+		gen := &gimpl.QuantumultXGenerator{}
+		output, err := gen.Generate(proxies, nil, nil, nil, opts)
+		assert.NoError(t, err)
+		// QX supports SSR
+		assert.Contains(t, output, "tag=ssr-proxy")
+		// QX does not support VLESS or WireGuard (in our implementation)
+		assert.NotContains(t, output, "tag=vless-proxy")
+		assert.NotContains(t, output, "tag=wg-proxy")
+	})
+
+	// Test Loon Generator
+	t.Run("LoonGenerator", func(t *testing.T) {
+		gen := &gimpl.LoonGenerator{}
+		output, err := gen.Generate(proxies, nil, nil, nil, opts)
+		assert.NoError(t, err)
+		// Loon supports SSR, VLESS, and WireGuard
+		assert.Contains(t, output, "ssr-proxy")
+		assert.Contains(t, output, "vless-proxy")
+		assert.Contains(t, output, "wg-proxy")
+	})
+}
+
+func TestGenerators_EmptyProxies(t *testing.T) {
+	proxies := []pc.ProxyInterface{}
+	opts := core.GeneratorOptions{
+		Base:         "[General]",
+		ProxySetting: config.ProxySetting{},
+	}
+
+	t.Run("SurgeGenerator", func(t *testing.T) {
+		gen := &gimpl.SurgeGenerator{}
+		output, err := gen.Generate(proxies, nil, nil, nil, opts)
+		assert.NoError(t, err)
+		assert.Contains(t, output, "[Proxy]")
+	})
+
+	t.Run("LoonGenerator", func(t *testing.T) {
+		gen := &gimpl.LoonGenerator{}
+		output, err := gen.Generate(proxies, nil, nil, nil, opts)
+		assert.NoError(t, err)
+		assert.Contains(t, output, "[Proxy]")
+	})
 }

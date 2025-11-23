@@ -23,7 +23,7 @@ type VLESSProxy struct {
 	SNI            string `yaml:"sni" json:"sni"`
 }
 
-func (p *VLESSProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
+func (p *VLESSProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 	// Format: vless://uuid@server:port?params#remark
 	link := fmt.Sprintf("vless://%s@%s:%d", p.UUID, p.Server, p.Port)
 
@@ -52,7 +52,7 @@ func (p *VLESSProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	return link, nil
 }
 
-func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
+func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
 	options := map[string]interface{}{
 		"type":    "vless",
 		"name":    p.Remark,
@@ -108,5 +108,100 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) map[string]interfac
 		options["h2-opts"] = h2Opts
 	}
 
-	return options
+	return options, nil
+}
+
+func (p *VLESSProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	return "", fmt.Errorf("VLESS not supported in Surge")
+}
+
+func (p *VLESSProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
+	// Format: vless,server,port,uuid,transport,args
+	parts := []string{"vless", p.Server, fmt.Sprintf("%d", p.Port), p.UUID}
+	if p.Network == "ws" {
+		parts = append(parts, "transport=ws")
+		if p.Path != "" {
+			parts = append(parts, fmt.Sprintf("path=\"%s\"", p.Path))
+		}
+		if p.Host != "" {
+			parts = append(parts, fmt.Sprintf("host=\"%s\"", p.Host))
+		}
+	}
+	if p.TLS {
+		parts = append(parts, "over-tls=true")
+		if p.SNI != "" {
+			parts = append(parts, fmt.Sprintf("u-tls-name=%s", p.SNI))
+		}
+	}
+	if p.AllowInsecure {
+		parts = append(parts, "skip-cert-verify=true")
+	}
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
+}
+
+func (p *VLESSProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
+	return "", fmt.Errorf("VLESS not supported in Quantumult X")
+}
+
+func (p *VLESSProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	outbound := map[string]interface{}{
+		"type":        "vless",
+		"tag":         p.Remark,
+		"server":      p.Server,
+		"server_port": p.Port,
+		"uuid":        p.UUID,
+	}
+
+	if p.Flow != "" {
+		outbound["flow"] = p.Flow
+	}
+
+	if p.TLS {
+		tls := map[string]interface{}{
+			"enabled": true,
+		}
+		if p.SNI != "" {
+			tls["server_name"] = p.SNI
+		}
+		if p.AllowInsecure {
+			tls["insecure"] = true
+		}
+		outbound["tls"] = tls
+	}
+
+	if p.Network == "ws" {
+		transport := map[string]interface{}{
+			"type": "ws",
+		}
+		if p.Path != "" {
+			transport["path"] = p.Path
+		}
+		if p.Host != "" {
+			transport["headers"] = map[string]string{
+				"Host": p.Host,
+			}
+		}
+		outbound["transport"] = transport
+	} else if p.Network == "grpc" {
+		transport := map[string]interface{}{
+			"type": "grpc",
+		}
+		if p.Path != "" {
+			transport["service_name"] = p.Path
+		}
+		outbound["transport"] = transport
+	} else if p.Network == "http" || p.Network == "h2" {
+		transport := map[string]interface{}{
+			"type": "http",
+		}
+		if p.Path != "" {
+			transport["path"] = p.Path
+		}
+		if p.Host != "" {
+			transport["host"] = []string{p.Host}
+		}
+		outbound["transport"] = transport
+	}
+
+	return outbound, nil
 }

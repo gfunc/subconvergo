@@ -1,9 +1,9 @@
 package utils
 
 import (
-"testing"
+	"testing"
 
-"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestUrlEncode(t *testing.T) {
@@ -19,7 +19,7 @@ func TestUrlEncode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-assert.Equal(t, tt.expected, UrlEncode(tt.input))
-})
+			assert.Equal(t, tt.expected, UrlEncode(tt.input))
+		})
 	}
 }

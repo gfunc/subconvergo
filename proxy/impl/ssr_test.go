@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestShadowsocksRProxy_ToShareLink(t *testing.T) {
+func TestShadowsocksRProxy_ToSingleConfig(t *testing.T) {
 	proxy := &ShadowsocksRProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "ssr",
@@ -26,7 +26,7 @@ func TestShadowsocksRProxy_ToShareLink(t *testing.T) {
 		ObfsParam:     "param2",
 	}
 
-	link, err := proxy.ToShareLink(&config.ProxySetting{})
+	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.True(t, strings.HasPrefix(link, "ssr://"))
 
@@ -55,7 +55,7 @@ func TestShadowsocksRProxy_ToShareLink(t *testing.T) {
 		Protocol:      "origin",
 		Obfs:          "plain",
 	}
-	linkEmpty, err := proxyEmptyParams.ToShareLink(&config.ProxySetting{})
+	linkEmpty, err := proxyEmptyParams.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	decodedEmptyBytes, err := base64.URLEncoding.DecodeString(strings.TrimPrefix(linkEmpty, "ssr://"))
 	assert.NoError(t, err)
@@ -77,7 +77,7 @@ func TestShadowsocksRProxy_ToShareLink(t *testing.T) {
 		Protocol:      "origin",
 		Obfs:          "plain",
 	}
-	linkSpecial, err := proxySpecial.ToShareLink(&config.ProxySetting{})
+	linkSpecial, err := proxySpecial.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	decodedSpecialBytes, err := base64.URLEncoding.DecodeString(strings.TrimPrefix(linkSpecial, "ssr://"))
 	assert.NoError(t, err)
@@ -103,7 +103,8 @@ func TestShadowsocksRProxy_ToClashConfig(t *testing.T) {
 		ObfsParam:     "param2",
 	}
 
-	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	clashConfig, err := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
 	assert.NotNil(t, clashConfig)
 	assert.Equal(t, "ssr", clashConfig["type"])
 	assert.Equal(t, "test-ssr", clashConfig["name"])

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMihomoProxy_ToShareLink(t *testing.T) {
+func TestMihomoProxy_ToSingleConfig(t *testing.T) {
 	ssProxy := &ShadowsocksProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "ss",
@@ -24,7 +24,7 @@ func TestMihomoProxy_ToShareLink(t *testing.T) {
 		ProxyInterface: ssProxy,
 	}
 
-	link, err := mihomoProxy.ToShareLink(&config.ProxySetting{})
+	link, err := mihomoProxy.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, link, "ss://")
 	assert.Contains(t, link, "#ss-proxy")
@@ -46,7 +46,8 @@ func TestMihomoProxy_ToClashConfig(t *testing.T) {
 		ProxyInterface: ssProxy,
 	}
 
-	clashConfig := mihomoProxy.ToClashConfig(&config.ProxySetting{})
+	clashConfig, err := mihomoProxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
 	assert.NotNil(t, clashConfig)
 	assert.Equal(t, "ss", clashConfig["type"])
 	assert.Equal(t, "ss-proxy", clashConfig["name"])

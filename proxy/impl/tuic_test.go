@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTUICProxy_ToShareLink(t *testing.T) {
+func TestTUICProxy_ToSingleConfig(t *testing.T) {
 	proxy := &TUICProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "tuic",
@@ -24,7 +24,7 @@ func TestTUICProxy_ToShareLink(t *testing.T) {
 	}
 	proxy.Params.Add("sni", "example.com")
 
-	link, err := proxy.ToShareLink(&config.ProxySetting{})
+	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	// tuic://uuid:password@1.2.3.4:443?allow_insecure=1&sni=example.com#test-tuic
 	assert.Contains(t, link, "tuic://uuid:password@1.2.3.4:443")
@@ -43,7 +43,7 @@ func TestTUICProxy_ToShareLink(t *testing.T) {
 		UUID:   "uuid",
 		Params: url.Values{},
 	}
-	linkNoPass, err := proxyNoPass.ToShareLink(&config.ProxySetting{})
+	linkNoPass, err := proxyNoPass.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, linkNoPass, "tuic://uuid@1.2.3.4:443")
 
@@ -60,7 +60,7 @@ func TestTUICProxy_ToShareLink(t *testing.T) {
 	}
 	proxyParams.Params.Add("congestion_control", "bbr")
 	proxyParams.Params.Add("udp_relay_mode", "native")
-	linkParams, err := proxyParams.ToShareLink(&config.ProxySetting{})
+	linkParams, err := proxyParams.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, linkParams, "congestion_control=bbr")
 	assert.Contains(t, linkParams, "udp_relay_mode=native")
@@ -85,7 +85,8 @@ func TestTUICProxy_ToClashConfig(t *testing.T) {
 		Params:        params,
 	}
 
-	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	clashConfig, err := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
 	assert.NotNil(t, clashConfig)
 	assert.Equal(t, "tuic", clashConfig["type"])
 	assert.Equal(t, "test-tuic", clashConfig["name"])

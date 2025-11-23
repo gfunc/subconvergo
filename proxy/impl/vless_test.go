@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestVLESSProxy_ToShareLink(t *testing.T) {
+func TestVLESSProxy_ToSingleConfig(t *testing.T) {
 	proxy := &VLESSProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "vless",
@@ -23,7 +23,7 @@ func TestVLESSProxy_ToShareLink(t *testing.T) {
 		TLS:     true,
 	}
 
-	link, err := proxy.ToShareLink(&config.ProxySetting{})
+	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	// vless://uuid@1.2.3.4:443?host=example.com&path=%2Fpath&security=tls&sni=example.com&type=ws#test-vless
 	assert.Contains(t, link, "vless://uuid@1.2.3.4:443")
@@ -45,7 +45,7 @@ func TestVLESSProxy_ToShareLink(t *testing.T) {
 		UUID:    "uuid",
 		Network: "tcp",
 	}
-	linkNoTLS, err := proxyNoTLS.ToShareLink(&config.ProxySetting{})
+	linkNoTLS, err := proxyNoTLS.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, linkNoTLS, "vless://uuid@1.2.3.4:80")
 	assert.Contains(t, linkNoTLS, "type=tcp")
@@ -64,7 +64,7 @@ func TestVLESSProxy_ToShareLink(t *testing.T) {
 		Path:    "serviceName",
 		TLS:     true,
 	}
-	linkGRPC, err := proxyGRPC.ToShareLink(&config.ProxySetting{})
+	linkGRPC, err := proxyGRPC.ToSingleConfig(&config.ProxySetting{})
 	assert.NoError(t, err)
 	assert.Contains(t, linkGRPC, "type=grpc")
 	// gRPC service name is usually not in path param for standard vless link, but let's check implementation
@@ -101,7 +101,8 @@ func TestVLESSProxy_ToClashConfig(t *testing.T) {
 		SNI:     "example.com",
 	}
 
-	clashConfig := proxy.ToClashConfig(&config.ProxySetting{})
+	clashConfig, err := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
 	assert.NotNil(t, clashConfig)
 	assert.Equal(t, "vless", clashConfig["type"])
 	assert.Equal(t, "test-vless", clashConfig["name"])

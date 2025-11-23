@@ -19,33 +19,37 @@ type MihomoProxy struct {
 	Options map[string]interface{} `yaml:"-" json:"-"`
 }
 
-func (m *MihomoProxy) ToShareLink(opts *config.ProxySetting) (string, error) {
+func (m *MihomoProxy) ToSingleConfig(opts *config.ProxySetting) (string, error) {
 	if m.ProxyInterface == nil {
 		return "", fmt.Errorf("Plain proxy is not set")
 	}
 	switch p := m.ProxyInterface.(type) {
 	case core.SubconverterProxy:
-		return p.ToShareLink(opts)
+		return p.ToSingleConfig(opts)
 	default:
-		b, err := json.Marshal(m.ToClashConfig(opts))
+		clashConfig, err := m.ToClashConfig(opts)
 		if err != nil {
-			return "", fmt.Errorf("error ToShareLink for proxy %s of type %s, %v", m.GetRemark(), m.GetType(), err)
+			return "", fmt.Errorf("error ToSingleConfig for proxy %s of type %s, %v", m.GetRemark(), m.GetType(), err)
+		}
+		b, err := json.Marshal(clashConfig)
+		if err != nil {
+			return "", fmt.Errorf("error ToSingleConfig for proxy %s of type %s, %v", m.GetRemark(), m.GetType(), err)
 		}
 		content := base64.StdEncoding.EncodeToString(b)
 		return fmt.Sprintf("%s://%s", m.GetType(), content), nil
 	}
 }
 
-func (m *MihomoProxy) ToClashConfig(opts *config.ProxySetting) map[string]interface{} {
+func (m *MihomoProxy) ToClashConfig(opts *config.ProxySetting) (map[string]interface{}, error) {
 	if p, ok := m.ProxyInterface.(core.SubconverterProxy); ok {
 		return p.ToClashConfig(opts)
 	}
 	options, err := m.proxyOptions()
 	if err != nil {
 		log.Printf("failed to get proxy options: %v", err)
-		return nil
+		return nil, err
 	}
-	return options
+	return options, nil
 }
 
 func (m *MihomoProxy) proxyOptions() (map[string]interface{}, error) {
@@ -72,4 +76,32 @@ func (m *MihomoProxy) MarshalYAML() (interface{}, error) {
 		return nil, fmt.Errorf("failed to get proxy options for YAML marshal: %w", err)
 	}
 	return yaml.Marshal(options)
+}
+
+func (m *MihomoProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	if p, ok := m.ProxyInterface.(core.SurgeConvertableMixin); ok {
+		return p.ToSurgeConfig(ext)
+	}
+	return "", fmt.Errorf("ToSurgeConfig not supported for proxy type %s", m.GetType())
+}
+
+func (m *MihomoProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
+	if p, ok := m.ProxyInterface.(core.LoonConvertableMixin); ok {
+		return p.ToLoonConfig(ext)
+	}
+	return "", fmt.Errorf("ToLoonConfig not supported for proxy type %s", m.GetType())
+}
+
+func (m *MihomoProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
+	if p, ok := m.ProxyInterface.(core.QuantumultXConvertableMixin); ok {
+		return p.ToQuantumultXConfig(ext)
+	}
+	return "", fmt.Errorf("ToQuantumultXConfig not supported for proxy type %s", m.GetType())
+}
+
+func (m *MihomoProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	if p, ok := m.ProxyInterface.(core.SingboxConvertableMixin); ok {
+		return p.ToSingboxConfig(ext)
+	}
+	return nil, fmt.Errorf("ToSingboxConfig not supported for proxy type %s", m.GetType())
 }

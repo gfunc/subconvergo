@@ -18,7 +18,11 @@ func ToMihomoProxy(pObj core.SubconverterProxy) (core.SubconverterProxy, error) 
 }
 
 func ToMihomoProxyWithSetting(pObj core.SubconverterProxy, config *config.ProxySetting) (core.SubconverterProxy, error) {
-	option := pObj.ToClashConfig(config)
+	option, err := pObj.ToClashConfig(config)
+	if err != nil {
+		log.Printf("[toMihomoProxy] Failed to convert proxy to Clash config: %v", err)
+		return pObj, nil
+	}
 	mihomoProxy, err := adapter.ParseProxy(option)
 	if err != nil {
 		log.Printf("[toMihomoProxy] Converted proxy: %+v to Mihomo format: %+v, err: %v", pObj, mihomoProxy, err)

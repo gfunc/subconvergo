@@ -24,7 +24,7 @@ type AnyTLSProxy struct {
 	AllowInsecure            bool     `yaml:"allow_insecure" json:"allow_insecure"`
 }
 
-func (p *AnyTLSProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
+func (p *AnyTLSProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 	// Format: anytls://password@server:port?peer=sni&alpn=alpn&hpkp=fingerprint&tfo=1&insecure=1#remark
 	link := fmt.Sprintf("anytls://%s@%s:%d", p.Password, p.Server, p.Port)
 
@@ -65,7 +65,7 @@ func (p *AnyTLSProxy) ToShareLink(ext *config.ProxySetting) (string, error) {
 	return link, nil
 }
 
-func (p *AnyTLSProxy) ToClashConfig(ext *config.ProxySetting) map[string]interface{} {
+func (p *AnyTLSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
 	options := map[string]interface{}{
 		"type":   "anytls",
 		"name":   p.Remark,
@@ -101,5 +101,21 @@ func (p *AnyTLSProxy) ToClashConfig(ext *config.ProxySetting) map[string]interfa
 		options["tfo"] = true
 	}
 
-	return options
+	return options, nil
+}
+
+func (p *AnyTLSProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	return "", fmt.Errorf("AnyTLS not supported in Surge")
+}
+
+func (p *AnyTLSProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
+	return "", fmt.Errorf("AnyTLS not supported in Loon")
+}
+
+func (p *AnyTLSProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
+	return "", fmt.Errorf("AnyTLS not supported in Quantumult X")
+}
+
+func (p *AnyTLSProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	return nil, fmt.Errorf("AnyTLS not supported in sing-box")
 }

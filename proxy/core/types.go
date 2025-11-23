@@ -18,52 +18,30 @@ type ProxyInterface interface {
 
 type SubconverterProxy interface {
 	ProxyInterface
-	ToShareLink(ext *config.ProxySetting) (string, error)
-	ToClashConfig(ext *config.ProxySetting) map[string]interface{}
+	SingleConvertableMixin
+	ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error)
 }
 
-// BaseProxy contains common fields shared by all proxy types
-type BaseProxy struct {
-	Type    string `yaml:"type" json:"type"`
-	Remark  string `yaml:"remark" json:"remark"`
-	Server  string `yaml:"server" json:"server"`
-	Port    int    `yaml:"port" json:"port"`
-	Group   string `yaml:"group" json:"group"` // group here is not proxy group, but subscription group
-	GroupId int    `yaml:"group_id" json:"group_id"`
+type ClashConvertableMixin interface {
+	ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error)
 }
 
-func (p *BaseProxy) GetType() string {
-	return p.Type
+type SingleConvertableMixin interface {
+	ToSingleConfig(ext *config.ProxySetting) (string, error)
 }
 
-func (p *BaseProxy) GetRemark() string {
-	return p.Remark
+type LoonConvertableMixin interface {
+	ToLoonConfig(ext *config.ProxySetting) (string, error)
 }
 
-func (p *BaseProxy) SetRemark(remark string) {
-	p.Remark = remark
+type SurgeConvertableMixin interface {
+	ToSurgeConfig(ext *config.ProxySetting) (string, error)
 }
 
-func (p *BaseProxy) GetServer() string {
-	return p.Server
+type QuantumultXConvertableMixin interface {
+	ToQuantumultXConfig(ext *config.ProxySetting) (string, error)
 }
 
-func (p *BaseProxy) GetPort() int {
-	return p.Port
-}
-
-func (p *BaseProxy) GetGroup() string {
-	return p.Group
-}
-
-func (p *BaseProxy) SetGroup(group string) {
-	p.Group = group
-}
-
-func (p *BaseProxy) GetGroupId() int {
-	return p.GroupId
-}
-
-func (p *BaseProxy) SetGroupId(groupId int) {
-	p.GroupId = groupId
+type SingboxConvertableMixin interface {
+	ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error)
 }

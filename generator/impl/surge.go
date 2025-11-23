@@ -2,13 +2,13 @@ package impl
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator/core"
 	"github.com/gfunc/subconvergo/generator/utils"
 	pc "github.com/gfunc/subconvergo/proxy/core"
-	"github.com/gfunc/subconvergo/proxy/impl"
 )
 
 // SurgeGenerator implements the Generator interface for Surge
@@ -25,6 +25,7 @@ func (g *SurgeGenerator) Name() string {
 
 // Generate produces the Surge configuration
 func (g *SurgeGenerator) Generate(proxies []pc.ProxyInterface, groups []config.ProxyGroupConfig, rules []string, global *config.Settings, opts core.GeneratorOptions) (string, error) {
+	log.Printf("Generating Surge config for %d proxies", len(proxies))
 	var output strings.Builder
 
 	// Add base configuration
@@ -37,6 +38,8 @@ func (g *SurgeGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 		if line != "" {
 			output.WriteString(line)
 			output.WriteString("\n")
+		} else {
+			log.Printf("Proxy %s skipped for Surge (not supported)", proxy.GetRemark())
 		}
 	}
 
@@ -67,147 +70,16 @@ func (g *SurgeGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 }
 
 func convertToSurge(p pc.ProxyInterface, opts core.GeneratorOptions) string {
-	var parts []string
-
-	switch t := p.(type) {
-	case *impl.ShadowsocksProxy:
-		parts = append(parts, "ss")
-		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("encrypt-method=%s", t.EncryptMethod))
-		parts = append(parts, fmt.Sprintf("password=%s", t.Password))
-		if opts.UDP {
-			parts = append(parts, "udp-relay=true")
+	if mixin, ok := p.(pc.SurgeConvertableMixin); ok {
+		config, err := mixin.ToSurgeConfig(&opts.ProxySetting)
+		if err != nil {
+			log.Printf("Failed to convert proxy %s to Surge: %v", p.GetRemark(), err)
+			return ""
 		}
-		if opts.TFO {
-			parts = append(parts, "tfo=true")
-		}
-		if t.Plugin == "obfs-local" || t.Plugin == "simple-obfs" {
-			if mode, ok := t.PluginOpts["obfs"]; ok {
-				parts = append(parts, fmt.Sprintf("obfs=%s", mode))
-			}
-			if host, ok := t.PluginOpts["obfs-host"]; ok {
-				parts = append(parts, fmt.Sprintf("obfs-host=%s", host))
-			}
-		}
-
-	case *impl.HttpProxy:
-		if t.Tls {
-			parts = append(parts, "https")
-		} else {
-			parts = append(parts, "http")
-		}
-		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("username=%s", t.Username))
-		parts = append(parts, fmt.Sprintf("password=%s", t.Password))
-		if opts.TFO {
-			parts = append(parts, "tfo=true")
-		}
-
-	case *impl.SnellProxy:
-		parts = append(parts, "snell")
-		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("psk=%s", t.Psk))
-		if t.Obfs != "" {
-			parts = append(parts, fmt.Sprintf("obfs=%s", t.Obfs))
-			if t.ObfsParam != "" {
-				parts = append(parts, fmt.Sprintf("obfs-host=%s", t.ObfsParam))
-			}
-		}
-		if t.Version > 0 {
-			parts = append(parts, fmt.Sprintf("version=%d", t.Version))
-		}
-		if opts.TFO {
-			parts = append(parts, "tfo=true")
-		}
-
-	case *impl.WireGuardProxy:
-		parts = append(parts, "wireguard")
-		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("private-key=%s", t.PrivateKey))
-		if t.Ip != "" {
-			parts = append(parts, fmt.Sprintf("self-ip=%s", t.Ip))
-		}
-		if t.Ipv6 != "" {
-			parts = append(parts, fmt.Sprintf("self-ip-v6=%s", t.Ipv6))
-		}
-		if len(t.Dns) > 0 {
-			parts = append(parts, fmt.Sprintf("dns-server=%s", strings.Join(t.Dns, ", ")))
-		}
-		if t.Mtu > 0 {
-			parts = append(parts, fmt.Sprintf("mtu=%d", t.Mtu))
-		}
-		if t.PreSharedKey != "" {
-			parts = append(parts, fmt.Sprintf("psk=%s", t.PreSharedKey))
-		}
-
-	case *impl.Hysteria2Proxy:
-		parts = append(parts, "hysteria2")
-		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("password=%s", t.Password))
-		if t.Sni != "" {
-			parts = append(parts, fmt.Sprintf("sni=%s", t.Sni))
-		}
-		if t.SkipCertVerify {
-			parts = append(parts, "skip-cert-verify=true")
-		}
-		if t.Obfs != "" {
-			parts = append(parts, fmt.Sprintf("obfs=%s", t.Obfs))
-			if t.ObfsPassword != "" {
-				parts = append(parts, fmt.Sprintf("obfs-password=%s", t.ObfsPassword))
-			}
-		}
-		if opts.TFO {
-			parts = append(parts, "tfo=true")
-		}
-
-	case *impl.VMessProxy:
-		parts = append(parts, "vmess")
-		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("username=%s", t.UUID))
-		if t.Network == "ws" {
-			parts = append(parts, "ws=true")
-			if t.Path != "" {
-				parts = append(parts, fmt.Sprintf("ws-path=%s", t.Path))
-			}
-			if t.Host != "" {
-				parts = append(parts, fmt.Sprintf("ws-headers=Host:%s", t.Host))
-			}
-		}
-		if t.TLS {
-			parts = append(parts, "tls=true")
-			if opts.SCV {
-				parts = append(parts, "skip-cert-verify=true")
-			}
-			if t.SNI != "" {
-				parts = append(parts, fmt.Sprintf("sni=%s", t.SNI))
-			}
-		}
-
-	case *impl.TrojanProxy:
-		parts = append(parts, "trojan")
-		parts = append(parts, fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("password=%s", t.Password))
-		if opts.SCV || t.AllowInsecure {
-			parts = append(parts, "skip-cert-verify=true")
-		}
-		if t.Network == "ws" {
-			parts = append(parts, "ws=true")
-			if t.Path != "" {
-				parts = append(parts, fmt.Sprintf("ws-path=%s", t.Path))
-			}
-			if t.Host != "" {
-				parts = append(parts, fmt.Sprintf("ws-headers=Host:%s", t.Host))
-			}
-		}
-		if t.Host != "" {
-			parts = append(parts, fmt.Sprintf("sni=%s", t.Host))
-		}
-
-	default:
-		return ""
+		return config
 	}
-
-	return fmt.Sprintf("%s = %s", p.GetRemark(), strings.Join(parts, ", "))
+	log.Printf("Proxy %s skipped for Surge (not supported)", p.GetRemark())
+	return ""
 }
 
 func convertGroupToSurge(group config.ProxyGroupConfig, proxies []pc.ProxyInterface) string {

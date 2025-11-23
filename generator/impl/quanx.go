@@ -2,13 +2,13 @@ package impl
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator/core"
 	"github.com/gfunc/subconvergo/generator/utils"
 	pc "github.com/gfunc/subconvergo/proxy/core"
-	"github.com/gfunc/subconvergo/proxy/impl"
 )
 
 // QuantumultXGenerator implements the Generator interface for Quantumult X
@@ -25,6 +25,7 @@ func (g *QuantumultXGenerator) Name() string {
 
 // Generate produces the Quantumult X configuration
 func (g *QuantumultXGenerator) Generate(proxies []pc.ProxyInterface, groups []config.ProxyGroupConfig, rules []string, global *config.Settings, opts core.GeneratorOptions) (string, error) {
+	log.Printf("Generating Quantumult X config for %d proxies", len(proxies))
 	var output strings.Builder
 
 	// Add base configuration
@@ -37,6 +38,8 @@ func (g *QuantumultXGenerator) Generate(proxies []pc.ProxyInterface, groups []co
 		if line != "" {
 			output.WriteString(line)
 			output.WriteString("\n")
+		} else {
+			log.Printf("Proxy %s skipped for Quantumult X (not supported)", proxy.GetRemark())
 		}
 	}
 
@@ -66,94 +69,16 @@ func (g *QuantumultXGenerator) Generate(proxies []pc.ProxyInterface, groups []co
 }
 
 func convertToQuantumultX(p pc.ProxyInterface, opts core.GeneratorOptions) string {
-	var parts []string
-
-	switch t := p.(type) {
-	case *impl.ShadowsocksProxy:
-		// Format: shadowsocks=server:port, method=encrypt-method, password=password, tag=name
-		parts = append(parts, "shadowsocks="+fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("method=%s", t.EncryptMethod))
-		parts = append(parts, fmt.Sprintf("password=%s", t.Password))
-		if opts.UDP {
-			parts = append(parts, "udp-relay=true")
+	if mixin, ok := p.(pc.QuantumultXConvertableMixin); ok {
+		config, err := mixin.ToQuantumultXConfig(&opts.ProxySetting)
+		if err != nil {
+			log.Printf("Failed to convert proxy %s to Quantumult X: %v", p.GetRemark(), err)
+			return ""
 		}
-		if opts.TFO {
-			parts = append(parts, "fast-open=true")
-		}
-		if t.Plugin == "obfs-local" || t.Plugin == "simple-obfs" {
-			if mode, ok := t.PluginOpts["obfs"]; ok {
-				parts = append(parts, fmt.Sprintf("obfs=%s", mode))
-			}
-			if host, ok := t.PluginOpts["obfs-host"]; ok {
-				parts = append(parts, fmt.Sprintf("obfs-host=%s", host))
-			}
-		}
-		parts = append(parts, fmt.Sprintf("tag=%s", t.Remark))
-
-	case *impl.VMessProxy:
-		// Format: vmess=server:port, method=encrypt-method, password=uuid, tag=name
-		parts = append(parts, "vmess="+fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, "method=aes-128-gcm")
-		parts = append(parts, fmt.Sprintf("password=%s", t.UUID))
-		if t.Network == "ws" {
-			parts = append(parts, "obfs=ws")
-			if t.Path != "" {
-				parts = append(parts, fmt.Sprintf("obfs-uri=%s", t.Path))
-			}
-			if t.Host != "" {
-				parts = append(parts, fmt.Sprintf("obfs-host=%s", t.Host))
-			}
-		} else if t.TLS {
-			parts = append(parts, "obfs=over-tls")
-			if t.SNI != "" {
-				parts = append(parts, fmt.Sprintf("obfs-host=%s", t.SNI))
-			}
-		}
-		if opts.SCV {
-			parts = append(parts, "tls-verification=false")
-		}
-		parts = append(parts, fmt.Sprintf("tag=%s", t.Remark))
-
-	case *impl.TrojanProxy:
-		// Format: trojan=server:port, password=password, tag=name
-		parts = append(parts, "trojan="+fmt.Sprintf("%s:%d", t.Server, t.Port))
-		parts = append(parts, fmt.Sprintf("password=%s", t.Password))
-		if opts.SCV || t.AllowInsecure {
-			parts = append(parts, "tls-verification=false")
-		}
-		if t.Host != "" {
-			parts = append(parts, fmt.Sprintf("tls-host=%s", t.Host))
-		}
-		parts = append(parts, fmt.Sprintf("tag=%s", t.Remark))
-
-	case *impl.HttpProxy:
-		// Format: http=server:port, username=user, password=pass, over-tls=true/false, tag=name
-		parts = append(parts, "http="+fmt.Sprintf("%s:%d", t.Server, t.Port))
-		if t.Username != "" {
-			parts = append(parts, fmt.Sprintf("username=%s", t.Username))
-		} else {
-			parts = append(parts, "username=none")
-		}
-		if t.Password != "" {
-			parts = append(parts, fmt.Sprintf("password=%s", t.Password))
-		} else {
-			parts = append(parts, "password=none")
-		}
-		if t.Tls {
-			parts = append(parts, "over-tls=true")
-		} else {
-			parts = append(parts, "over-tls=false")
-		}
-		if opts.TFO {
-			parts = append(parts, "fast-open=true")
-		}
-		parts = append(parts, fmt.Sprintf("tag=%s", t.Remark))
-
-	default:
-		return ""
+		return config
 	}
-
-	return strings.Join(parts, ", ")
+	log.Printf("Proxy %s skipped for Quantumult X (not supported)", p.GetRemark())
+	return ""
 }
 
 func convertGroupToQuantumultX(group config.ProxyGroupConfig, proxies []pc.ProxyInterface) string {
