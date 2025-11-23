@@ -1,4 +1,4 @@
-package impl
+package proxy
 
 import (
 	"testing"
@@ -53,7 +53,7 @@ func TestAnyTLSParser_Parse(t *testing.T) {
 
 	// Test case 3: Invalid link
 	link = "invalid://link"
-	assert.False(t, parser.CanParse(link))
+	assert.False(t, parser.CanParseLine(link))
 	_, err = parser.Parse(link)
 	assert.Error(t, err)
 }

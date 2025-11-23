@@ -1,4 +1,4 @@
-package impl
+package proxy
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ func (p *WireGuardParser) Name() string {
 	return "WireGuard"
 }
 
-func (p *WireGuardParser) CanParse(line string) bool {
+func (p *WireGuardParser) CanParseLine(line string) bool {
 	// WireGuard usually doesn't have a standard link format.
 	// But we can support a custom one if needed, or just return false.
 	// For now, let's assume no standard link format support.

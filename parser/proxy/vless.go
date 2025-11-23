@@ -1,4 +1,4 @@
-package impl
+package proxy
 
 import (
 	"fmt"
@@ -12,25 +12,25 @@ import (
 	"github.com/gfunc/subconvergo/proxy/impl"
 )
 
-type TrojanParser struct{}
+type VLESSParser struct{}
 
-func (p *TrojanParser) Name() string {
-	return "Trojan"
+func (p *VLESSParser) Name() string {
+	return "VLESS"
 }
 
-func (p *TrojanParser) CanParse(line string) bool {
-	return strings.HasPrefix(line, "trojan://")
+func (p *VLESSParser) CanParseLine(line string) bool {
+	return strings.HasPrefix(line, "vless://")
 }
 
-func (p *TrojanParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *VLESSParser) Parse(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "trojan://") {
-		return nil, fmt.Errorf("not a valid trojan:// link")
+	if !strings.HasPrefix(line, "vless://") {
+		return nil, fmt.Errorf("not a valid vless:// link")
 	}
 
-	line = line[9:]
+	line = line[8:]
 
-	var remark, password, server, port, sni, network, path, group string
+	var remark, uuid, server, port, network, flow, security, sni, path, host, group string
 	var allowInsecure bool
 
 	if idx := strings.LastIndex(line, "#"); idx != -1 {
@@ -44,10 +44,14 @@ func (p *TrojanParser) Parse(line string) (core.SubconverterProxy, error) {
 
 		params, _ := url.ParseQuery(queryStr)
 
-		sni = params.Get("sni")
-		if sni == "" {
-			sni = params.Get("peer")
+		network = params.Get("type")
+		if network == "" {
+			network = "tcp"
 		}
+
+		security = params.Get("security")
+		flow = params.Get("flow")
+		sni = params.Get("sni")
 
 		if params.Get("allowInsecure") == "1" || params.Get("allowInsecure") == "true" {
 			allowInsecure = true
@@ -55,31 +59,31 @@ func (p *TrojanParser) Parse(line string) (core.SubconverterProxy, error) {
 
 		group = utils.UrlDecode(params.Get("group"))
 
-		if params.Get("ws") == "1" {
-			network = "ws"
-			path = params.Get("wspath")
-		} else if params.Get("type") == "ws" {
-			network = "ws"
+		switch network {
+		case "ws":
 			path = params.Get("path")
-			if strings.HasPrefix(path, "%2F") {
-				path = utils.UrlDecode(path)
-			}
-		} else if params.Get("type") == "grpc" {
-			network = "grpc"
+			host = params.Get("host")
+		case "grpc":
 			path = params.Get("serviceName")
 			if path == "" {
 				path = params.Get("path")
 			}
+		case "http", "h2":
+			path = params.Get("path")
+			host = params.Get("host")
+		case "quic":
+			host = params.Get("quicSecurity")
+			path = params.Get("key")
 		}
 	}
 
 	re := regexp.MustCompile(`(.*?)@(.*):(.*)`)
 	matches := re.FindStringSubmatch(line)
 	if len(matches) != 4 {
-		return nil, fmt.Errorf("invalid trojan link format")
+		return nil, fmt.Errorf("invalid vless link format")
 	}
 
-	password = matches[1]
+	uuid = matches[1]
 	server = matches[2]
 	port = matches[3]
 
@@ -92,23 +96,25 @@ func (p *TrojanParser) Parse(line string) (core.SubconverterProxy, error) {
 		remark = server + ":" + port
 	}
 	if group == "" {
-		group = "Trojan"
+		group = core.VLESS_DEFAULT_GROUP
 	}
 
-	pObj := &impl.TrojanProxy{
+	pObj := &impl.VLESSProxy{
 		BaseProxy: core.BaseProxy{
-			Type:   "trojan",
+			Type:   "vless",
 			Remark: remark,
 			Server: server,
 			Port:   portNum,
 			Group:  group,
 		},
-		Password:      password,
+		UUID:          uuid,
 		Network:       network,
 		Path:          path,
-		Host:          sni,
-		TLS:           true, // Trojan always uses TLS
+		Host:          host,
+		TLS:           security == "tls" || security == "reality",
 		AllowInsecure: allowInsecure,
+		Flow:          flow,
+		SNI:           sni,
 	}
 	return utils.ToMihomoProxy(pObj)
 }

@@ -1,4 +1,4 @@
-package impl
+package proxy
 
 import (
 	"fmt"
@@ -11,25 +11,27 @@ import (
 	"github.com/gfunc/subconvergo/proxy/impl"
 )
 
-type TUICParser struct{}
+type HysteriaParser struct{}
 
-func (p *TUICParser) Name() string {
-	return "TUIC"
+func (p *HysteriaParser) Name() string {
+	return "Hysteria"
 }
 
-func (p *TUICParser) CanParse(line string) bool {
-	return strings.HasPrefix(line, "tuic://")
+func (p *HysteriaParser) CanParseLine(line string) bool {
+	return strings.HasPrefix(line, "hysteria://")
 }
 
-func (p *TUICParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *HysteriaParser) Parse(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "tuic://") {
-		return nil, fmt.Errorf("not a valid tuic link")
+
+	if !strings.HasPrefix(line, "hysteria://") {
+		return nil, fmt.Errorf("not a valid hysteria link")
 	}
 
-	line = line[7:]
+	protocol := "hysteria"
+	line = line[11:] // len("hysteria://")
 
-	var remark, uuid, password, server, port string
+	var remark, server, port, password, obfs string
 	var insecure bool
 
 	if idx := strings.LastIndex(line, "#"); idx != -1 {
@@ -43,21 +45,25 @@ func (p *TUICParser) Parse(line string) (core.SubconverterProxy, error) {
 		line = line[:idx]
 		params, _ = url.ParseQuery(queryStr)
 
-		if params.Get("allow_insecure") == "1" || params.Get("allow_insecure") == "true" {
+		if params.Get("insecure") == "1" || params.Get("insecure") == "true" {
 			insecure = true
 		}
-		params.Del("allow_insecure")
+		params.Del("insecure")
+		obfs = params.Get("obfs")
+		params.Del("obfs")
 	}
 
 	if strings.Contains(line, "@") {
 		parts := strings.SplitN(line, "@", 2)
-		auth := parts[0]
+		password = parts[0]
 		line = parts[1]
-
-		authParts := strings.SplitN(auth, ":", 2)
-		uuid = authParts[0]
-		if len(authParts) == 2 {
-			password = authParts[1]
+	} else {
+		if pass := params.Get("password"); pass != "" {
+			password = pass
+			params.Del("password")
+		} else if pass := params.Get("auth"); pass != "" {
+			password = pass
+			params.Del("auth")
 		}
 	}
 
@@ -77,16 +83,16 @@ func (p *TUICParser) Parse(line string) (core.SubconverterProxy, error) {
 		remark = server + ":" + port
 	}
 
-	pObj := &impl.TUICProxy{
+	pObj := &impl.HysteriaProxy{
 		BaseProxy: core.BaseProxy{
-			Type:   "tuic",
+			Type:   protocol,
 			Remark: remark,
 			Server: server,
 			Port:   portNum,
-			Group:  "TUIC",
+			Group:  core.HYSTERIA_DEFAULT_GROUP,
 		},
-		UUID:          uuid,
 		Password:      password,
+		Obfs:          obfs,
 		AllowInsecure: insecure,
 		Params:        params,
 	}

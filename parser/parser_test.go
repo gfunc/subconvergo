@@ -1,9 +1,12 @@
 package parser
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gfunc/subconvergo/parser/core"
 	P "github.com/gfunc/subconvergo/proxy/impl"
 	"github.com/stretchr/testify/assert"
 )
@@ -388,12 +391,7 @@ func TestParseProxyLine(t *testing.T) {
 func TestParseContentSkipsComments(t *testing.T) {
 	content := `# comment line
 ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test`
-	sp := &SubParser{
-		Index: 0,
-		URL:   "",
-		Proxy: "",
-	}
-	result, err := sp.parseContent(content)
+	result, err := core.ParseSubscription(content)
 	if err != nil {
 		t.Fatalf("parseContent returned error: %v", err)
 	}
@@ -411,4 +409,79 @@ func TestSubParser_Parse_RawLine(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, sc.Proxies, 1)
 	assert.Equal(t, "Test", sc.Proxies[0].GetRemark())
+}
+
+func TestSubParser_Parse_TagAndTelegram(t *testing.T) {
+	// Test tag: prefix
+	sp := &SubParser{
+		Index: 0,
+		URL:   "tag:MyGroup,ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:8388#TestSS",
+	}
+	sc, err := sp.Parse()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(sc.Proxies))
+	assert.Equal(t, "TestSS", sc.Proxies[0].GetRemark())
+	assert.Equal(t, "MyGroup", sc.Proxies[0].GetGroup())
+
+	// Test tg://socks
+	sp = &SubParser{
+		Index: 0,
+		URL:   "tg://socks?server=1.2.3.4&port=1080&user=u&pass=p&remarks=TgSocks",
+	}
+	sc, err = sp.Parse()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(sc.Proxies))
+	socks := sc.Proxies[0].(*P.Socks5Proxy)
+	assert.Equal(t, "socks5", socks.Type)
+	assert.Equal(t, "1.2.3.4", socks.Server)
+	assert.Equal(t, 1080, socks.Port)
+	assert.Equal(t, "u", socks.Username)
+	assert.Equal(t, "p", socks.Password)
+	assert.Equal(t, "TgSocks", socks.Remark)
+
+	// Test tg://http
+	sp = &SubParser{
+		Index: 0,
+		URL:   "tg://http?server=1.2.3.4&port=8080&user=u&pass=p&remarks=TgHttp",
+	}
+	sc, err = sp.Parse()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(sc.Proxies))
+	httpProxy := sc.Proxies[0].(*P.HttpProxy)
+	assert.Equal(t, "http", httpProxy.Type)
+	assert.Equal(t, "1.2.3.4", httpProxy.Server)
+	assert.Equal(t, 8080, httpProxy.Port)
+	assert.Equal(t, "u", httpProxy.Username)
+	assert.Equal(t, "p", httpProxy.Password)
+	assert.Equal(t, "TgHttp", httpProxy.Remark)
+
+	// Test nullnode
+	sp = &SubParser{
+		Index: 0,
+		URL:   "nullnode",
+	}
+	sc, err = sp.Parse()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(sc.Proxies))
+}
+
+func TestSubParser_UserAgent(t *testing.T) {
+	expectedUA := "MyCustomUserAgent/1.0"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua := r.Header.Get("User-Agent")
+		if ua != expectedUA {
+			t.Errorf("Expected User-Agent %s, got %s", expectedUA, ua)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:8388#Test%20SS"))
+	}))
+	defer server.Close()
+
+	sp := &SubParser{
+		URL:       server.URL,
+		UserAgent: expectedUA,
+	}
+
+	_, err := sp.ParseSubscription()
+	assert.NoError(t, err)
 }

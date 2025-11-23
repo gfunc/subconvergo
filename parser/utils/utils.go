@@ -91,3 +91,51 @@ func ParsePluginOpts(opts string) map[string]interface{} {
 	}
 	return result
 }
+
+func GetIntField(m map[string]interface{}, key string) int {
+	if v, ok := m[key]; ok {
+		switch val := v.(type) {
+		case float64:
+			return int(val)
+		case int:
+			return val
+		case string:
+			i, _ := strconv.Atoi(val)
+			return i
+		}
+	}
+	return 0
+}
+
+func ToString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(val)
+	default:
+		return ""
+	}
+}
+
+func ToInt(v interface{}) int {
+	if v == nil {
+		return 0
+	}
+	switch val := v.(type) {
+	case float64:
+		return int(val)
+	case int:
+		return val
+	case string:
+		i, _ := strconv.Atoi(val)
+		return i
+	default:
+		return 0
+	}
+}

@@ -15,7 +15,9 @@ type VMessProxy struct {
 	core.BaseProxy `yaml:",inline"`
 	UUID           string `yaml:"uuid" json:"uuid"`
 	AlterID        int    `yaml:"alter_id" json:"alter_id"`
+	Cipher         string `yaml:"cipher" json:"cipher"`
 	Network        string `yaml:"network" json:"network"`
+	FakeType       string `yaml:"fake_type" json:"fake_type"` // Obfuscation type
 	Path           string `yaml:"path" json:"path"`
 	Host           string `yaml:"host" json:"host"`
 	TLS            bool   `yaml:"tls" json:"tls"`

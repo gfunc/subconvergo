@@ -1,13 +1,59 @@
 package core
 
-import "github.com/gfunc/subconvergo/proxy/core"
+import (
+	"github.com/gfunc/subconvergo/config"
+	"github.com/gfunc/subconvergo/proxy/core"
+)
 
-// LineParser defines how to parse a single proxy line
-type LineParser interface {
+// SubContent represents the parsed content of a subscription
+type SubContent struct {
+	Proxies  []core.ProxyInterface
+	Groups   []config.ProxyGroupConfig
+	RawRules []string
+}
+
+// ProxyParser defines how to parse a single proxy configuration
+type ProxyParser interface {
 	// Name returns the protocol name (e.g., "Shadowsocks")
 	Name() string
-	// CanParse checks if the line starts with the protocol prefix
-	CanParse(line string) bool
-	// Parse converts the line into a ProxyInterface
-	Parse(line string) (core.SubconverterProxy, error)
+	// Parse converts the content into a ProxyInterface
+	Parse(content string) (core.SubconverterProxy, error)
+}
+
+// LineMatcher indicates the parser can handle single line configurations (e.g. ss://...)
+type LineMatcher interface {
+	CanParseLine(line string) bool
+}
+
+// SubscriptionParser defines how to parse a full subscription/config file
+type SubscriptionParser interface {
+	// Name returns the parser name
+	Name() string
+	// CanParse checks if the content can be parsed by this parser
+	CanParse(content string) bool
+	// Parse converts the content into SubContent
+	Parse(content string) (*SubContent, error)
+}
+
+type ClashSourceParserMixin interface {
+	ParseClash(config map[string]interface{}) (core.SubconverterProxy, error)
+}
+
+type V2RaySourceParserMixin interface {
+	ParseV2Ray(config map[string]interface{}) (core.SubconverterProxy, error)
+}
+
+type NetchSourceParserMixin interface {
+	ParseNetch(config map[string]interface{}) (core.SubconverterProxy, error)
+}
+
+type SSSourceParserMixin interface {
+	ParseSSConf(config map[string]interface{}) (core.SubconverterProxy, error)
+}
+
+type SSTapSourceParserMixin interface {
+	ParseSSTap(config map[string]interface{}) (core.SubconverterProxy, error)
+}
+type SSAndroidSubscriptionParser interface{
+	ParseSSAndroid(config map[string]interface{}) (core.SubconverterProxy, error)
 }

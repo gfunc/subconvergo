@@ -85,6 +85,7 @@ type NodePrefConfig struct {
 	AppendSubUserinfo     bool               `yaml:"append_sub_userinfo" toml:"append_sub_userinfo" ini:"append_sub_userinfo"`
 	ClashProxiesStyle     string             `yaml:"clash_proxies_style" toml:"clash_proxies_style" ini:"clash_proxies_style"`
 	ClashProxyGroupsStyle string             `yaml:"clash_proxy_groups_style" toml:"clash_proxy_groups_style" ini:"clash_proxy_groups_style"`
+	ClashUseNewField      bool               `yaml:"clash_use_new_field_name" toml:"clash_use_new_field_name" ini:"clash_use_new_field_name"`
 	SingBoxAddClashModes  bool               `yaml:"singbox_add_clash_modes" toml:"singbox_add_clash_modes" ini:"singbox_add_clash_modes"`
 	RenameNodes           []RenameNodeConfig `yaml:"rename_node" toml:"rename_node" ini:"rename_node,,,allowshadow"`
 }
@@ -224,6 +225,8 @@ type ProxySetting struct {
 	NodeList          bool   // deprecated
 
 	SingBoxAddClashMode bool
+	ClashUseNewField    bool
+	SurgeVer            int
 	UDP                 bool
 	TFO                 bool
 	SCV                 bool

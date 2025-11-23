@@ -1,4 +1,4 @@
-package impl
+package proxy
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ func (p *Hysteria2Parser) Name() string {
 	return "Hysteria2"
 }
 
-func (p *Hysteria2Parser) CanParse(line string) bool {
+func (p *Hysteria2Parser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "hysteria2://") || strings.HasPrefix(line, "hy2://")
 }
 
@@ -59,6 +59,7 @@ func (p *Hysteria2Parser) Parse(line string) (core.SubconverterProxy, error) {
 	if proxy.Remark == "" {
 		proxy.Remark = proxy.Server
 	}
+	proxy.Group = core.HYSTERIA2_DEFAULT_GROUP
 
 	return proxy, nil
 }

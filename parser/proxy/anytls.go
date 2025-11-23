@@ -1,4 +1,4 @@
-package impl
+package proxy
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ func (p *AnyTLSParser) Name() string {
 	return "AnyTLS"
 }
 
-func (p *AnyTLSParser) CanParse(line string) bool {
+func (p *AnyTLSParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "anytls://")
 }
 
@@ -97,6 +97,7 @@ func (p *AnyTLSParser) Parse(line string) (core.SubconverterProxy, error) {
 			Remark: remark,
 			Server: server,
 			Port:   port,
+			Group:  core.ANYTLS_DEFAULT_GROUP,
 		},
 		Password:                 password,
 		SNI:                      sni,

@@ -8,26 +8,49 @@ import (
 )
 
 var (
-	parsers []LineParser
-	mu      sync.RWMutex
+	proxyParsers []ProxyParser
+	subParsers   []SubscriptionParser
+	mu           sync.RWMutex
 )
 
-// RegisterParser adds a parser to the registry
-func RegisterParser(p LineParser) {
+// RegisterParser adds a proxy parser to the registry
+func RegisterParser(p ProxyParser) {
 	mu.Lock()
 	defer mu.Unlock()
-	parsers = append(parsers, p)
+	proxyParsers = append(proxyParsers, p)
 }
 
-// ParseLine tries to parse a line using registered parsers
-func ParseLine(line string) (core.SubconverterProxy, error) {
+// RegisterSubscriptionParser adds a subscription parser to the registry
+func RegisterSubscriptionParser(p SubscriptionParser) {
+	mu.Lock()
+	defer mu.Unlock()
+	subParsers = append(subParsers, p)
+}
+
+// ParseProxy tries to parse a proxy config using registered parsers
+func ParseProxy(content string) (core.SubconverterProxy, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 
-	for _, p := range parsers {
-		if p.CanParse(line) {
-			return p.Parse(line)
+	for _, p := range proxyParsers {
+		if matcher, ok := p.(LineMatcher); ok {
+			if matcher.CanParseLine(content) {
+				return p.Parse(content)
+			}
 		}
 	}
-	return nil, fmt.Errorf("no parser found for line: %s", line)
+	return nil, fmt.Errorf("no parser found for content: %s", content)
+}
+
+// ParseSubscription tries to parse a subscription using registered parsers
+func ParseSubscription(content string) (*SubContent, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	for _, p := range subParsers {
+		if p.CanParse(content) {
+			return p.Parse(content)
+		}
+	}
+	return nil, fmt.Errorf("no subscription parser found")
 }

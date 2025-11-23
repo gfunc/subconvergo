@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"strings"
 	"text/template"
@@ -55,8 +56,24 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	target := getParam("target")
 	urlParam := getParam("url")
 	configParam := getParam("config")
+	uaParam := getParam("ua")
 
-	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s", target, urlParam, configParam)
+	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s ua=%s", target, urlParam, configParam, uaParam)
+
+	// Handle auto target detection
+	var clashNewName *bool
+	var surgeVer int = -1
+
+	if target == "auto" {
+		ua := c.Request.Header.Get("User-Agent")
+		matchedTarget, cnn, sv := matchUserAgent(ua)
+		if matchedTarget != "" {
+			target = matchedTarget
+			clashNewName = cnn
+			surgeVer = sv
+			log.Printf("[handler.HandleSub] Auto-detected target=%s from UA=%s", target, ua)
+		}
+	}
 
 	// Validate required parameters
 	if target == "" {
@@ -140,9 +157,10 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 			continue
 		}
 		sp := &parser.SubParser{
-			Index: index,
-			URL:   url,
-			Proxy: config.Global.Common.ProxySubscription,
+			Index:     index,
+			URL:       url,
+			Proxy:     config.Global.Common.ProxySubscription,
+			UserAgent: uaParam,
 		}
 		custom, err := sp.Parse()
 		if err == nil {
@@ -165,6 +183,13 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		log.Printf("[handler.HandleSub] no valid proxies parsed from %d url(s)", len(urlsToProcess))
 		c.String(http.StatusBadRequest, "No valid proxies found")
 		return
+	}
+
+	// Check custom group name override
+	if groupName := getParam("group"); groupName != "" {
+		for _, p := range allProxies {
+			p.SetGroup(groupName)
+		}
 	}
 
 	// Prepare filter patterns
@@ -213,7 +238,16 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 			ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
 			ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
 			SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
+			ClashUseNewField:    config.Global.NodePref.ClashUseNewField,
 		},
+	}
+
+	// Apply auto-detected settings
+	if clashNewName != nil {
+		opts.ProxySetting.ClashUseNewField = *clashNewName
+	}
+	if surgeVer != -1 {
+		opts.ProxySetting.SurgeVer = surgeVer
 	}
 
 	// Apply node preferences to generator options
@@ -239,6 +273,14 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 	if scv := getParam("scv"); scv != "" {
 		opts.SCV = scv == "true"
+	}
+	if newName := getParam("new_name"); newName != "" {
+		opts.ProxySetting.ClashUseNewField = newName == "true"
+	}
+	if ver := getParam("ver"); ver != "" {
+		if v, err := strconv.Atoi(ver); err == nil {
+			opts.ProxySetting.SurgeVer = v
+		}
 	}
 
 	// Prepare request parameters for template rendering
