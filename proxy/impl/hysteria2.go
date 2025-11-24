@@ -96,7 +96,23 @@ func (p *Hysteria2Proxy) ToSurgeConfig(ext *config.ProxySetting) (string, error)
 }
 
 func (p *Hysteria2Proxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
-	return "", fmt.Errorf("hysteria2 not supported in Loon")
+	parts := []string{"hysteria2", p.Server, fmt.Sprintf("%d", p.Port)}
+	if p.Password != "" {
+		parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+	}
+	if p.Sni != "" {
+		parts = append(parts, fmt.Sprintf("sni=%s", p.Sni))
+	}
+	if p.SkipCertVerify || ext.SCV {
+		parts = append(parts, "skip-cert-verify=true")
+	}
+	if p.Obfs != "" {
+		parts = append(parts, fmt.Sprintf("obfs=%s", p.Obfs))
+		if p.ObfsPassword != "" {
+			parts = append(parts, fmt.Sprintf("obfs-password=%s", p.ObfsPassword))
+		}
+	}
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
 }
 
 func (p *Hysteria2Proxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {

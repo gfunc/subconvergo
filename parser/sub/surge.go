@@ -21,7 +21,7 @@ func (p *SurgeSubscriptionParser) Name() string {
 func (p *SurgeSubscriptionParser) CanParse(content string) bool {
 	content = utils.UrlSafeBase64Decode(content)
 	surgeRegex := regexp.MustCompile(`.+\s*?=\s*?(vmess|shadowsocks|http|trojan|ss|ssr|snell|socks5)\s*?,`)
-	
+
 	cfg, err := ini.Load([]byte(content))
 	if err != nil {
 		return false
@@ -96,7 +96,7 @@ func (p *SurgeSubscriptionParser) Parse(content string) (*core.SubContent, error
 		case "vmess":
 			p, parseErr = (&proxy.VMessParser{}).ParseSurge(value)
 
-		case "http", "https":
+		case "http":
 			p, parseErr = (&proxy.HttpParser{}).ParseSurge(value)
 
 		case "trojan":

@@ -59,7 +59,7 @@ func (p *HttpProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 
 func (p *HttpProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	scheme := "http"
-	parts := []string{scheme, fmt.Sprintf("%s:%d", p.Server, p.Port)}
+	parts := []string{scheme, p.Server, fmt.Sprintf("%d", p.Port)}
 	parts = append(parts, fmt.Sprintf("username=%s", p.Username))
 	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
 	if p.Tls {

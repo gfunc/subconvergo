@@ -88,6 +88,9 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 		case "vless":
 			parser := &proxy.VLESSParser{}
 			p, err = parser.ParseClash(proxyMap)
+		case "tuic":
+			parser := &proxy.TUICParser{}
+			p, err = parser.ParseClash(proxyMap)
 		default:
 			p, err = parseMihomoProxy(proxyMap)
 		}

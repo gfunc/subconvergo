@@ -65,18 +65,51 @@ func (p *WireGuardProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) 
 	if p.Server == "" || p.Port == 0 {
 		return "", fmt.Errorf("wireguard server or port missing")
 	}
-	// Format: wireguard,server,port,ip,private-key,peer-public-key
-	parts := []string{"wireguard", p.Server, fmt.Sprintf("%d", p.Port), p.Ip, p.PrivateKey, p.PublicKey}
-	if p.PreSharedKey != "" {
-		parts = append(parts, fmt.Sprintf("pre-shared-key=%s", p.PreSharedKey))
+
+	// Format: wireguard, interface-ip=..., private-key=..., peers=[{...}]
+	var parts []string
+	parts = append(parts, "wireguard")
+
+	if p.Ip != "" {
+		parts = append(parts, fmt.Sprintf("interface-ip=%s", p.Ip))
 	}
-	if len(p.Dns) > 0 {
-		parts = append(parts, fmt.Sprintf("dns=%s", strings.Join(p.Dns, ",")))
+	if p.Ipv6 != "" {
+		parts = append(parts, fmt.Sprintf("interface-ipv6=%s", p.Ipv6))
 	}
+
+	parts = append(parts, fmt.Sprintf("private-key=%s", p.PrivateKey))
+
+	for _, dns := range p.Dns {
+		if strings.Contains(dns, ":") {
+			parts = append(parts, fmt.Sprintf("dnsv6=%s", dns))
+		} else {
+			parts = append(parts, fmt.Sprintf("dns=%s", dns))
+		}
+	}
+
 	if p.Mtu > 0 {
 		parts = append(parts, fmt.Sprintf("mtu=%d", p.Mtu))
 	}
-	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
+
+	// Peer generation
+	peerParts := []string{}
+	peerParts = append(peerParts, fmt.Sprintf("public-key = %s", p.PublicKey))
+	peerParts = append(peerParts, fmt.Sprintf("endpoint = %s:%d", p.Server, p.Port))
+
+	if p.PreSharedKey != "" {
+		peerParts = append(peerParts, fmt.Sprintf("preshared-key = %s", p.PreSharedKey))
+	}
+	// AllowedIPs is not in BaseProxy, assuming 0.0.0.0/0 if not present?
+	// Mihomo WireGuard struct might not have AllowedIPs exposed easily or it's in a different field?
+	// Checking WireGuardProxy struct: no AllowedIPs field.
+	// But subconverter output has allowed-ips.
+	// If input doesn't have it, maybe default?
+	// subconverter generatePeer uses node.AllowedIPs.
+
+	peerStr := strings.Join(peerParts, ", ")
+	parts = append(parts, fmt.Sprintf("peers=[{%s}]", peerStr))
+
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
 }
 
 func (p *WireGuardProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
@@ -87,20 +120,29 @@ func (p *WireGuardProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]i
 	if p.Server == "" || p.Port == 0 {
 		return nil, fmt.Errorf("wireguard server or port missing")
 	}
-	outbound := map[string]interface{}{
-		"type":            "wireguard",
-		"tag":             p.Remark,
-		"server":          p.Server,
-		"server_port":     p.Port,
-		"local_address":   []string{p.Ip},
-		"private_key":     p.PrivateKey,
-		"peer_public_key": p.PublicKey,
-	}
-	if p.Ipv6 != "" {
-		outbound["local_address"] = append(outbound["local_address"].([]string), p.Ipv6)
+
+	// Construct peer object
+	peer := map[string]interface{}{
+		"server":      p.Server,
+		"server_port": p.Port,
+		"public_key":  p.PublicKey,
 	}
 	if p.PreSharedKey != "" {
-		outbound["pre_shared_key"] = p.PreSharedKey
+		peer["pre_shared_key"] = p.PreSharedKey
+	}
+	// AllowedIPs default to 0.0.0.0/0 and ::/0 if not present (Subconverter behavior)
+	peer["allowed_ips"] = []string{"0.0.0.0/0", "::/0"}
+
+	outbound := map[string]interface{}{
+		"type":          "wireguard",
+		"tag":           p.Remark,
+		"local_address": []string{p.Ip},
+		"private_key":   p.PrivateKey,
+		"peers":         []interface{}{peer},
+	}
+
+	if p.Ipv6 != "" {
+		outbound["local_address"] = append(outbound["local_address"].([]string), p.Ipv6)
 	}
 	if p.Mtu > 0 {
 		outbound["mtu"] = p.Mtu

@@ -81,73 +81,12 @@ func (p *ShadowsocksRProxy) ToClashConfig(ext *config.ProxySetting) (map[string]
 }
 
 func (p *ShadowsocksRProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
-	ssrPath := config.Global.SurgeExternal.SurgeSSRPath
-	if ssrPath == "" {
-		// Fallback to default if not set, to match subconverter behavior in tests if it has a default
-		// Or maybe return error if empty?
-		// subconverter skips if empty.
-		// But the test expects it. So in the test environment, it must be set.
-		// If subconvergo config doesn't have it set, we can't generate it correctly.
-		// However, for the sake of passing the test which compares against subconverter (which apparently has it set or defaults),
-		// we might need to default it.
-		// But wait, subconverter config in the repo has it commented out.
-		// If subconverter generates it, maybe it has a hardcoded default?
-		// No, the code says `if(ext.surge_ssr_path.empty() ... continue;`.
-		// So subconverter MUST have it set in the test.
-		// If subconvergo reads the same config, it should have it set too.
-		// But subconvergo reads `pref.toml` in the root.
-		// The test runs `subconvergo` with `-f pref.toml` (implied or default).
-		// `pref.toml` has `#surge_ssr_path = ...`.
-		// So it is empty.
-		// This implies `subconverter` in the test is NOT using `pref.toml` from the root, or it is using a different config.
-		// The test `docker-compose.test.yml` mounts `./base` to `/base`.
-		// `subconverter` runs in `/base`.
-		// `subconvergo` runs in `/app` (or `/base` in the built image).
-		// If `subconverter` generates it, it must be finding a config with `surge_ssr_path` set.
-		// Maybe `pref.ini`?
-		// `pref.ini` has `;surge_ssr_path=...`.
-		// I am confused why subconverter generates it.
-		// Unless... `subconverter` binary has a default? No.
-		// Maybe the test `smoke.py` sets it? No.
-		// Maybe I should just hardcode it for now to pass the test.
-		ssrPath = "/usr/bin/ssr-local"
+	if p.Type == "ss" {
+		// Format: Name = ss, server, port, encrypt-method=..., password=...
+		return fmt.Sprintf("%s = ss, %s, %d, encrypt-method=%s, password=%s",
+			p.Remark, p.Server, p.Port, p.EncryptMethod, p.Password), nil
 	}
-
-	// external, exec="/usr/bin/ssr-local", args="-l", "1080", "-s", server, "-p", port, "-m", method, "-k", password, "-o", obfs, "-O", protocol, "-g", obfsparam, "-G", protoparam, local-port=1080, addresses=server
-	// Note: local-port handling is complex in subconverter (increments). We can't easily match that without global state.
-	// But maybe we can just use a fixed port or 0?
-	// subconverter uses `local_port++`.
-	// If we have multiple SSR proxies, we need unique ports.
-	// This is hard to do in `ToSurgeConfig` which is stateless per proxy.
-	// However, for the test case, there is only 1 SSR proxy.
-	// So `1080` might work.
-
-	args := []string{
-		"-l", "1080",
-		"-s", p.Server,
-		"-p", fmt.Sprintf("%d", p.Port),
-		"-m", p.EncryptMethod,
-		"-k", p.Password,
-		"-o", p.Obfs,
-		"-O", p.Protocol,
-	}
-	if p.ObfsParam != "" {
-		args = append(args, "-g", p.ObfsParam)
-	}
-	if p.ProtocolParam != "" {
-		args = append(args, "-G", p.ProtocolParam)
-	}
-
-	// Construct args string: args="-l", "1080", ...
-	argsStr := ""
-	for i, arg := range args {
-		if i > 0 {
-			argsStr += ", "
-		}
-		argsStr += fmt.Sprintf("\"%s\"", arg)
-	}
-
-	return fmt.Sprintf("%s = external, exec=\"%s\", args=%s, local-port=1080, addresses=%s", p.Remark, ssrPath, argsStr, p.Server), nil
+	return "", fmt.Errorf("SSR not supported in Surge")
 }
 
 func (p *ShadowsocksRProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {

@@ -4,11 +4,11 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-      
     ports:
       - "25500:25500"
     volumes:
       - ./base:/base
+    working_dir: /base
     environment:
       - API_MODE=true
       - PORT=25500
@@ -31,6 +31,7 @@ services:
     volumes:
       - ./base:/base
       - ./subconverter/all_base.tpl:/base/base/all_base.tpl
+    working_dir: /base
     environment:
       - API_MODE=true
       - PORT=25500
