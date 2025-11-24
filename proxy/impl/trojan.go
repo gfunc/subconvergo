@@ -89,7 +89,15 @@ func (p *TrojanProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interf
 }
 
 func (p *TrojanProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
-	parts := []string{"trojan", fmt.Sprintf("%s:%d", p.Server, p.Port), fmt.Sprintf("password=%s", p.Password)}
+	surgeVer := 3
+	if ext != nil && ext.SurgeVer != 0 {
+		surgeVer = ext.SurgeVer
+	}
+	if surgeVer < 4 {
+		return "", fmt.Errorf("Trojan not supported in Surge < 4")
+	}
+
+	parts := []string{"trojan", p.Server, fmt.Sprintf("%d", p.Port), fmt.Sprintf("password=%s", p.Password)}
 
 	if p.Network == "ws" {
 		parts = append(parts, "ws=true")
@@ -115,7 +123,7 @@ func (p *TrojanProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 }
 
 func (p *TrojanProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
-	parts := []string{"trojan", fmt.Sprintf("%s:%d", p.Server, p.Port), fmt.Sprintf("password=%s", p.Password)}
+	parts := []string{"trojan", p.Server, fmt.Sprintf("%d", p.Port), fmt.Sprintf("password=%s", p.Password)}
 
 	if p.Network == "ws" {
 		parts = append(parts, "ws=true")

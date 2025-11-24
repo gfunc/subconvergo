@@ -97,3 +97,60 @@ func (p *HysteriaParser) ParseSingle(line string) (core.SubconverterProxy, error
 	}
 	return utils.ToMihomoProxy(pObj)
 }
+
+// ParseClash parses a Clash config map
+func (p *HysteriaParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+	server := utils.GetStringField(config, "server")
+	port := utils.GetIntField(config, "port")
+	name := utils.GetStringField(config, "name")
+
+	proxyType := utils.GetStringField(config, "type")
+
+	password := utils.GetStringField(config, "auth-str")
+	if password == "" {
+		password = utils.GetStringField(config, "password")
+	}
+
+	obfs := utils.GetStringField(config, "obfs")
+
+	params := url.Values{}
+	if up := utils.GetStringField(config, "up"); up != "" {
+		params.Set("up", up)
+	}
+	if down := utils.GetStringField(config, "down"); down != "" {
+		params.Set("down", down)
+	}
+	if sni := utils.GetStringField(config, "sni"); sni != "" {
+		params.Set("sni", sni)
+	}
+	if skipCertVerify := config["skip-cert-verify"]; skipCertVerify == true {
+		params.Set("insecure", "1")
+	}
+
+	// Handle ALPN
+	if alpn, ok := config["alpn"].([]interface{}); ok {
+		var alpnStrs []string
+		for _, a := range alpn {
+			if s, ok := a.(string); ok {
+				alpnStrs = append(alpnStrs, s)
+			}
+		}
+		if len(alpnStrs) > 0 {
+			params.Set("alpn", strings.Join(alpnStrs, ","))
+		}
+	}
+
+	h := &impl.HysteriaProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   proxyType,
+			Server: server,
+			Port:   port,
+			Remark: name,
+		},
+		Password:      password,
+		Obfs:          obfs,
+		AllowInsecure: params.Get("insecure") == "1",
+		Params:        params,
+	}
+	return utils.ToMihomoProxy(h)
+}

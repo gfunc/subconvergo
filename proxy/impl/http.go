@@ -14,6 +14,7 @@ type HttpProxy struct {
 	Username       string `yaml:"username" json:"username"`
 	Password       string `yaml:"password" json:"password"`
 	Tls            bool   `yaml:"tls" json:"tls"`
+	SkipCertVerify bool   `yaml:"skip-cert-verify" json:"skip-cert-verify"`
 }
 
 func (p *HttpProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
@@ -49,22 +50,25 @@ func (p *HttpProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 	}
 	if p.Tls {
 		options["tls"] = true
+		if p.SkipCertVerify || ext.SCV {
+			options["skip-cert-verify"] = true
+		}
 	}
 	return options, nil
 }
 
 func (p *HttpProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	scheme := "http"
-	if p.Tls {
-		scheme = "https"
-	}
 	parts := []string{scheme, fmt.Sprintf("%s:%d", p.Server, p.Port)}
 	parts = append(parts, fmt.Sprintf("username=%s", p.Username))
 	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+	if p.Tls {
+		parts = append(parts, "tls=true")
+	}
 	if ext.TFO {
 		parts = append(parts, "tfo=true")
 	}
-	if p.Tls && ext.SCV {
+	if p.Tls && (p.SkipCertVerify || ext.SCV) {
 		parts = append(parts, "skip-cert-verify=true")
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
@@ -77,7 +81,7 @@ func (p *HttpProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 	}
 	// Format: http,server,port,username,"password"
 	part := fmt.Sprintf("%s,%s,%d,%s,\"%s\"", scheme, p.Server, p.Port, p.Username, p.Password)
-	if p.Tls && ext.SCV {
+	if p.Tls && (p.SkipCertVerify || ext.SCV) {
 		part += ",skip-cert-verify=true"
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, part), nil

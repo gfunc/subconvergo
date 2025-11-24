@@ -120,6 +120,14 @@ func (p *HysteriaProxy) ToClashConfig(ext *config.ProxySetting) (map[string]inte
 }
 
 func (p *HysteriaProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	surgeVer := 3
+	if ext != nil && ext.SurgeVer != 0 {
+		surgeVer = ext.SurgeVer
+	}
+	if surgeVer < 4 {
+		return "", fmt.Errorf("Hysteria not supported in Surge < 4")
+	}
+
 	parts := []string{p.Type, p.Server, fmt.Sprintf("%d", p.Port)}
 	if p.Type == "hysteria2" {
 		parts = append(parts, fmt.Sprintf("password=%s", p.Password))
@@ -172,45 +180,7 @@ func (p *HysteriaProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) 
 }
 
 func (p *HysteriaProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
-	// Format: hysteria,server,port,auth_str=...,...
-	parts := []string{p.Type, p.Server, fmt.Sprintf("%d", p.Port)}
-	if p.Type == "hysteria2" {
-		parts = append(parts, fmt.Sprintf("password=\"%s\"", p.Password))
-	} else {
-		parts = append(parts, fmt.Sprintf("auth_str=\"%s\"", p.Password))
-	}
-
-	if p.Params != nil {
-		if sni := p.Params.Get("sni"); sni != "" {
-			parts = append(parts, fmt.Sprintf("sni=%s", sni))
-		} else if peer := p.Params.Get("peer"); peer != "" {
-			parts = append(parts, fmt.Sprintf("sni=%s", peer))
-		}
-		if alpn := p.Params.Get("alpn"); alpn != "" {
-			parts = append(parts, fmt.Sprintf("alpn=\"%s\"", alpn))
-		}
-		if p.Type == "hysteria" {
-			up := p.Params.Get("upmbps")
-			if up == "" {
-				up = p.Params.Get("up")
-			}
-			down := p.Params.Get("downmbps")
-			if down == "" {
-				down = p.Params.Get("down")
-			}
-			if up != "" {
-				parts = append(parts, fmt.Sprintf("up=%s", up))
-			}
-			if down != "" {
-				parts = append(parts, fmt.Sprintf("down=%s", down))
-			}
-		}
-	}
-
-	if p.AllowInsecure {
-		parts = append(parts, "skip-cert-verify=true")
-	}
-	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
+	return "", fmt.Errorf("hysteria not supported in Loon")
 }
 
 func (p *HysteriaProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {

@@ -40,6 +40,9 @@ func (p *SnellProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 }
 
 func (p *SnellProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	if p.Version >= 4 {
+		return nil, fmt.Errorf("snell version %d not supported in Clash", p.Version)
+	}
 	options := map[string]interface{}{
 		"type":   "snell",
 		"name":   p.Remark,

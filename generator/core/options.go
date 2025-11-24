@@ -19,7 +19,8 @@ type GeneratorOptions struct {
 	Pipelines       []transformers.Transformer
 
 	// Additional options from legacy core
-	Type string
-	Base string
-	Rule bool
+	Type     string
+	Base     string
+	Rule     bool
+	SurgeVer int
 }

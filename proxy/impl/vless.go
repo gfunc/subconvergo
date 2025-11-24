@@ -116,27 +116,7 @@ func (p *VLESSProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 }
 
 func (p *VLESSProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
-	// Format: vless,server,port,uuid,transport,args
-	parts := []string{"vless", p.Server, fmt.Sprintf("%d", p.Port), p.UUID}
-	if p.Network == "ws" {
-		parts = append(parts, "transport=ws")
-		if p.Path != "" {
-			parts = append(parts, fmt.Sprintf("path=\"%s\"", p.Path))
-		}
-		if p.Host != "" {
-			parts = append(parts, fmt.Sprintf("host=\"%s\"", p.Host))
-		}
-	}
-	if p.TLS {
-		parts = append(parts, "over-tls=true")
-		if p.SNI != "" {
-			parts = append(parts, fmt.Sprintf("u-tls-name=%s", p.SNI))
-		}
-	}
-	if p.AllowInsecure {
-		parts = append(parts, "skip-cert-verify=true")
-	}
-	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
+	return "", fmt.Errorf("ToLoonConfig not supported for proxy type vless")
 }
 
 func (p *VLESSProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {

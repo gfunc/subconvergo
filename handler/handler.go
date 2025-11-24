@@ -283,6 +283,11 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		}
 	}
 
+	// Default Surge version to 3 if not set
+	if opts.ProxySetting.SurgeVer == 0 {
+		opts.ProxySetting.SurgeVer = 3
+	}
+
 	// Prepare request parameters for template rendering
 	requestParams := map[string]string{
 		"target": target,

@@ -67,7 +67,15 @@ func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 }
 
 func (p *Hysteria2Proxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
-	parts := []string{"hysteria2", fmt.Sprintf("%s:%d", p.Server, p.Port)}
+	surgeVer := 3
+	if ext != nil && ext.SurgeVer != 0 {
+		surgeVer = ext.SurgeVer
+	}
+	if surgeVer < 4 {
+		return "", fmt.Errorf("Hysteria2 not supported in Surge < 4")
+	}
+
+	parts := []string{"hysteria2", p.Server, fmt.Sprintf("%d", p.Port)}
 	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
 	if p.Sni != "" {
 		parts = append(parts, fmt.Sprintf("sni=%s", p.Sni))
@@ -88,41 +96,11 @@ func (p *Hysteria2Proxy) ToSurgeConfig(ext *config.ProxySetting) (string, error)
 }
 
 func (p *Hysteria2Proxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
-	// Format: hysteria2,server,port,"password"
-	parts := []string{"hysteria2", p.Server, fmt.Sprintf("%d", p.Port), fmt.Sprintf("\"%s\"", p.Password)}
-	if p.Sni != "" {
-		parts = append(parts, fmt.Sprintf("sni=%s", p.Sni))
-	}
-	if p.SkipCertVerify {
-		parts = append(parts, "skip-cert-verify=true")
-	}
-	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
+	return "", fmt.Errorf("hysteria2 not supported in Loon")
 }
 
 func (p *Hysteria2Proxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
-	// Format: hysteria2=server:port, password=password, sni=sni, obfs=obfs, obfs-password=obfs-password, fast-open=true/false, udp-relay=true/false, tag=tag
-	parts := []string{fmt.Sprintf("hysteria2=%s:%d", p.Server, p.Port)}
-	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
-	if p.Sni != "" {
-		parts = append(parts, fmt.Sprintf("sni=%s", p.Sni))
-	}
-	if p.Obfs != "" {
-		parts = append(parts, fmt.Sprintf("obfs=%s", p.Obfs))
-		if p.ObfsPassword != "" {
-			parts = append(parts, fmt.Sprintf("obfs-password=%s", p.ObfsPassword))
-		}
-	}
-	if p.SkipCertVerify {
-		parts = append(parts, "tls-verification=false")
-	}
-	if ext.TFO {
-		parts = append(parts, "fast-open=true")
-	}
-	if ext.UDP {
-		parts = append(parts, "udp-relay=true")
-	}
-	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))
-	return strings.Join(parts, ", "), nil
+	return "", fmt.Errorf("ToQuantumultXConfig not supported for proxy type hysteria2")
 }
 
 func (p *Hysteria2Proxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {

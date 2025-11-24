@@ -12,6 +12,7 @@ import (
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/parser/core"
 	"github.com/gfunc/subconvergo/parser/proxy"
+	"github.com/gfunc/subconvergo/parser/utils"
 	proxyCore "github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
 	"github.com/metacubex/mihomo/adapter"
@@ -78,6 +79,15 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 		case "socks5":
 			parser := &proxy.Socks5Parser{}
 			p, err = parser.ParseClash(proxyMap)
+		case "wireguard":
+			parser := &proxy.WireGuardParser{}
+			p, err = parser.ParseClash(proxyMap)
+		case "hysteria", "hysteria2":
+			parser := &proxy.HysteriaParser{}
+			p, err = parser.ParseClash(proxyMap)
+		case "vless":
+			parser := &proxy.VLESSParser{}
+			p, err = parser.ParseClash(proxyMap)
 		default:
 			p, err = parseMihomoProxy(proxyMap)
 		}
@@ -131,23 +141,28 @@ func ParseMihomoProxy(protocol, content string) (*impl.MihomoProxy, error) {
 
 func parseMihomoProxy(options map[string]any) (*impl.MihomoProxy, error) {
 	mihomoProxy, err := adapter.ParseProxy(options)
-	if err != nil {
-		return nil, err
+
+	var server string
+	var port int
+	var remark string
+
+	if err == nil {
+		addr := mihomoProxy.Addr()
+		var portStr string
+		server, portStr, _ = net.SplitHostPort(addr)
+		port, _ = strconv.Atoi(portStr)
+		remark = mihomoProxy.Name()
+	} else {
+		log.Printf("mihomo adapter failed to parse proxy: %v, falling back to manual extraction", err)
+		server = utils.GetStringField(options, "server")
+		port = utils.GetIntField(options, "port")
+		remark = utils.GetStringField(options, "name")
 	}
-	addr := mihomoProxy.Addr()
-	// parse addr to server and port
-	server, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid address format: %s, %w", addr, err)
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid port in address: %s", addr)
-	}
+
 	return &impl.MihomoProxy{
 		ProxyInterface: &proxyCore.BaseProxy{
 			Type:   options["type"].(string),
-			Remark: mihomoProxy.Name(),
+			Remark: remark,
 			Server: server,
 			Port:   port,
 		},

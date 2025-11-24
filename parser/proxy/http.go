@@ -127,6 +127,8 @@ func (p *HttpParser) ParseSurge(content string) (core.SubconverterProxy, error) 
 				http.Username = v
 			case "password":
 				http.Password = v
+			case "skip-cert-verify":
+				http.SkipCertVerify = v == "true"
 			}
 		}
 	}
@@ -142,6 +144,7 @@ func (p *HttpParser) ParseClash(config map[string]interface{}) (core.Subconverte
 	username := utils.GetStringField(config, "username")
 	password := utils.GetStringField(config, "password")
 	tls := utils.GetStringField(config, "tls") == "true" || config["tls"] == true
+	skipCertVerify := utils.GetStringField(config, "skip-cert-verify") == "true" || config["skip-cert-verify"] == true
 
 	http := &impl.HttpProxy{
 		BaseProxy: core.BaseProxy{
@@ -150,9 +153,10 @@ func (p *HttpParser) ParseClash(config map[string]interface{}) (core.Subconverte
 			Port:   port,
 			Remark: name,
 		},
-		Username: username,
-		Password: password,
-		Tls:      tls,
+		Username:       username,
+		Password:       password,
+		Tls:            tls,
+		SkipCertVerify: skipCertVerify,
 	}
 	return utils.ToMihomoProxy(http)
 }

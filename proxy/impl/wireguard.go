@@ -27,6 +27,9 @@ func (p *WireGuardProxy) ToSingleConfig(ext *config.ProxySetting) (string, error
 }
 
 func (p *WireGuardProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	if p.Server == "" || p.Port == 0 {
+		return nil, fmt.Errorf("wireguard server or port missing")
+	}
 	options := map[string]interface{}{
 		"type":        "wireguard",
 		"name":        p.Remark,
@@ -59,6 +62,9 @@ func (p *WireGuardProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error)
 }
 
 func (p *WireGuardProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
+	if p.Server == "" || p.Port == 0 {
+		return "", fmt.Errorf("wireguard server or port missing")
+	}
 	// Format: wireguard,server,port,ip,private-key,peer-public-key
 	parts := []string{"wireguard", p.Server, fmt.Sprintf("%d", p.Port), p.Ip, p.PrivateKey, p.PublicKey}
 	if p.PreSharedKey != "" {
@@ -78,6 +84,9 @@ func (p *WireGuardProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, 
 }
 
 func (p *WireGuardProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+	if p.Server == "" || p.Port == 0 {
+		return nil, fmt.Errorf("wireguard server or port missing")
+	}
 	outbound := map[string]interface{}{
 		"type":            "wireguard",
 		"tag":             p.Remark,

@@ -31,6 +31,7 @@ func (g *SurgeGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 	// Add base configuration
 	output.WriteString(opts.Base)
 	output.WriteString("\n\n[Proxy]\n")
+	output.WriteString("DIRECT = direct\n")
 
 	// Generate proxy section
 	var validProxies []pc.ProxyInterface

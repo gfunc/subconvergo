@@ -85,7 +85,10 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) (map[string]i
 }
 
 func (p *ShadowsocksProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
-	parts := []string{"ss", fmt.Sprintf("%s:%d", p.Server, p.Port)}
+	if p.Plugin == "v2ray-plugin" {
+		return "", fmt.Errorf("v2ray-plugin not supported in Surge")
+	}
+	parts := []string{"ss", p.Server, fmt.Sprintf("%d", p.Port)}
 	parts = append(parts, fmt.Sprintf("encrypt-method=%s", p.EncryptMethod))
 	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
 	if ext.UDP {
@@ -106,7 +109,25 @@ func (p *ShadowsocksProxy) ToSurgeConfig(ext *config.ProxySetting) (string, erro
 }
 
 func (p *ShadowsocksProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
-	return p.ToSurgeConfig(ext)
+	// Format: Name = Shadowsocks,server,port,method,"password"
+	parts := []string{"Shadowsocks", p.Server, fmt.Sprintf("%d", p.Port), p.EncryptMethod, fmt.Sprintf("\"%s\"", p.Password)}
+
+	if p.Plugin == "simple-obfs" || p.Plugin == "obfs-local" || p.Plugin == "obfs" {
+		if mode, ok := p.PluginOpts["obfs"]; ok {
+			parts = append(parts, fmt.Sprintf("%v", mode))
+		} else if mode, ok := p.PluginOpts["mode"]; ok {
+			parts = append(parts, fmt.Sprintf("%v", mode))
+		}
+		if host, ok := p.PluginOpts["obfs-host"]; ok {
+			parts = append(parts, fmt.Sprintf("%v", host))
+		} else if host, ok := p.PluginOpts["host"]; ok {
+			parts = append(parts, fmt.Sprintf("%v", host))
+		}
+	} else if p.Plugin != "" {
+		return "", fmt.Errorf("plugin %s not supported in Loon", p.Plugin)
+	}
+
+	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
 }
 
 func (p *ShadowsocksProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {

@@ -75,6 +75,14 @@ func (p *TUICProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 }
 
 func (p *TUICProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
+	surgeVer := 3
+	if ext != nil && ext.SurgeVer != 0 {
+		surgeVer = ext.SurgeVer
+	}
+	if surgeVer < 4 {
+		return "", fmt.Errorf("TUIC not supported in Surge < 4")
+	}
+
 	parts := []string{"tuic", p.Server, fmt.Sprintf("%d", p.Port)}
 	if p.UUID != "" {
 		parts = append(parts, fmt.Sprintf("uuid=%s", p.UUID))
@@ -105,25 +113,7 @@ func (p *TUICProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 }
 
 func (p *TUICProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
-	// Format: tuic,server,port,uuid,password,args
-	parts := []string{"tuic", p.Server, fmt.Sprintf("%d", p.Port), p.UUID, fmt.Sprintf("%s", p.Password)}
-
-	if p.Params != nil {
-		if sni := p.Params.Get("sni"); sni != "" {
-			parts = append(parts, fmt.Sprintf("sni=%s", sni))
-		}
-		if alpn := p.Params.Get("alpn"); alpn != "" {
-			parts = append(parts, fmt.Sprintf("alpn=%s", alpn))
-		}
-		if congestion := p.Params.Get("congestion_control"); congestion != "" {
-			parts = append(parts, fmt.Sprintf("congestion_controller=%s", congestion))
-		}
-	}
-
-	if p.AllowInsecure {
-		parts = append(parts, "skip-cert-verify=true")
-	}
-	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
+	return "", fmt.Errorf("ToLoonConfig not supported for proxy type tuic")
 }
 
 func (p *TUICProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
@@ -137,34 +127,35 @@ func (p *TUICProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interf
 		"server":      p.Server,
 		"server_port": p.Port,
 		"uuid":        p.UUID,
-		"password":    p.Password,
 	}
-
-	tls := map[string]interface{}{
-		"enabled": true,
+	if p.Password != "" {
+		outbound["password"] = p.Password
 	}
 
 	if p.Params != nil {
 		if sni := p.Params.Get("sni"); sni != "" {
-			tls["server_name"] = sni
+			outbound["sni"] = sni
 		}
-		if alpn := p.Params.Get("alpn"); alpn != "" {
-			tls["alpn"] = strings.Split(alpn, ",")
-		}
-	}
-	if p.AllowInsecure {
-		tls["insecure"] = true
-	}
-	outbound["tls"] = tls
-
-	if p.Params != nil {
 		if congestion := p.Params.Get("congestion_control"); congestion != "" {
-			outbound["congestion_control"] = congestion
+			outbound["congestion_controller"] = congestion
 		}
 		if udpRelay := p.Params.Get("udp_relay_mode"); udpRelay != "" {
 			outbound["udp_relay_mode"] = udpRelay
 		}
 	}
+
+	tls := map[string]interface{}{
+		"enabled": true,
+	}
+	if p.AllowInsecure || ext.SCV {
+		tls["insecure"] = true
+	}
+	if p.Params != nil {
+		if alpn := p.Params.Get("alpn"); alpn != "" {
+			tls["alpn"] = strings.Split(alpn, ",")
+		}
+	}
+	outbound["tls"] = tls
 
 	return outbound, nil
 }

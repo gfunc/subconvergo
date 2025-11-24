@@ -57,7 +57,7 @@ func (p *Socks5Proxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	return line, nil
 }
 
-func (p *Socks5Proxy) ToQuanXConfig(ext *config.ProxySetting) (string, error) {
+func (p *Socks5Proxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
 	// Format: socks5=Server:Port, username=..., password=..., tag=Remark
 	line := fmt.Sprintf("socks5=%s:%d", p.Server, p.Port)
 	if p.Username != "" {
@@ -74,7 +74,7 @@ func (p *Socks5Proxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 	return p.ToSurgeConfig(ext)
 }
 
-func (p *Socks5Proxy) ToSingBoxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
+func (p *Socks5Proxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
 	outbound := map[string]interface{}{
 		"type":        "socks",
 		"tag":         p.Remark,

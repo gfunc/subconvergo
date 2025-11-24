@@ -107,6 +107,18 @@ func GetIntField(m map[string]interface{}, key string) int {
 	return 0
 }
 
+func GetBoolField(m map[string]interface{}, key string) bool {
+	if v, ok := m[key]; ok {
+		switch val := v.(type) {
+		case bool:
+			return val
+		case string:
+			return val == "true"
+		}
+	}
+	return false
+}
+
 func ToString(v interface{}) string {
 	if v == nil {
 		return ""

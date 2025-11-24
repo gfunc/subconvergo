@@ -145,7 +145,15 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 }
 
 func (p *VMessProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
-	parts := []string{"vmess", fmt.Sprintf("%s:%d", p.Server, p.Port), fmt.Sprintf("username=%s", p.UUID)}
+	surgeVer := 3
+	if ext != nil && ext.SurgeVer != 0 {
+		surgeVer = ext.SurgeVer
+	}
+	if surgeVer < 4 {
+		return "", fmt.Errorf("VMess not supported in Surge < 4")
+	}
+
+	parts := []string{"vmess", p.Server, fmt.Sprintf("%d", p.Port), fmt.Sprintf("username=%s", p.UUID)}
 
 	if p.Network == "ws" {
 		parts = append(parts, "ws=true")
@@ -183,12 +191,15 @@ func (p *VMessProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 }
 
 func (p *VMessProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
-	parts := []string{"vmess", fmt.Sprintf("%s:%d", p.Server, p.Port), fmt.Sprintf("username=%s", p.UUID)}
+	if p.Network == "grpc" {
+		return "", fmt.Errorf("VMess gRPC not supported in Loon")
+	}
+	parts := []string{"vmess", p.Server, fmt.Sprintf("%d", p.Port), fmt.Sprintf("username=%s", p.UUID)}
 
 	if p.Network == "ws" {
-		parts = append(parts, "ws=true")
+		parts = append(parts, "transport=ws")
 		if p.Path != "" {
-			parts = append(parts, fmt.Sprintf("ws-path=%s", p.Path))
+			parts = append(parts, fmt.Sprintf("path=%s", p.Path))
 		}
 		if p.Host != "" {
 			parts = append(parts, fmt.Sprintf("ws-headers=Host:%s", p.Host))

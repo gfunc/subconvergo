@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Minimal docker-based smoke test runner for subconvergo."""
 
+import argparse
 import base64
 import json
+import re
 import subprocess
+import sys
 import time
 from pathlib import Path
+from typing import List, Dict, Any
 
 import requests
 import yaml
@@ -71,7 +75,7 @@ def base_pref() -> dict:
             ]
         },
         "template": {
-            "template_path": "base/base",
+            "template_path": "base",
             "globals": [
                 {"key": "clash.http_port", "value": 7890},
                 {"key": "clash.socks_port", "value": 7891},
@@ -107,7 +111,30 @@ def pref_variant(case: str) -> dict:
     elif case == "filters_regex":
         pref["common"]["include_remarks"] = ["/^HK/"]
         pref["common"]["exclude_remarks"] = []
+    elif case in ("exclude_remarks", "e2e_matrix_exclude"):
+        pref["common"]["exclude_remarks"] = ["HK"]
+    elif case in ("include_remarks", "e2e_matrix_include"):
+        pref["common"]["include_remarks"] = ["HK"]
+    elif case in ("emoji_rule", "e2e_matrix_emoji"):
+        pref["emojis"] = {
+            "add_emoji": True,
+            "remove_old_emoji": True,
+            "rules": [
+                {"match": "(HK|Hong Kong)", "emoji": "🇭🇰"},
+                {"match": "(US|United States)", "emoji": "🇺🇸"},
+            ]
+        }
+    elif case in ("rename_node", "e2e_matrix_rename"):
+        pref["node_pref"]["rename_node"] = [
+            {"match": "HK", "replace": "Hong Kong"},
+            {"match": "US", "replace": "United States"},
+        ]
+    elif case in ("userinfo", "e2e_matrix_userinfo"):
+        pref["node_pref"]["append_sub_userinfo"] = True
     elif case == "e2e_matrix":
+        # Use base pref
+        pass
+    elif case == "settings_comparison":
         # Use base pref
         pass
     else:
@@ -128,13 +155,21 @@ def restore_pref() -> None:
         PREF_PATH.unlink()
 
 
-def compose_up() -> None:
-    cmd = ["docker", "compose", "-f", str(COMPOSE_FILE), "up", "--build", "-d"]
+def compose_up(build: bool = True) -> None:
+    cmd = ["docker", "compose", "-f", str(COMPOSE_FILE), "up"]
+    if build:
+        cmd.append("--build")
+    cmd.append("-d")
     subprocess.run(cmd, cwd=TESTS_DIR, check=True)
 
 
 def compose_down() -> None:
     cmd = ["docker", "compose", "-f", str(COMPOSE_FILE), "down", "--volumes", "--remove-orphans"]
+    subprocess.run(cmd, cwd=TESTS_DIR, check=True)
+
+
+def restart_services() -> None:
+    cmd = ["docker", "compose", "-f", str(COMPOSE_FILE), "restart"]
     subprocess.run(cmd, cwd=TESTS_DIR, check=True)
 
 
@@ -186,7 +221,140 @@ def assert_rules(struct: dict) -> None:
         raise AssertionError("rules list missing MATCH entries")
 
 
+def count_proxies(content: str, target: str) -> int:
+    if not content:
+        return 0
+    try:
+        proxies = extract_proxies(content, target)
+        return len(proxies)
+    except Exception:
+        pass
+    return -1
+
+
+def extract_proxies(content: str, target: str) -> List[Dict[str, Any]]:
+    """Extract list of proxies with normalized keys: name, type, server, port."""
+    proxies = []
+    if not content:
+        return proxies
+    try:
+        if target == "clash":
+            data = yaml.safe_load(content)
+            if isinstance(data, dict):
+                for p in data.get("proxies", []):
+                    proxies.append({
+                        "name": str(p.get("name", "")),
+                        "type": str(p.get("type", "")),
+                        "server": str(p.get("server", "")),
+                        "port": str(p.get("port", "")),
+                        "original": p
+                    })
+        elif target == "singbox":
+            data = json.loads(content)
+            if isinstance(data, dict):
+                for p in data.get("outbounds", []):
+                    # Skip structural outbounds
+                    if p.get("type") in ["selector", "urltest", "direct", "block", "dns"]:
+                        continue
+                    proxies.append({
+                        "name": str(p.get("tag", "")),
+                        "type": str(p.get("type", "")),
+                        "server": str(p.get("server", "")),
+                        "port": str(p.get("server_port", "")),
+                        "original": p
+                    })
+        elif target in ["surge", "loon"]:
+            match = re.search(r'\[Proxy\]\s*(.*?)\s*(\[|$)', content, re.DOTALL | re.IGNORECASE)
+            if match:
+                lines = [l.strip() for l in match.group(1).splitlines() if l.strip() and not l.strip().startswith(('#', ';'))]
+                for line in lines:
+                    if "=" in line:
+                        name, rest = line.split("=", 1)
+                        parts = [p.strip() for p in rest.split(",")]
+                        if len(parts) >= 3:
+                            proxies.append({
+                                "name": name.strip(),
+                                "type": parts[0],
+                                "server": parts[1],
+                                "port": parts[2],
+                                "original": line
+                            })
+                        else:
+                             proxies.append({"name": name.strip(), "original": line})
+        elif target == "quanx":
+             for section in ["server_remote", "server_local"]:
+                 match = re.search(rf'\[{section}\]\s*(.*?)\s*(\[|$)', content, re.DOTALL | re.IGNORECASE)
+                 if match:
+                    lines = [l.strip() for l in match.group(1).splitlines() if l.strip() and not l.strip().startswith(('#', ';'))]
+                    for line in lines:
+                        tag_match = re.search(r'tag\s*=\s*([^,]+)', line)
+                        if tag_match:
+                            name = tag_match.group(1).strip()
+                            # Try to extract type/server/port if possible, but QuanX format varies
+                            # e.g. shadowsocks=server:port,...
+                            # or vmess=server:port,...
+                            # Simple heuristic for server:port
+                            parts = line.split("=")
+                            if len(parts) > 1:
+                                type_part = parts[0].strip()
+                                val_part = parts[1]
+                                server_port = val_part.split(",")[0]
+                                if ":" in server_port:
+                                    srv, prt = server_port.split(":", 1)
+                                    proxies.append({
+                                        "name": name,
+                                        "type": type_part,
+                                        "server": srv.strip(),
+                                        "port": prt.strip(),
+                                        "original": line
+                                    })
+                                    continue
+                            proxies.append({"name": name, "original": line})
+    except Exception:
+        pass
+    return proxies
+
+
+def compare_proxy_lists(cand_proxies: List[Dict[str, Any]], ref_proxies: List[Dict[str, Any]]) -> str:
+    """Compare two lists of proxies and return a status string."""
+    cand_map = {p["name"]: p for p in cand_proxies}
+    ref_map = {p["name"]: p for p in ref_proxies}
+    
+    cand_names = set(cand_map.keys())
+    ref_names = set(ref_map.keys())
+    
+    if cand_names == ref_names:
+        # Check details
+        mismatches = []
+        for name in cand_names:
+            c = cand_map[name]
+            r = ref_map[name]
+            # Compare core fields if they exist
+            for field in ["type", "server", "port"]:
+                if field in c and field in r:
+                    val_c = str(c[field]).strip()
+                    val_r = str(r[field]).strip()
+                    if val_c != val_r:
+                         mismatches.append(f"{name}.{field}({val_c}!={val_r})")
+        if mismatches:
+            return f"DETAIL_MISMATCH({len(mismatches)}): {','.join(mismatches[:3])}..."
+        return f"MATCH({len(cand_names)})"
+    
+    missing = ref_names - cand_names
+    extra = cand_names - ref_names
+    
+    msg = []
+    if missing:
+        msg.append(f"MISSING({len(missing)}):{list(missing)[:3]}")
+    if extra:
+        msg.append(f"EXTRA({len(extra)}):{list(extra)[:3]}")
+        
+    return " ".join(msg)
+
+
+
 def test_version() -> dict:
+    # raise AssertionError("Forced failure")
     resp = api_get("/version")
     body = resp.text.strip()
     if not body.startswith("subconvergo"):
@@ -292,7 +460,117 @@ def test_sub_with_external_config() -> dict:
     return {"proxy_count": len(data.get("proxies", [])), "rule_count": len(data.get("rules", []))}
 
 
-def test_e2e_matrix() -> dict:
+def test_exclude_remarks() -> dict:
+    # Exclude "HK"
+    params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
+    resp = api_get("/sub", params=params)
+    data = yaml.safe_load(resp.text)
+    names = [p.get("name") for p in data.get("proxies", [])]
+    if any("HK" in n for n in names):
+        raise AssertionError(f"exclude failed: found HK in {names}")
+    return {"proxy_count": len(names)}
+
+
+def test_include_remarks() -> dict:
+    # Include only "HK"
+    params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
+    resp = api_get("/sub", params=params)
+    data = yaml.safe_load(resp.text)
+    names = [p.get("name") for p in data.get("proxies", [])]
+    if not all("HK" in n for n in names):
+        raise AssertionError(f"include failed: found non-HK in {names}")
+    return {"proxy_count": len(names)}
+
+
+def test_emoji_rule() -> dict:
+    # Check if HK gets flag
+    params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
+    resp = api_get("/sub", params=params)
+    data = yaml.safe_load(resp.text)
+    names = [p.get("name") for p in data.get("proxies", [])]
+    # HK-Server-01 -> 🇭🇰 HK-Server-01
+    if not any("🇭🇰" in n for n in names):
+        raise AssertionError(f"emoji failed: no flag in {names}")
+    return {"proxy_count": len(names)}
+
+
+def test_rename_node() -> dict:
+    # HK -> Hong Kong
+    params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
+    resp = api_get("/sub", params=params)
+    data = yaml.safe_load(resp.text)
+    names = [p.get("name") for p in data.get("proxies", [])]
+    if not any("Hong Kong" in n for n in names):
+        raise AssertionError(f"rename failed: no Hong Kong in {names}")
+    return {"proxy_count": len(names)}
+
+
+def test_userinfo() -> dict:
+    # Just check it runs without error for now, as mock might not have userinfo
+    params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
+    resp = api_get("/sub", params=params)
+    return {"status": "ok"}
+
+
+def test_settings_comparison() -> dict:
+    """Compare results with various settings (emoji, rules, etc)."""
+    base_params = {
+        "target": "clash",
+        "url": f"{MOCK_BASE}/ss-subscription.txt",
+    }
+    
+    # Settings to permute or test individually
+    scenarios = [
+        {"emoji": "true"},
+        {"emoji": "false"},
+        {"list": "true"}, # Clash list only
+        {"udp": "true"},
+        {"tfo": "true"},
+        {"scv": "true"},
+        {"fdn": "true"},
+        {"sort": "true"},
+    ]
+    
+    results = {}
+    failures = []
+    
+    for i, settings in enumerate(scenarios):
+        case_id = f"settings_{i}_{list(settings.keys())[0]}"
+        params = base_params.copy()
+        params.update(settings)
+        settings_compare_dir = RESULTS_DIR /  "settings_comparison"
+        settings_compare_dir.mkdir(parents=True, exist_ok=True)
+        # 1. Subconvergo
+        try:
+            r1 = api_get("/sub", params=params)
+            c1 = count_proxies(r1.text, "clash")
+            (settings_compare_dir / "subconvergo.txt").write_text(r1.text, encoding="utf-8")
+        except Exception as e:
+            failures.append(f"{case_id}: Subconvergo failed: {e}")
+            continue
+            
+        # 2. Subconverter
+        try:
+            r2 = requests.get(f"{SUBCONVERTER_URL}/sub", params=params, timeout=10)
+            c2 = count_proxies(r2.text, "clash")
+            (settings_compare_dir / "subconverter.txt").write_text(r2.text, encoding="utf-8")
+        except Exception as e:
+            failures.append(f"{case_id}: Subconverter failed: {e}")
+            continue
+            
+        if c1 != c2:
+            failures.append(f"{case_id}: Proxy count mismatch: {c1} vs {c2}")
+            results[case_id] = f"MISMATCH({c1}vs{c2})"
+        else:
+            results[case_id] = f"MATCH({c1})"
+            
+    if failures:
+        results["_failures"] = failures
+        
+    return results
+
+
+def test_e2e_matrix(test_name: str) -> dict:
     sources = {
         "mixed": "mixed-subscription.txt",
         "ss": "ss-subscription.txt",
@@ -305,7 +583,7 @@ def test_e2e_matrix() -> dict:
     }
     targets = ["clash", "surge", "quanx", "loon", "singbox"]
     
-    matrix_dir = RESULTS_DIR / "matrix"
+    matrix_dir = RESULTS_DIR / "matrix" / test_name
     matrix_dir.mkdir(parents=True, exist_ok=True)
 
     results = {}
@@ -396,19 +674,34 @@ def test_e2e_matrix() -> dict:
             
             # Comparison note
             comp = "MATCH"
-            if ref_desc != "OK":
-                comp = f"REF_{ref_desc}"
-            elif len(content1) == 0:
-                comp = "EMPTY"
+            
+            cand_proxies = extract_proxies(content1, target)
+            ref_proxies = extract_proxies(content2, target)
+            
+            count1 = len(cand_proxies)
+            count2 = len(ref_proxies)
+            
+            if count1 > 0 and count2 > 0:
+                comp = compare_proxy_lists(cand_proxies, ref_proxies)
+                if "MISMATCH" in comp or "MISSING" in comp or "EXTRA" in comp:
+                    status = "FAIL_COMPARE"
             else:
-                # Simple size comparison as proxy for correctness
-                diff = abs(len(content1) - len(content2))
-                if diff > len(content1) * 0.5: # >50% difference
-                    comp = f"SIZE_MISMATCH({len(content1)}vs{len(content2)})"
+                if ref_desc != "OK":
+                    comp = f"REF_{ref_desc}"
+                elif len(content1) == 0:
+                    comp = "EMPTY"
+                else:
+                    # Simple size comparison as proxy for correctness
+                    diff = abs(len(content1) - len(content2))
+                    if diff > len(content1) * 0.5: # >50% difference
+                        comp = f"SIZE_MISMATCH({len(content1)}vs{len(content2)})"
             
             results[case_id] = f"{status} | {comp}"
+            if status == "FAIL_COMPARE":
+                 failures.append(f"{case_id}: Comparison failed: {comp}")
 
     if failures:
+
         # Don't raise immediately, let other tests run, but mark result
         results["_failures"] = failures
         print(f"E2E Failures: {failures}")
@@ -419,9 +712,18 @@ def test_e2e_matrix() -> dict:
 def print_logs() -> None:
     print("--- Subconvergo Logs ---")
     subprocess.run(["docker", "logs", "tests-subconvergo-1"], cwd=TESTS_DIR)
+    print("--- Subconverter Logs ---")
+    subprocess.run(["docker", "logs", "tests-subconverter-1"], cwd=TESTS_DIR)
     print("------------------------")
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Run smoke tests")
+    parser.add_argument("-t", "--test", help="Run specific test case (substring match)")
+    parser.add_argument("-s", "--skip-build", action="store_true", default=False, help="Skip docker image build step")
+    parser.add_argument("--fail-fast", action="store_true", default=True, help="Stop on first failure (default: True)")
+    parser.add_argument("--no-fail-fast", dest="fail_fast", action="store_false", help="Don't stop on first failure")
+    args = parser.parse_args()
+
     cases = [
         ("version", test_version),
         ("sub", test_sub),
@@ -430,40 +732,82 @@ def main() -> None:
         ("ruleset_remote", test_ruleset_remote),
         ("ruleset_compare", test_ruleset_compare_with_subconverter),
         ("filters_regex", test_filters_regex),
+        ("exclude_remarks", test_exclude_remarks),
+        ("include_remarks", test_include_remarks),
+        ("emoji_rule", test_emoji_rule),
+        ("rename_node", test_rename_node),
+        ("userinfo", test_userinfo),
         ("sub_with_external_config", test_sub_with_external_config),
+        ("settings_comparison", test_settings_comparison),
         ("e2e_matrix", test_e2e_matrix),
+        ("e2e_matrix_exclude", test_e2e_matrix),
+        ("e2e_matrix_include", test_e2e_matrix),
+        ("e2e_matrix_emoji", test_e2e_matrix),
+        ("e2e_matrix_rename", test_e2e_matrix),
+        ("e2e_matrix_userinfo", test_e2e_matrix),
     ]
 
-    write_pref(cases[0][0])
-    compose_up()
+    if args.test:
+        cases = [c for c in cases if args.test in c[0]]
+        if not cases:
+            print(f"No tests matched '{args.test}'")
+            return
+
+    # Initial setup
+    # Use the first case's pref if available, or base if filtered list is empty (though we return above)
+    write_pref(cases[0][0] if cases else "version")
+    compose_up(not args.skip_build)
+    
+    failed = False
     try:
-        wait_for_service()
         results = {}
         for case, func in cases:
-            reload_note = reload_config(case)
-            results[f"{case}_reload"] = reload_note
+            print(f"Preparing {case}...")
+            write_pref(case)
+            restart_services()
+            wait_for_service()
+            
             print(f"Running {case}...")
-            results[case] = func()
+            try:
+                if func == test_e2e_matrix:
+                    res = func(case)
+                else:
+                    res = func()
+                
+                results[case] = res
+                
+                # Check for soft failures (like in e2e_matrix or settings_comparison)
+                if isinstance(res, dict) and "_failures" in res:
+                    print(f"Test {case} reported failures.")
+                    failed = True
+                    if args.fail_fast:
+                        raise AssertionError(f"Test {case} failed: {res['_failures']}")
+
+            except Exception as e:
+                print(f"Test {case} failed with exception: {e}")
+                failed = True
+                if args.fail_fast:
+                    raise
+
         RESULTS_FILE.write_text(json.dumps(results, indent=2))
-        print(f"Smoke tests passed. Summary: {RESULTS_FILE}")
+        
+        if failed:
+            print(f"Smoke tests failed. Summary: {RESULTS_FILE}")
+            sys.exit(1)
+        else:
+            print(f"Smoke tests passed. Summary: {RESULTS_FILE}")
+
     except Exception:
         print_logs()
         raise
     finally:
-        # If we want to see logs even on success (e.g. for E2E failures which don't raise exception immediately)
-        # we should check if results has failures.
-        # But results is local.
-        # Let's just print logs if we suspect failure.
-        # Actually, E2E failures are printed but don't raise exception.
-        # So I should print logs if I see "E2E Failures" in output.
-        # But I can't see output here easily.
-        # I'll just always print logs for now, or print if RESULTS_FILE contains failures.
-        pass
-        
-        # Better: print logs if E2E failed.
-        # But I can't access results here.
-        # I'll just print logs before compose_down.
-        print_logs()
+        # Only print logs if we haven't already (exception handler does it)
+        # But finally runs always. Let's just rely on exception handler for logs on crash, 
+        # and maybe print logs on exit if failed?
+        # The original code printed logs in finally.
+        # If we exit via sys.exit(1), finally block runs.
+        # We might want to avoid double printing.
+        # Let's keep it simple and close to original but ensure cleanup.
         compose_down()
         restore_pref()
 

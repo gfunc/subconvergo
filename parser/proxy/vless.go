@@ -118,3 +118,45 @@ func (p *VLESSParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	}
 	return utils.ToMihomoProxy(pObj)
 }
+
+// ParseClash parses a Clash config map
+func (p *VLESSParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+	server := utils.GetStringField(config, "server")
+	port := utils.GetIntField(config, "port")
+	name := utils.GetStringField(config, "name")
+	uuid := utils.GetStringField(config, "uuid")
+	network := utils.GetStringField(config, "network")
+	tls := config["tls"] == true
+	flow := utils.GetStringField(config, "flow")
+	servername := utils.GetStringField(config, "servername")
+
+	v := &impl.VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Server: server,
+			Port:   port,
+			Remark: name,
+		},
+		UUID:    uuid,
+		Network: network,
+		TLS:     tls,
+		Flow:    flow,
+		SNI:     servername,
+	}
+
+	if config["skip-cert-verify"] == true {
+		v.AllowInsecure = true
+	}
+
+	if wsOpts, ok := config["ws-opts"].(map[string]interface{}); ok {
+		v.Path = utils.GetStringField(wsOpts, "path")
+		if headers, ok := wsOpts["headers"].(map[string]interface{}); ok {
+			v.Host = utils.GetStringField(headers, "Host")
+		}
+	}
+	if grpcOpts, ok := config["grpc-opts"].(map[string]interface{}); ok {
+		v.Path = utils.GetStringField(grpcOpts, "grpc-service-name")
+	}
+
+	return utils.ToMihomoProxy(v)
+}

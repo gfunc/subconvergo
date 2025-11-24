@@ -117,5 +117,43 @@ func (p *AnyTLSProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, err
 }
 
 func (p *AnyTLSProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {
-	return nil, fmt.Errorf("AnyTLS not supported in sing-box")
+	outbound := map[string]interface{}{
+		"type":        "anytls",
+		"tag":         p.Remark,
+		"server":      p.Server,
+		"server_port": p.Port,
+		"password":    p.Password,
+	}
+
+	if p.IdleSessionCheckInterval > 0 {
+		outbound["idle_session_check_interval"] = p.IdleSessionCheckInterval
+	}
+	if p.IdleSessionTimeout > 0 {
+		outbound["idle_session_timeout"] = p.IdleSessionTimeout
+	}
+	if p.MinIdleSession > 0 {
+		outbound["min_idle_session"] = p.MinIdleSession
+	}
+	if p.TFO {
+		outbound["tcp_fast_open"] = true
+	}
+
+	tls := map[string]interface{}{
+		"enabled": true,
+	}
+	if p.SNI != "" {
+		tls["server_name"] = p.SNI
+	}
+
+	if ext.SCV || p.AllowInsecure || p.Fingerprint != "" {
+		tls["insecure"] = true
+	}
+
+	if len(p.Alpn) > 0 {
+		tls["alpn"] = p.Alpn
+	}
+
+	outbound["tls"] = tls
+
+	return outbound, nil
 }

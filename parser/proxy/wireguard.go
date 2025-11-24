@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -60,6 +61,11 @@ func (p *WireGuardParser) ParseSurge(content string) (core.SubconverterProxy, er
 				wg.PublicKey = v
 			case "pre-shared-key":
 				wg.PreSharedKey = v
+			case "endpoint":
+				if host, portStr, err := net.SplitHostPort(v); err == nil {
+					wg.Server = host
+					wg.Port, _ = strconv.Atoi(portStr)
+				}
 			}
 		}
 	}
@@ -74,6 +80,39 @@ func (p *WireGuardParser) ParseSurge(content string) (core.SubconverterProxy, er
 			}
 			if !strings.Contains(params[2], "=") {
 				wg.Port, _ = strconv.Atoi(strings.TrimSpace(params[2]))
+			}
+		}
+	}
+
+	return utils.ToMihomoProxy(wg)
+}
+
+// ParseClash parses a Clash config map
+func (p *WireGuardParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+	server := utils.GetStringField(config, "server")
+	port := utils.GetIntField(config, "port")
+	name := utils.GetStringField(config, "name")
+
+	wg := &impl.WireGuardProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "wireguard",
+			Server: server,
+			Port:   port,
+			Remark: name,
+		},
+		PrivateKey:   utils.GetStringField(config, "private-key"),
+		PublicKey:    utils.GetStringField(config, "public-key"),
+		PreSharedKey: utils.GetStringField(config, "pre-shared-key"),
+		Ip:           utils.GetStringField(config, "ip"),
+		Ipv6:         utils.GetStringField(config, "ipv6"),
+		Mtu:          utils.GetIntField(config, "mtu"),
+		Udp:          utils.GetBoolField(config, "udp"),
+	}
+
+	if dns, ok := config["dns"].([]interface{}); ok {
+		for _, d := range dns {
+			if s, ok := d.(string); ok {
+				wg.Dns = append(wg.Dns, s)
 			}
 		}
 	}
