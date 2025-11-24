@@ -1,6 +1,7 @@
 package transformers
 
 import (
+	"log"
 	"regexp"
 	"strings"
 
@@ -38,6 +39,8 @@ func filterProxies(proxies []proxyCore.ProxyInterface, patterns []string, includ
 	if len(patterns) == 0 {
 		return proxies
 	}
+
+	log.Printf("[FilterTransformer] Filtering %d proxies with patterns %v (include=%v)", len(proxies), patterns, include)
 
 	// Pre-compile regexes for all patterns
 	type compiledPat struct {
@@ -81,6 +84,7 @@ func filterProxies(proxies []proxyCore.ProxyInterface, patterns []string, includ
 				}
 			}
 		}
+		log.Printf("[FilterTransformer] Proxy '%s' matched=%v (include=%v) -> keep=%v", pr.GetRemark(), matched, include, include == matched)
 		if include == matched {
 			result = append(result, pr)
 		}

@@ -23,6 +23,10 @@ func Generate(proxies []pc.ProxyInterface, opts core.GeneratorOptions, baseConfi
 	}
 	log.Printf("[generator.Generate] After pipeline: proxies=%d", len(proxies))
 
+	if len(proxies) == 0 {
+		return "", fmt.Errorf("No valid proxies found")
+	}
+
 	// Append proxy type to remark if enabled
 	if opts.AppendProxyType {
 		for i := range proxies {

@@ -311,7 +311,11 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	output, err := generator.Generate(allProxies, opts, baseConfig)
 	if err != nil {
 		log.Printf("[handler.HandleSub] generator failed target=%s proxies=%d err=%v", target, len(allProxies), err)
-		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to generate config: %v", err))
+		if err.Error() == "No valid proxies found" {
+			c.String(http.StatusBadRequest, err.Error())
+		} else {
+			c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to generate config: %v", err))
+		}
 		return
 	}
 

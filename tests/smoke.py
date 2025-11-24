@@ -597,8 +597,9 @@ def test_e2e_matrix(test_name: str) -> dict:
             
             # 1. Request from Subconvergo (Candidate)
             try:
-                r1 = api_get("/sub", params=params)
+                r1 = api_get("/sub", params=params, expected=[200, 400])
                 content1 = r1.text
+                cand_status = r1.status_code
             except Exception as e:
                 failures.append(f"{case_id}: Subconvergo failed: {e}")
                 results[case_id] = "FAIL_CANDIDATE"
@@ -630,6 +631,12 @@ def test_e2e_matrix(test_name: str) -> dict:
                 return None
 
             cand_issue = detect_content_issue(content1)
+            if cand_status != 200:
+                if cand_status == 400 and ("No valid proxies found" in content1 or "doesn't contain any valid node info" in content1):
+                    cand_issue = "ERR_NO_NODES"
+                else:
+                    cand_issue = f"HTTP_{cand_status}"
+
             if cand_issue:
                 status = f"CAND_{cand_issue}"
             
@@ -658,9 +665,6 @@ def test_e2e_matrix(test_name: str) -> dict:
                          elif target == "surge" and "[Proxy]" not in content1:
                              status = "SUSPICIOUS_INI"
 
-            if status != "OK":
-                failures.append(f"{case_id}: {status}")
-            
             # Analyze Reference Result
             ref_desc = "OK"
             ref_issue = detect_content_issue(content2)
@@ -671,6 +675,14 @@ def test_e2e_matrix(test_name: str) -> dict:
                     ref_desc += "(NO_NODES)"
             elif ref_issue:
                 ref_desc = ref_issue
+
+            if status != "OK":
+                # Allow CAND_ERR_NO_NODES if Reference also has no nodes or is empty or returns 400
+                if status == "CAND_ERR_NO_NODES" and (ref_desc == "ERR_NO_NODES" or "NO_NODES" in ref_desc or ref_desc == "EMPTY" or "HTTP_400" in ref_desc):
+                     status = "OK"
+                     comp = "MATCH_NO_NODES"
+                else:
+                     failures.append(f"{case_id}: {status} (Ref: {ref_desc})")
             
             # Comparison note
             comp = "MATCH"
@@ -688,6 +700,13 @@ def test_e2e_matrix(test_name: str) -> dict:
             else:
                 if ref_desc != "OK":
                     comp = f"REF_{ref_desc}"
+                    if ("NO_NODES" in ref_desc or "HTTP_400" in ref_desc):
+                        if count1 > 0:
+                            status = "FAIL_REF"
+                            failures.append(f"{case_id}: Reference failed: {ref_desc} but Candidate has {count1} nodes")
+                        elif cand_issue == "ERR_NO_NODES" or cand_status == 400:
+                            status = "OK"
+                            comp = "MATCH_NO_NODES"
                 elif len(content1) == 0:
                     comp = "EMPTY"
                 else:
