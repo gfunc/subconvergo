@@ -1,37 +1,212 @@
 proxies:
-  - name: "HK-Clash-01"
+  - name: "SS-Basic"
     type: ss
-    server: example1.com
+    server: example.com
     port: 8388
     cipher: aes-256-gcm
-    password: password
+    password: password123
     udp: true
 
-  - name: "HK-Clash-02"
+  - name: "SS-Obfs"
+    type: ss
+    server: example.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: password123
+    plugin: obfs
+    plugin-opts:
+      mode: http
+      host: example.com
+
+  - name: "SS-V2Ray-Plugin"
+    type: ss
+    server: example.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: password123
+    plugin: v2ray-plugin
+    plugin-opts:
+      mode: websocket
+      host: example.com
+      path: /ws
+      tls: true
+      mux: true
+
+  - name: "SSR-Basic"
+    type: ssr
+    server: example.com
+    port: 8388
+    cipher: aes-256-cfb
+    password: password123
+    protocol: origin
+    protocol-param: ""
+    obfs: plain
+    obfs-param: ""
+    udp: true
+
+  - name: "VMess-TCP"
     type: vmess
-    server: example2.com
+    server: example.com
+    port: 10086
+    uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
+    alterId: 0
+    cipher: auto
+    network: tcp
+    tls: false
+    udp: true
+
+  - name: "VMess-WS-TLS"
+    type: vmess
+    server: example.com
     port: 443
-    uuid: 12345678-1234-1234-1234-123456789012
+    uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
     alterId: 0
     cipher: auto
     network: ws
-    tls: true
     ws-opts:
-      path: /path
+      path: /ws
       headers:
-        Host: example2.com
-
-  - name: "US-Clash-01"
-    type: trojan
-    server: example3.com
-    port: 443
-    password: password
-    sni: example3.com
+        Host: example.com
+    tls: true
+    skip-cert-verify: false
     udp: true
 
-  - name: "JP-Clash-01"
-    type: ss
-    server: example4.com
-    port: 8388
-    cipher: chacha20-ietf-poly1305
-    password: password
+  - name: "VMess-gRPC"
+    type: vmess
+    server: example.com
+    port: 443
+    uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
+    alterId: 0
+    cipher: auto
+    network: grpc
+    grpc-opts:
+      grpc-service-name: example-service
+    tls: true
+    skip-cert-verify: false
+
+  - name: "VLESS-TCP-Reality"
+    type: vless
+    server: example.com
+    port: 443
+    uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
+    network: tcp
+    tls: true
+    servername: example.com
+    flow: xtls-rprx-vision
+    reality-opts:
+      public-key: "publickey"
+      short-id: "shortid"
+    client-fingerprint: chrome
+    udp: true
+
+  - name: "VLESS-WS"
+    type: vless
+    server: example.com
+    port: 443
+    uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
+    network: ws
+    ws-opts:
+      path: /ws
+      headers:
+        Host: example.com
+    tls: true
+    skip-cert-verify: false
+
+  - name: "Trojan-Basic"
+    type: trojan
+    server: example.com
+    port: 443
+    password: password123
+    sni: example.com
+    udp: true
+    skip-cert-verify: false
+
+  - name: "Trojan-gRPC"
+    type: trojan
+    server: example.com
+    port: 443
+    password: password123
+    network: grpc
+    grpc-opts:
+      grpc-service-name: example-service
+    sni: example.com
+    udp: true
+
+  - name: "Socks5-Basic"
+    type: socks5
+    server: example.com
+    port: 1080
+    username: user
+    password: pass
+    udp: true
+    skip-cert-verify: false
+
+  - name: "HTTP-Basic"
+    type: http
+    server: example.com
+    port: 8080
+    username: user
+    password: pass
+    tls: true
+    skip-cert-verify: false
+
+  - name: "Snell-Basic"
+    type: snell
+    server: example.com
+    port: 6160
+    psk: password123
+    version: 4
+    obfs-opts:
+      mode: http
+      host: example.com
+    udp: true
+
+  - name: "WireGuard-Basic"
+    type: wireguard
+    server: 1.2.3.4
+    port: 51820
+    ip: 10.0.0.2
+    ipv6: 2001:db8::2
+    private-key: "privatekey"
+    public-key: "publickey"
+    preshared-key: "presharedkey"
+    dns: [1.1.1.1, 8.8.8.8]
+    mtu: 1420
+    udp: true
+
+  - name: "Hysteria-v1"
+    type: hysteria
+    server: example.com
+    port: 443
+    protocol: udp
+    up: 100 Mbps
+    down: 100 Mbps
+    auth_str: password123
+    obfs: xplus
+    sni: example.com
+    alpn: [h3]
+    skip-cert-verify: false
+    fast-open: true
+
+  - name: "Hysteria2-Basic"
+    type: hysteria2
+    server: example.com
+    port: 443
+    password: password123
+    obfs: salamander
+    obfs-password: secret
+    sni: example.com
+    skip-cert-verify: false
+
+  - name: "TUIC-Basic"
+    type: tuic
+    server: example.com
+    port: 443
+    uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
+    password: password123
+    congestion-controller: bbr
+    udp-relay-mode: native
+    alpn: [h3]
+    disable-sni: false
+    reduce-rtt: true
+    skip-cert-verify: false

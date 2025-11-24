@@ -8,6 +8,7 @@ import (
 
 	"github.com/gfunc/subconvergo/parser/core"
 	"github.com/gfunc/subconvergo/parser/proxy"
+	"github.com/gfunc/subconvergo/parser/utils"
 	proxyCore "github.com/gfunc/subconvergo/proxy/core"
 )
 
@@ -53,8 +54,8 @@ func (p *V2RaySubscriptionParser) Parse(content string) (*core.SubContent, error
 		return nil, fmt.Errorf("invalid vnext format")
 	}
 
-	address := toString(serverObj["address"])
-	port := toString(serverObj["port"])
+	address := utils.ToString(serverObj["address"])
+	port := utils.ToString(serverObj["port"])
 
 	users, ok := serverObj["users"].([]interface{})
 	if !ok || len(users) == 0 {
@@ -65,13 +66,13 @@ func (p *V2RaySubscriptionParser) Parse(content string) (*core.SubContent, error
 		return nil, fmt.Errorf("invalid user format")
 	}
 
-	id := toString(user["id"])
-	aid := toString(user["alterId"])
-	security := toString(user["security"])
+	id := utils.ToString(user["id"])
+	aid := utils.ToString(user["alterId"])
+	security := utils.ToString(user["security"])
 
 	streamSettings, _ := outbound["streamSettings"].(map[string]interface{})
-	network := toString(streamSettings["network"])
-	securityType := toString(streamSettings["security"])
+	network := utils.ToString(streamSettings["network"])
+	securityType := utils.ToString(streamSettings["security"])
 	tls := securityType == "tls"
 
 	var path, host, sni, typeStr string
@@ -82,20 +83,30 @@ func (p *V2RaySubscriptionParser) Parse(content string) (*core.SubContent, error
 
 	if net == "ws" {
 		wsSettings, _ := streamSettings["wsSettings"].(map[string]interface{})
-		path = toString(wsSettings["path"])
+		path = utils.ToString(wsSettings["path"])
 		headers, _ := wsSettings["headers"].(map[string]interface{})
-		host = toString(headers["Host"])
+		host = utils.ToString(headers["Host"])
 	} else if net == "tcp" {
 		tcpSettings, _ := streamSettings["tcpSettings"].(map[string]interface{})
 		header, _ := tcpSettings["header"].(map[string]interface{})
-		typeStr = toString(header["type"])
-		// ...
+		typeStr = utils.ToString(header["type"])
+
+		if typeStr == "http" {
+			request, _ := header["request"].(map[string]interface{})
+			if request != nil {
+				if paths, ok := request["path"].([]interface{}); ok && len(paths) > 0 {
+					path = utils.ToString(paths[0])
+				}
+				if headers, ok := request["headers"].(map[string]interface{}); ok {
+					host = utils.ToString(headers["Host"])
+				}
+			}
+		}
 	}
-	// ... more parsing logic for other transports ...
 
 	if tls {
 		tlsSettings, _ := streamSettings["tlsSettings"].(map[string]interface{})
-		sni = toString(tlsSettings["serverName"])
+		sni = utils.ToString(tlsSettings["serverName"])
 	}
 
 	config := map[string]interface{}{

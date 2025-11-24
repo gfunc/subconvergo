@@ -33,11 +33,13 @@ func (g *QuantumultXGenerator) Generate(proxies []pc.ProxyInterface, groups []co
 	output.WriteString("\n\n[server_local]\n")
 
 	// Generate proxy section
+	var validProxies []pc.ProxyInterface
 	for _, proxy := range proxies {
 		line := convertToQuantumultX(proxy, opts)
 		if line != "" {
 			output.WriteString(line)
 			output.WriteString("\n")
+			validProxies = append(validProxies, proxy)
 		} else {
 			log.Printf("Proxy %s skipped for Quantumult X (not supported)", proxy.GetRemark())
 		}
@@ -48,7 +50,7 @@ func (g *QuantumultXGenerator) Generate(proxies []pc.ProxyInterface, groups []co
 		output.WriteString("\n[policy]\n")
 
 		for _, group := range groups {
-			line := convertGroupToQuantumultX(group, proxies)
+			line := convertGroupToQuantumultX(group, validProxies)
 			if line != "" {
 				output.WriteString(line)
 				output.WriteString("\n")

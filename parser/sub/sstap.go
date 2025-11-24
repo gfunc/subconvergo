@@ -7,6 +7,7 @@ import (
 
 	"github.com/gfunc/subconvergo/parser/core"
 	"github.com/gfunc/subconvergo/parser/proxy"
+	"github.com/gfunc/subconvergo/parser/utils"
 	proxyCore "github.com/gfunc/subconvergo/proxy/core"
 )
 
@@ -39,7 +40,7 @@ func (p *SSTapSubscriptionParser) Parse(content string) (*core.SubContent, error
 			continue
 		}
 
-		mode := toString(cfg["mode"]) // type
+		mode := utils.ToString(cfg["mode"]) // type
 
 		// SSTap types: ss, ssr, socks5, http
 		switch mode {

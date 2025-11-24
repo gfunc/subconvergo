@@ -21,7 +21,7 @@ func (p *TUICParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "tuic://")
 }
 
-func (p *TUICParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *TUICParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "tuic://") {
 		return nil, fmt.Errorf("not a valid tuic link")

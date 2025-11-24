@@ -21,9 +21,8 @@ func (p *HysteriaParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "hysteria://")
 }
 
-func (p *HysteriaParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *HysteriaParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
-
 	if !strings.HasPrefix(line, "hysteria://") {
 		return nil, fmt.Errorf("not a valid hysteria link")
 	}

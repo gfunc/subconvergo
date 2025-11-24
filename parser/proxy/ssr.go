@@ -22,7 +22,7 @@ func (p *ShadowsocksRParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "ssr://")
 }
 
-func (p *ShadowsocksRParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *ShadowsocksRParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "ssr://") {
 		return nil, fmt.Errorf("not a valid ssr:// link")
@@ -140,7 +140,7 @@ func (p *ShadowsocksRParser) ParseClash(config map[string]interface{}) (core.Sub
 		Obfs:          obfs,
 		ObfsParam:     obfsParam,
 	}
-	return ssr, nil
+	return utils.ToMihomoProxy(ssr)
 }
 
 // ParseNetch parses a Netch config map
@@ -169,7 +169,7 @@ func (p *ShadowsocksRParser) ParseNetch(config map[string]interface{}) (core.Sub
 		Obfs:          obfs,
 		ObfsParam:     obfsParam,
 	}
-	return ssr, nil
+	return utils.ToMihomoProxy(ssr)
 }
 
 // ParseSSTap parses a SSTap config map
@@ -198,5 +198,5 @@ func (p *ShadowsocksRParser) ParseSSTap(config map[string]interface{}) (core.Sub
 		Obfs:          obfs,
 		ObfsParam:     obfsParam,
 	}
-	return ssr, nil
+	return utils.ToMihomoProxy(ssr)
 }

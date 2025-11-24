@@ -20,9 +20,11 @@ services:
       start_period: 5s
     networks:
       - subconvergo-network
+    depends_on:
+      - mock-subscription
 
   subconverter:
-    image: georgefu12/subconverter:latest
+    image: metacubex/subconverter:latest
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     ports:
       - "25550:25500"
@@ -40,6 +42,8 @@ services:
       start_period: 5s
     networks:
       - subconvergo-network
+    depends_on:
+      - mock-subscription
 
   # Mock subscription server for testing
   mock-subscription:

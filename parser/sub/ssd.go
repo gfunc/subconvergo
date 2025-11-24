@@ -4,11 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/gfunc/subconvergo/parser/core"
 	"github.com/gfunc/subconvergo/parser/proxy"
+	"github.com/gfunc/subconvergo/parser/utils"
 	proxyCore "github.com/gfunc/subconvergo/proxy/core"
 )
 
@@ -68,7 +68,7 @@ func (p *SSDSubscriptionParser) Parse(content string) (*core.SubContent, error) 
 		}
 	}
 
-	defaultPort := toString(ssdData.Port)
+	defaultPort := utils.ToString(ssdData.Port)
 	defaultEncrypt := ssdData.Encrypt
 	defaultPass := ssdData.Pass
 	defaultPlugin := ssdData.Plugin
@@ -76,19 +76,19 @@ func (p *SSDSubscriptionParser) Parse(content string) (*core.SubContent, error) 
 
 	for _, s := range servers {
 		// Resolve defaults
-		if toString(s["port"]) == "" {
+		if utils.ToString(s["port"]) == "" {
 			s["port"] = defaultPort
 		}
-		if toString(s["encryption"]) == "" {
+		if utils.ToString(s["encryption"]) == "" {
 			s["encryption"] = defaultEncrypt
 		}
-		if toString(s["password"]) == "" {
+		if utils.ToString(s["password"]) == "" {
 			s["password"] = defaultPass
 		}
-		if toString(s["plugin"]) == "" {
+		if utils.ToString(s["plugin"]) == "" {
 			s["plugin"] = defaultPlugin
 		}
-		if toString(s["plugin_options"]) == "" {
+		if utils.ToString(s["plugin_options"]) == "" {
 			s["plugin_options"] = defaultPluginO
 		}
 
@@ -103,20 +103,4 @@ func (p *SSDSubscriptionParser) Parse(content string) (*core.SubContent, error) 
 	return &core.SubContent{
 		Proxies: proxies,
 	}, nil
-}
-
-func toString(v interface{}) string {
-	if v == nil {
-		return ""
-	}
-	switch val := v.(type) {
-	case string:
-		return val
-	case float64:
-		return strconv.FormatFloat(val, 'f', -1, 64)
-	case int:
-		return strconv.Itoa(val)
-	default:
-		return fmt.Sprintf("%v", val)
-	}
 }

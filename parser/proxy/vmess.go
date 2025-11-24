@@ -31,10 +31,19 @@ func isSurgeVMess(line string) bool {
 	return strings.HasPrefix(val, "vmess,")
 }
 
-func (p *VMessParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *VMessParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeVMess(line) {
-		return p.ParseSurge(line)
+		parts := strings.SplitN(line, "=", 2)
+		remark := strings.TrimSpace(parts[0])
+		content := strings.TrimSpace(parts[1])
+
+		proxy, err := p.ParseSurge(content)
+		if err != nil {
+			return nil, err
+		}
+		proxy.SetRemark(remark)
+		return proxy, nil
 	}
 
 	if !strings.HasPrefix(line, "vmess://") {
@@ -210,17 +219,13 @@ func (p *VMessParser) parseJSONVMess(decoded string) (core.SubconverterProxy, er
 	return utils.ToMihomoProxy(pObj)
 }
 
-// ParseSurge parses a Surge format line
-func (p *VMessParser) ParseSurge(line string) (core.SubconverterProxy, error) {
-	parts := strings.SplitN(line, "=", 2)
-	remark := strings.TrimSpace(parts[0])
-	params := strings.Split(strings.TrimSpace(parts[1]), ",")
-
+// ParseSurge parses a Surge config string
+func (p *VMessParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+	params := strings.Split(content, ",")
 	if len(params) < 3 {
-		return nil, fmt.Errorf("invalid surge vmess format")
+		return nil, fmt.Errorf("invalid surge vmess config: %s", content)
 	}
 
-	// params[0] is "vmess"
 	server := strings.TrimSpace(params[1])
 	portStr := strings.TrimSpace(params[2])
 	port, err := strconv.Atoi(portStr)
@@ -233,32 +238,33 @@ func (p *VMessParser) ParseSurge(line string) (core.SubconverterProxy, error) {
 			Type:   "vmess",
 			Server: server,
 			Port:   port,
-			Remark: remark,
 		},
 		Network: "tcp", // Default
 	}
 
 	for i := 3; i < len(params); i++ {
-		arg := strings.TrimSpace(params[i])
-		if strings.HasPrefix(arg, "username=") {
-			vmess.UUID = strings.TrimPrefix(arg, "username=")
-		} else if strings.HasPrefix(arg, "ws=") {
-			if strings.TrimPrefix(arg, "ws=") == "true" {
-				vmess.Network = "ws"
+		kv := strings.SplitN(strings.TrimSpace(params[i]), "=", 2)
+		if len(kv) == 2 {
+			k := strings.TrimSpace(kv[0])
+			v := strings.TrimSpace(kv[1])
+			switch k {
+			case "username":
+				vmess.UUID = v
+			case "ws":
+				if v == "true" {
+					vmess.Network = "ws"
+				}
+			case "ws-path":
+				vmess.Path = v
+			case "tls":
+				vmess.TLS = v == "true"
+			case "sni":
+				vmess.SNI = v
 			}
-		} else if strings.HasPrefix(arg, "ws-path=") {
-			vmess.Path = strings.TrimPrefix(arg, "ws-path=")
-		} else if strings.HasPrefix(arg, "ws-headers=") {
-			// format: ws-headers=Host:example.com|User-Agent:...
-			// Need to parse
-		} else if strings.HasPrefix(arg, "tls=") {
-			vmess.TLS = strings.TrimPrefix(arg, "tls=") == "true"
-		} else if strings.HasPrefix(arg, "sni=") {
-			vmess.SNI = strings.TrimPrefix(arg, "sni=")
 		}
 	}
 
-	return vmess, nil
+	return utils.ToMihomoProxy(vmess)
 }
 
 // ParseClash parses a Clash config map
@@ -302,7 +308,7 @@ func (p *VMessParser) ParseClash(config map[string]interface{}) (core.Subconvert
 		Path:    path,
 		Host:    host,
 	}
-	return vmess, nil
+	return utils.ToMihomoProxy(vmess)
 }
 
 // ParseNetch parses a Netch config map
@@ -335,7 +341,7 @@ func (p *VMessParser) ParseNetch(config map[string]interface{}) (core.Subconvert
 		Path:     path,
 		FakeType: fakeType,
 	}
-	return vmess, nil
+	return utils.ToMihomoProxy(vmess)
 }
 
 // ParseV2Ray parses a V2Ray config map (resolved)

@@ -14,10 +14,9 @@ type SubContent struct {
 
 // ProxyParser defines how to parse a single proxy configuration
 type ProxyParser interface {
+	SingeSourceParserMixin
 	// Name returns the protocol name (e.g., "Shadowsocks")
 	Name() string
-	// Parse converts the content into a ProxyInterface
-	Parse(content string) (core.SubconverterProxy, error)
 }
 
 // LineMatcher indicates the parser can handle single line configurations (e.g. ss://...)
@@ -35,6 +34,11 @@ type SubscriptionParser interface {
 	Parse(content string) (*SubContent, error)
 }
 
+type SingeSourceParserMixin interface {
+	// ParseSingle converts the content into a ProxyInterface
+	ParseSingle(content string) (core.SubconverterProxy, error)
+}
+
 type ClashSourceParserMixin interface {
 	ParseClash(config map[string]interface{}) (core.SubconverterProxy, error)
 }
@@ -48,12 +52,17 @@ type NetchSourceParserMixin interface {
 }
 
 type SSSourceParserMixin interface {
-	ParseSSConf(config map[string]interface{}) (core.SubconverterProxy, error)
+	ParseSS(config map[string]interface{}) (core.SubconverterProxy, error)
 }
 
 type SSTapSourceParserMixin interface {
 	ParseSSTap(config map[string]interface{}) (core.SubconverterProxy, error)
 }
-type SSAndroidSubscriptionParser interface {
+type SSAndroidSourceParserMixin interface {
 	ParseSSAndroid(config map[string]interface{}) (core.SubconverterProxy, error)
+}
+
+// SurgeSourceParserMixin defines the interface for proxies that can be parsed from Surge config lines
+type SurgeSourceParserMixin interface {
+	ParseSurge(content string) (core.SubconverterProxy, error)
 }

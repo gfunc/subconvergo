@@ -57,33 +57,33 @@ func (p *SSRSubscriptionParser) Parse(content string) (*core.SubContent, error) 
 }
 
 func parseSSRNode(cfg map[string]interface{}) proxyCore.ProxyInterface {
-	server := toStringVal(cfg["server"])
-	portStr := toStringVal(cfg["server_port"])
+	server := utils.ToString(cfg["server"])
+	portStr := utils.ToString(cfg["server_port"])
 	if server == "" || portStr == "0" || portStr == "" {
 		return nil
 	}
 	port, _ := strconv.Atoi(portStr)
 
-	remarks := toStringVal(cfg["remarks"])
+	remarks := utils.ToString(cfg["remarks"])
 	if remarks == "" {
 		remarks = fmt.Sprintf("%s:%s", server, portStr)
 	}
-	group := toStringVal(cfg["group"])
+	group := utils.ToString(cfg["group"])
 	if group == "" {
 		group = proxyCore.SSR_DEFAULT_GROUP
 	}
 
-	method := toStringVal(cfg["method"])
-	password := toStringVal(cfg["password"])
-	protocol := toStringVal(cfg["protocol"])
-	protocolParam := toStringVal(cfg["protocolparam"])
+	method := utils.ToString(cfg["method"])
+	password := utils.ToString(cfg["password"])
+	protocol := utils.ToString(cfg["protocol"])
+	protocolParam := utils.ToString(cfg["protocolparam"])
 	if protocolParam == "" {
-		protocolParam = toStringVal(cfg["protocol_param"])
+		protocolParam = utils.ToString(cfg["protocol_param"])
 	}
-	obfs := toStringVal(cfg["obfs"])
-	obfsParam := toStringVal(cfg["obfsparam"])
+	obfs := utils.ToString(cfg["obfs"])
+	obfsParam := utils.ToString(cfg["obfsparam"])
 	if obfsParam == "" {
-		obfsParam = toStringVal(cfg["obfs_param"])
+		obfsParam = utils.ToString(cfg["obfs_param"])
 	}
 
 	// Check if it's actually SS (subconverter logic)
@@ -100,8 +100,8 @@ func parseSSRNode(cfg map[string]interface{}) proxyCore.ProxyInterface {
 	}
 
 	if isSS {
-		plugin := toStringVal(cfg["plugin"])
-		pluginOptsStr := toStringVal(cfg["plugin_opts"])
+		plugin := utils.ToString(cfg["plugin"])
+		pluginOptsStr := utils.ToString(cfg["plugin_opts"])
 		pluginOpts := make(map[string]interface{})
 		if pluginOptsStr != "" {
 			pluginOpts = utils.ParsePluginOpts(pluginOptsStr)

@@ -2,8 +2,12 @@ package proxy
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
+	"github.com/gfunc/subconvergo/parser/utils"
 	"github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/proxy/impl"
 )
 
 type WireGuardParser struct{}
@@ -19,6 +23,60 @@ func (p *WireGuardParser) CanParseLine(line string) bool {
 	return false
 }
 
-func (p *WireGuardParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *WireGuardParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	return nil, fmt.Errorf("wireguard link parsing not supported")
+}
+
+// ParseSurge parses a Surge config string
+func (p *WireGuardParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+	params := strings.Split(content, ",")
+	wg := &impl.WireGuardProxy{
+		BaseProxy: core.BaseProxy{
+			Type: "wireguard",
+		},
+	}
+
+	for _, param := range params {
+		kv := strings.SplitN(strings.TrimSpace(param), "=", 2)
+		if len(kv) == 2 {
+			k := strings.TrimSpace(kv[0])
+			v := strings.TrimSpace(kv[1])
+			switch k {
+			case "server":
+				wg.Server = v
+			case "port":
+				wg.Port, _ = strconv.Atoi(v)
+			case "private-key":
+				wg.PrivateKey = v
+			case "self-ip":
+				wg.Ip = v
+			case "self-ip-v6":
+				wg.Ipv6 = v
+			case "dns-server":
+				wg.Dns = strings.Split(v, ",")
+			case "mtu":
+				wg.Mtu, _ = strconv.Atoi(v)
+			case "public-key", "peer-public-key":
+				wg.PublicKey = v
+			case "pre-shared-key":
+				wg.PreSharedKey = v
+			}
+		}
+	}
+
+	if wg.Server == "" || wg.Port == 0 {
+		// If server/port are not found, maybe they are positional?
+		// But usually WG uses keys.
+		// Let's check if params[1] and params[2] are positional if they don't have '='
+		if len(params) >= 3 {
+			if !strings.Contains(params[1], "=") {
+				wg.Server = strings.TrimSpace(params[1])
+			}
+			if !strings.Contains(params[2], "=") {
+				wg.Port, _ = strconv.Atoi(strings.TrimSpace(params[2]))
+			}
+		}
+	}
+
+	return utils.ToMihomoProxy(wg)
 }

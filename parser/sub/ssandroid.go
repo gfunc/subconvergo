@@ -1,10 +1,8 @@
 package sub
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/gfunc/subconvergo/parser/core"
@@ -55,19 +53,4 @@ func (p *SSAndroidSubscriptionParser) Parse(content string) (*core.SubContent, e
 	return &core.SubContent{
 		Proxies: proxies,
 	}, nil
-}
-
-func toStringVal(v interface{}) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-
-func base64Encode(s string) string {
-	return strings.TrimRight(base64.URLEncoding.EncodeToString([]byte(s)), "=")
-}
-
-func urlEncode(s string) string {
-	return url.QueryEscape(s)
 }

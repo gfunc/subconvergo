@@ -30,10 +30,19 @@ func isSurgeSnell(line string) bool {
 	return strings.HasPrefix(val, "snell,")
 }
 
-func (p *SnellParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *SnellParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeSnell(line) {
-		return p.ParseSurge(line)
+		parts := strings.SplitN(line, "=", 2)
+		remark := strings.TrimSpace(parts[0])
+		content := strings.TrimSpace(parts[1])
+
+		proxy, err := p.ParseSurge(content)
+		if err != nil {
+			return nil, err
+		}
+		proxy.SetRemark(remark)
+		return proxy, nil
 	}
 
 	u, err := url.Parse(line)
@@ -64,20 +73,16 @@ func (p *SnellParser) Parse(line string) (core.SubconverterProxy, error) {
 	}
 	proxy.Group = core.SNELL_DEFAULT_GROUP
 
-	return proxy, nil
+	return utils.ToMihomoProxy(proxy)
 }
 
-// ParseSurge parses a Surge format line
-func (p *SnellParser) ParseSurge(line string) (core.SubconverterProxy, error) {
-	parts := strings.SplitN(line, "=", 2)
-	remark := strings.TrimSpace(parts[0])
-	params := strings.Split(strings.TrimSpace(parts[1]), ",")
-
+// ParseSurge parses a Surge config string
+func (p *SnellParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+	params := strings.Split(content, ",")
 	if len(params) < 3 {
-		return nil, fmt.Errorf("invalid surge snell format")
+		return nil, fmt.Errorf("invalid surge snell config: %s", content)
 	}
 
-	// params[0] is "snell"
 	server := strings.TrimSpace(params[1])
 	portStr := strings.TrimSpace(params[2])
 	port, err := strconv.Atoi(portStr)
@@ -90,26 +95,31 @@ func (p *SnellParser) ParseSurge(line string) (core.SubconverterProxy, error) {
 			Type:   "snell",
 			Server: server,
 			Port:   port,
-			Remark: remark,
 			Group:  core.SNELL_DEFAULT_GROUP,
 		},
 	}
 
 	for i := 3; i < len(params); i++ {
-		arg := strings.TrimSpace(params[i])
-		if strings.HasPrefix(arg, "psk=") {
-			snell.Psk = strings.TrimPrefix(arg, "psk=")
-		} else if strings.HasPrefix(arg, "obfs=") {
-			snell.Obfs = strings.TrimPrefix(arg, "obfs=")
-		} else if strings.HasPrefix(arg, "obfs-host=") {
-			snell.ObfsParam = strings.TrimPrefix(arg, "obfs-host=")
-		} else if strings.HasPrefix(arg, "version=") {
-			v, _ := strconv.Atoi(strings.TrimPrefix(arg, "version="))
-			snell.Version = v
+		kv := strings.SplitN(strings.TrimSpace(params[i]), "=", 2)
+		if len(kv) == 2 {
+			k := strings.TrimSpace(kv[0])
+			v := strings.TrimSpace(kv[1])
+			switch k {
+			case "psk":
+				snell.Psk = v
+			case "obfs":
+				snell.Obfs = v
+			case "obfs-host":
+				snell.ObfsParam = v
+			case "version":
+				if ver, err := strconv.Atoi(v); err == nil {
+					snell.Version = ver
+				}
+			}
 		}
 	}
 
-	return snell, nil
+	return utils.ToMihomoProxy(snell)
 }
 
 // ParseClash parses a Clash config map
@@ -135,5 +145,5 @@ func (p *SnellParser) ParseClash(config map[string]interface{}) (core.Subconvert
 		Obfs:      obfs,
 		ObfsParam: obfsHost,
 	}
-	return snell, nil
+	return utils.ToMihomoProxy(snell)
 }

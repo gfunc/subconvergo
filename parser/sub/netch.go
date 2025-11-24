@@ -3,11 +3,11 @@ package sub
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/gfunc/subconvergo/parser/core"
 	"github.com/gfunc/subconvergo/parser/proxy"
+	"github.com/gfunc/subconvergo/parser/utils"
 	proxyCore "github.com/gfunc/subconvergo/proxy/core"
 )
 
@@ -40,7 +40,7 @@ func (p *NetchSubscriptionParser) Parse(content string) (*core.SubContent, error
 			continue
 		}
 
-		typeVal := toInt(cfg["Type"])
+		typeVal := utils.ToInt(cfg["Type"])
 
 		switch typeVal {
 		case 1: // SS
@@ -69,21 +69,4 @@ func (p *NetchSubscriptionParser) Parse(content string) (*core.SubContent, error
 	return &core.SubContent{
 		Proxies: proxies,
 	}, nil
-}
-
-func toInt(v interface{}) int {
-	if v == nil {
-		return 0
-	}
-	switch val := v.(type) {
-	case float64:
-		return int(val)
-	case int:
-		return val
-	case string:
-		i, _ := strconv.Atoi(val)
-		return i
-	default:
-		return 0
-	}
 }

@@ -74,7 +74,7 @@ func TestVLESSParser_Parse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parser.Parse(tt.input)
+			proxy, err := parser.ParseSingle(tt.input)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

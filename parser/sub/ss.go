@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/gfunc/subconvergo/parser/core"
+	"github.com/gfunc/subconvergo/parser/proxy"
 	"github.com/gfunc/subconvergo/parser/utils"
 	pc "github.com/gfunc/subconvergo/proxy/core"
-	"github.com/gfunc/subconvergo/proxy/impl"
 )
 
 type SSSubscriptionParser struct{}
@@ -66,9 +66,9 @@ func (p *SSSubscriptionParser) Parse(content string) (*core.SubContent, error) {
 	}
 
 	var proxies []pc.ProxyInterface
-	group := toString(js["remarks"])
+	group := utils.ToString(js["remarks"])
 	if group == "" {
-		group = "SS-Provider"
+		group = pc.SS_DEFAULT_GROUP
 	}
 
 	for _, item := range list {
@@ -78,8 +78,8 @@ func (p *SSSubscriptionParser) Parse(content string) (*core.SubContent, error) {
 		}
 
 		cfg["group"] = group
-
-		if ss, err := p.parseSSConf(cfg); err == nil {
+		sp := &proxy.ShadowsocksParser{}
+		if ss, err := sp.ParseSS(cfg); err == nil {
 			proxies = append(proxies, ss)
 		}
 	}
@@ -87,38 +87,4 @@ func (p *SSSubscriptionParser) Parse(content string) (*core.SubContent, error) {
 	return &core.SubContent{
 		Proxies: proxies,
 	}, nil
-}
-
-func (p *SSSubscriptionParser) parseSSConf(config map[string]interface{}) (*impl.ShadowsocksProxy, error) {
-	server := utils.GetStringField(config, "server")
-	port := utils.GetIntField(config, "server_port")
-	remarks := utils.GetStringField(config, "remarks")
-	password := utils.GetStringField(config, "password")
-	method := utils.GetStringField(config, "method")
-	plugin := utils.GetStringField(config, "plugin")
-	pluginOpts := utils.GetStringField(config, "plugin_opts")
-	group := utils.GetStringField(config, "group")
-
-	if remarks == "" {
-		remarks = fmt.Sprintf("%s:%d", server, port)
-	}
-
-	ss := &impl.ShadowsocksProxy{
-		BaseProxy: pc.BaseProxy{
-			Type:   "ss",
-			Server: server,
-			Port:   port,
-			Remark: remarks,
-			Group:  group,
-		},
-		Password:      password,
-		EncryptMethod: method,
-		Plugin:        plugin,
-	}
-
-	if pluginOpts != "" {
-		// Parse plugin opts
-	}
-
-	return ss, nil
 }

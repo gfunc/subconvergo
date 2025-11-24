@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 
@@ -135,12 +136,11 @@ func parseMihomoProxy(options map[string]any) (*impl.MihomoProxy, error) {
 	}
 	addr := mihomoProxy.Addr()
 	// parse addr to server and port
-	hostPort := strings.Split(addr, ":")
-	if len(hostPort) != 2 {
-		return nil, fmt.Errorf("invalid address format: %s", addr)
+	server, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address format: %s, %w", addr, err)
 	}
-	server := hostPort[0]
-	port, err := strconv.Atoi(hostPort[1])
+	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid port in address: %s", addr)
 	}

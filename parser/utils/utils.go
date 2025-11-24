@@ -14,7 +14,7 @@ import (
 )
 
 func ToMihomoProxy(pObj core.SubconverterProxy) (core.SubconverterProxy, error) {
-	return ToMihomoProxyWithSetting(pObj, nil)
+	return ToMihomoProxyWithSetting(pObj, &config.ProxySetting{})
 }
 
 func ToMihomoProxyWithSetting(pObj core.SubconverterProxy, config *config.ProxySetting) (core.SubconverterProxy, error) {

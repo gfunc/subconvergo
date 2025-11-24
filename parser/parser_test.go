@@ -431,7 +431,14 @@ func TestSubParser_Parse_TagAndTelegram(t *testing.T) {
 	sc, err = sp.Parse()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(sc.Proxies))
-	socks := sc.Proxies[0].(*P.Socks5Proxy)
+
+	var socks *P.Socks5Proxy
+	if mp, ok := sc.Proxies[0].(*P.MihomoProxy); ok {
+		socks = mp.ProxyInterface.(*P.Socks5Proxy)
+	} else {
+		socks = sc.Proxies[0].(*P.Socks5Proxy)
+	}
+
 	assert.Equal(t, "socks5", socks.Type)
 	assert.Equal(t, "1.2.3.4", socks.Server)
 	assert.Equal(t, 1080, socks.Port)
@@ -447,7 +454,14 @@ func TestSubParser_Parse_TagAndTelegram(t *testing.T) {
 	sc, err = sp.Parse()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(sc.Proxies))
-	httpProxy := sc.Proxies[0].(*P.HttpProxy)
+
+	var httpProxy *P.HttpProxy
+	if mp, ok := sc.Proxies[0].(*P.MihomoProxy); ok {
+		httpProxy = mp.ProxyInterface.(*P.HttpProxy)
+	} else {
+		httpProxy = sc.Proxies[0].(*P.HttpProxy)
+	}
+
 	assert.Equal(t, "http", httpProxy.Type)
 	assert.Equal(t, "1.2.3.4", httpProxy.Server)
 	assert.Equal(t, 8080, httpProxy.Port)

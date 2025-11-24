@@ -40,7 +40,13 @@ func TestSSAndroidSubscriptionParser_Parse(t *testing.T) {
 		t.Fatalf("Expected 1 proxy, got %d", len(sub.Proxies))
 	}
 
-	p := sub.Proxies[0].(*impl.ShadowsocksProxy)
+	var p *impl.ShadowsocksProxy
+	if mp, ok := sub.Proxies[0].(*impl.MihomoProxy); ok {
+		p = mp.ProxyInterface.(*impl.ShadowsocksProxy)
+	} else {
+		p = sub.Proxies[0].(*impl.ShadowsocksProxy)
+	}
+
 	if p.Server != "1.2.3.4" {
 		t.Errorf("Expected server 1.2.3.4, got %s", p.Server)
 	}

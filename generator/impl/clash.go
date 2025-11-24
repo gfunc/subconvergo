@@ -46,6 +46,7 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 
 	// Convert proxies to Clash format
 	var clashProxies []map[string]interface{}
+	var validProxies []pc.ProxyInterface
 	for _, p := range proxies {
 		var config map[string]interface{}
 		var err error
@@ -63,6 +64,7 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 			continue
 		}
 		clashProxies = append(clashProxies, config)
+		validProxies = append(validProxies, p)
 	}
 
 	// Set proxies field name based on Clash config
@@ -71,7 +73,7 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 
 	// Generate proxy groups
 	if len(groups) > 0 {
-		proxyGroups := generateClashProxyGroups(proxies, groups)
+		proxyGroups := generateClashProxyGroups(validProxies, groups)
 		clash.ProxyGroup = proxyGroups
 		base[utils.GetFieldTag("yaml", "ProxyGroup", clash, "proxy-groups")] = proxyGroups
 	}

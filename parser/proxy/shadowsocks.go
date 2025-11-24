@@ -30,10 +30,19 @@ func isSurgeSS(line string) bool {
 	return strings.HasPrefix(val, "ss,")
 }
 
-func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeSS(line) {
-		return p.ParseSurge(line)
+		parts := strings.SplitN(line, "=", 2)
+		remark := strings.TrimSpace(parts[0])
+		content := strings.TrimSpace(parts[1])
+
+		proxy, err := p.ParseSurge(content)
+		if err != nil {
+			return nil, err
+		}
+		proxy.SetRemark(remark)
+		return proxy, nil
 	}
 
 	if !strings.HasPrefix(line, "ss://") {
@@ -162,59 +171,66 @@ func (p *ShadowsocksParser) Parse(line string) (core.SubconverterProxy, error) {
 	return utils.ToMihomoProxy(pObj)
 }
 
-// ParseSurge parses a Surge format line
-func (p *ShadowsocksParser) ParseSurge(line string) (core.SubconverterProxy, error) {
-	parts := strings.SplitN(line, "=", 2)
-	remark := strings.TrimSpace(parts[0])
-	params := strings.Split(strings.TrimSpace(parts[1]), ",")
-
-	if len(params) < 5 {
-		return nil, fmt.Errorf("invalid surge ss format")
+// ParseSurge parses a Surge config string
+func (p *ShadowsocksParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+	params := strings.Split(content, ",")
+	if len(params) < 3 {
+		return nil, fmt.Errorf("invalid surge ss config: %s", content)
 	}
 
-	// params[0] is "ss"
+	proxyType := strings.TrimSpace(params[0])
 	server := strings.TrimSpace(params[1])
 	portStr := strings.TrimSpace(params[2])
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid port: %s", portStr)
 	}
-	encrypt := strings.TrimSpace(params[3])
-	password := strings.TrimSpace(params[4])
 
 	ss := &impl.ShadowsocksProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "ss",
 			Server: server,
 			Port:   port,
-			Remark: remark,
 		},
-		Password:      password,
-		EncryptMethod: encrypt,
 	}
 
-	// Parse optional args
-	for i := 5; i < len(params); i++ {
-		arg := strings.TrimSpace(params[i])
-		if strings.HasPrefix(arg, "obfs=") {
-			ss.Plugin = "obfs" // Surge uses "obfs" param, but in SS it maps to simple-obfs or similar?
-			// subconverter maps obfs=http to simple-obfs?
-			// Let's check subconverter logic if needed.
-			// For now, just store it.
-			if ss.PluginOpts == nil {
-				ss.PluginOpts = make(map[string]interface{})
-			}
-			ss.PluginOpts["obfs"] = strings.TrimPrefix(arg, "obfs=")
-		} else if strings.HasPrefix(arg, "obfs-host=") {
-			if ss.PluginOpts == nil {
-				ss.PluginOpts = make(map[string]interface{})
-			}
-			ss.PluginOpts["obfs-host"] = strings.TrimPrefix(arg, "obfs-host=")
+	startIdx := 3
+	// Check for positional method/password
+	// Surge 2 "custom" has method, password at 3, 4
+	if strings.ToLower(proxyType) == "custom" {
+		if len(params) >= 5 {
+			ss.EncryptMethod = strings.TrimSpace(params[3])
+			ss.Password = strings.TrimSpace(params[4])
+			startIdx = 5
 		}
-		// Handle tfo, udp-relay, etc.
 	}
 
-	return ss, nil
+	for i := startIdx; i < len(params); i++ {
+		kv := strings.SplitN(strings.TrimSpace(params[i]), "=", 2)
+		if len(kv) == 2 {
+			k := strings.TrimSpace(kv[0])
+			v := strings.TrimSpace(kv[1])
+			switch k {
+			case "encrypt-method":
+				ss.EncryptMethod = v
+			case "password":
+				ss.Password = v
+			case "obfs":
+				ss.Plugin = "obfs"
+				if ss.PluginOpts == nil {
+					ss.PluginOpts = make(map[string]interface{})
+				}
+				ss.PluginOpts["obfs"] = v
+			case "obfs-host":
+				if ss.PluginOpts == nil {
+					ss.PluginOpts = make(map[string]interface{})
+				}
+				ss.PluginOpts["obfs-host"] = v
+			}
+		}
+	}
+
+	return utils.ToMihomoProxy(ss)
 }
 
 // ParseClash parses a Clash config map
@@ -250,7 +266,7 @@ func (p *ShadowsocksParser) ParseClash(config map[string]interface{}) (core.Subc
 		}
 	}
 
-	return ss, nil
+	return utils.ToMihomoProxy(ss)
 }
 
 // ParseNetch parses a Netch config map
@@ -276,11 +292,10 @@ func (p *ShadowsocksParser) ParseNetch(config map[string]interface{}) (core.Subc
 	}
 
 	if pluginOptsStr != "" {
-		// Netch plugin opts parsing?
-		// Assuming simple string for now or implement parsing if needed
+		ss.PluginOpts = utils.ParsePluginOpts(pluginOptsStr)
 	}
 
-	return ss, nil
+	return utils.ToMihomoProxy(ss)
 }
 
 // ParseSSTap parses a SSTap config map
@@ -306,10 +321,10 @@ func (p *ShadowsocksParser) ParseSSTap(config map[string]interface{}) (core.Subc
 	}
 
 	if pluginOptsStr != "" {
-		// Parse plugin opts
+		ss.PluginOpts = utils.ParsePluginOpts(pluginOptsStr)
 	}
 
-	return ss, nil
+	return utils.ToMihomoProxy(ss)
 }
 
 // ParseSSD parses a SSD config map (resolved)
@@ -348,10 +363,10 @@ func (p *ShadowsocksParser) ParseSSD(config map[string]interface{}) (core.Subcon
 		}
 	}
 
-	return ss, nil
+	return utils.ToMihomoProxy(ss)
 }
 
-func (p *ShadowsocksParser) ParseSSAndroid(config map[string]interface{}) (*impl.ShadowsocksProxy, error) {
+func (p *ShadowsocksParser) ParseSSAndroid(config map[string]interface{}) (core.SubconverterProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "server_port")
 	remarks := utils.GetStringField(config, "remarks")
@@ -382,5 +397,46 @@ func (p *ShadowsocksParser) ParseSSAndroid(config map[string]interface{}) (*impl
 		ss.PluginOpts = utils.ParsePluginOpts(pluginOpts)
 	}
 
-	return ss, nil
+	return utils.ToMihomoProxy(ss)
+}
+
+func (p *ShadowsocksParser) ParseSS(cfg map[string]interface{}) (core.SubconverterProxy, error) {
+	server := utils.GetStringField(cfg, "server")
+	port := utils.GetIntField(cfg, "server_port")
+	if port == 0 {
+		return nil, fmt.Errorf("invalid port")
+	}
+
+	remark := utils.GetStringField(cfg, "remarks")
+	if remark == "" {
+		remark = fmt.Sprintf("%s:%d", server, port)
+	}
+
+	password := utils.GetStringField(cfg, "password")
+	method := utils.GetStringField(cfg, "method")
+	plugin := utils.GetStringField(cfg, "plugin")
+	pluginOpts := utils.GetStringField(cfg, "plugin_opts")
+	group := utils.GetStringField(cfg, "group")
+	if group == "" {
+		group = core.SS_DEFAULT_GROUP
+	}
+
+	ss := &impl.ShadowsocksProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "ss",
+			Remark: remark,
+			Server: server,
+			Port:   port,
+			Group:  group,
+		},
+		Password:      password,
+		EncryptMethod: method,
+		Plugin:        plugin,
+	}
+
+	if pluginOpts != "" {
+		ss.PluginOpts = utils.ParsePluginOpts(pluginOpts)
+	}
+
+	return utils.ToMihomoProxy(ss)
 }

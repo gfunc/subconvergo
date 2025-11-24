@@ -21,7 +21,7 @@ func (p *AnyTLSParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "anytls://")
 }
 
-func (p *AnyTLSParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *AnyTLSParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "anytls://") {
 		return nil, fmt.Errorf("not a valid anytls:// link")

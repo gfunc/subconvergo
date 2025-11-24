@@ -32,10 +32,19 @@ func isSurgeHttp(line string) bool {
 	return strings.HasPrefix(val, "http,") || strings.HasPrefix(val, "https,")
 }
 
-func (p *HttpParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *HttpParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeHttp(line) {
-		return p.ParseSurge(line)
+		parts := strings.SplitN(line, "=", 2)
+		remark := strings.TrimSpace(parts[0])
+		content := strings.TrimSpace(parts[1])
+
+		proxy, err := p.ParseSurge(content)
+		if err != nil {
+			return nil, err
+		}
+		proxy.SetRemark(remark)
+		return proxy, nil
 	}
 
 	if strings.HasPrefix(line, "tg://http") || strings.HasPrefix(line, "https://t.me/http") {
@@ -74,21 +83,17 @@ func (p *HttpParser) Parse(line string) (core.SubconverterProxy, error) {
 	}
 	proxy.Group = core.HTTP_DEFAULT_GROUP
 
-	return proxy, nil
+	return utils.ToMihomoProxy(proxy)
 }
 
-// ParseSurge parses a Surge format line
-func (p *HttpParser) ParseSurge(line string) (core.SubconverterProxy, error) {
-	parts := strings.SplitN(line, "=", 2)
-	remark := strings.TrimSpace(parts[0])
-	params := strings.Split(strings.TrimSpace(parts[1]), ",")
-
+// ParseSurge parses a Surge config string
+func (p *HttpParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+	params := strings.Split(content, ",")
 	if len(params) < 3 {
-		return nil, fmt.Errorf("invalid surge http format")
+		return nil, fmt.Errorf("invalid surge http config: %s", content)
 	}
 
-	// params[0] is "http" or "https"
-	typeStr := strings.TrimSpace(params[0])
+	proxyType := strings.TrimSpace(params[0])
 	server := strings.TrimSpace(params[1])
 	portStr := strings.TrimSpace(params[2])
 	port, err := strconv.Atoi(portStr)
@@ -101,23 +106,32 @@ func (p *HttpParser) ParseSurge(line string) (core.SubconverterProxy, error) {
 			Type:   "http",
 			Server: server,
 			Port:   port,
-			Remark: remark,
 		},
-		Tls: typeStr == "https",
+		Tls: proxyType == "https",
 	}
 
-	for i := 3; i < len(params); i++ {
-		arg := strings.TrimSpace(params[i])
-		if strings.HasPrefix(arg, "username=") {
-			http.Username = strings.TrimPrefix(arg, "username=")
-		} else if strings.HasPrefix(arg, "password=") {
-			http.Password = strings.TrimPrefix(arg, "password=")
-		} else if strings.HasPrefix(arg, "tls=") {
-			http.Tls = strings.TrimPrefix(arg, "tls=") == "true"
+	startIdx := 3
+	if len(params) >= 5 && !strings.Contains(params[3], "=") {
+		http.Username = strings.TrimSpace(params[3])
+		http.Password = strings.TrimSpace(params[4])
+		startIdx = 5
+	}
+
+	for i := startIdx; i < len(params); i++ {
+		kv := strings.SplitN(strings.TrimSpace(params[i]), "=", 2)
+		if len(kv) == 2 {
+			k := strings.TrimSpace(kv[0])
+			v := strings.TrimSpace(kv[1])
+			switch k {
+			case "username":
+				http.Username = v
+			case "password":
+				http.Password = v
+			}
 		}
 	}
 
-	return http, nil
+	return utils.ToMihomoProxy(http)
 }
 
 // ParseClash parses a Clash config map
@@ -140,7 +154,7 @@ func (p *HttpParser) ParseClash(config map[string]interface{}) (core.Subconverte
 		Password: password,
 		Tls:      tls,
 	}
-	return http, nil
+	return utils.ToMihomoProxy(http)
 }
 
 // ParseSSTap parses a SSTap config map
@@ -161,7 +175,7 @@ func (p *HttpParser) ParseSSTap(config map[string]interface{}) (core.Subconverte
 		Username: username,
 		Password: password,
 	}
-	return http, nil
+	return utils.ToMihomoProxy(http)
 }
 
 func (p *HttpParser) ParseTelegram(line string) (core.SubconverterProxy, error) {
@@ -190,5 +204,5 @@ func (p *HttpParser) ParseTelegram(line string) (core.SubconverterProxy, error) 
 	proxy.Password = pass
 	proxy.Remark = remark
 
-	return proxy, nil
+	return utils.ToMihomoProxy(proxy)
 }

@@ -21,7 +21,7 @@ func (p *Hysteria2Parser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "hysteria2://") || strings.HasPrefix(line, "hy2://")
 }
 
-func (p *Hysteria2Parser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *Hysteria2Parser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	u, err := url.Parse(line)
 	if err != nil {
 		return nil, fmt.Errorf("invalid hysteria2 link: %w", err)

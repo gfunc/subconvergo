@@ -33,10 +33,19 @@ func isSurgeSocks5(line string) bool {
 	return strings.HasPrefix(val, "socks5,") || strings.HasPrefix(val, "socks5-tls,")
 }
 
-func (p *Socks5Parser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *Socks5Parser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeSocks5(line) {
-		return p.ParseSurge(line)
+		parts := strings.SplitN(line, "=", 2)
+		remark := strings.TrimSpace(parts[0])
+		content := strings.TrimSpace(parts[1])
+
+		proxy, err := p.ParseSurge(content)
+		if err != nil {
+			return nil, err
+		}
+		proxy.SetRemark(remark)
+		return proxy, nil
 	}
 
 	if strings.HasPrefix(line, "tg://socks") || strings.HasPrefix(line, "https://t.me/socks") {
@@ -74,21 +83,17 @@ func (p *Socks5Parser) Parse(line string) (core.SubconverterProxy, error) {
 	}
 	proxy.Group = core.SOCKS_DEFAULT_GROUP
 
-	return proxy, nil
+	return utils.ToMihomoProxy(proxy)
 }
 
-// ParseSurge parses a Surge format line
-func (p *Socks5Parser) ParseSurge(line string) (core.SubconverterProxy, error) {
-	parts := strings.SplitN(line, "=", 2)
-	remark := strings.TrimSpace(parts[0])
-	params := strings.Split(strings.TrimSpace(parts[1]), ",")
-
+// ParseSurge parses a Surge config string
+func (p *Socks5Parser) ParseSurge(content string) (core.SubconverterProxy, error) {
+	params := strings.Split(content, ",")
 	if len(params) < 3 {
-		return nil, fmt.Errorf("invalid surge socks5 format")
+		return nil, fmt.Errorf("invalid surge socks5 config: %s", content)
 	}
 
-	// params[0] is "socks5" or "socks5-tls"
-	typeStr := strings.TrimSpace(params[0])
+	proxyType := strings.TrimSpace(params[0])
 	server := strings.TrimSpace(params[1])
 	portStr := strings.TrimSpace(params[2])
 	port, err := strconv.Atoi(portStr)
@@ -101,23 +106,37 @@ func (p *Socks5Parser) ParseSurge(line string) (core.SubconverterProxy, error) {
 			Type:   "socks5",
 			Server: server,
 			Port:   port,
-			Remark: remark,
 		},
-		TLS: typeStr == "socks5-tls",
 	}
 
-	for i := 3; i < len(params); i++ {
-		arg := strings.TrimSpace(params[i])
-		if strings.HasPrefix(arg, "username=") {
-			socks.Username = strings.TrimPrefix(arg, "username=")
-		} else if strings.HasPrefix(arg, "password=") {
-			socks.Password = strings.TrimPrefix(arg, "password=")
-		} else if strings.HasPrefix(arg, "tls=") {
-			socks.TLS = strings.TrimPrefix(arg, "tls=") == "true"
+	if proxyType == "socks5-tls" {
+		socks.TLS = true
+	}
+
+	startIdx := 3
+	if len(params) >= 5 && !strings.Contains(params[3], "=") {
+		socks.Username = strings.TrimSpace(params[3])
+		socks.Password = strings.TrimSpace(params[4])
+		startIdx = 5
+	}
+
+	for i := startIdx; i < len(params); i++ {
+		kv := strings.SplitN(strings.TrimSpace(params[i]), "=", 2)
+		if len(kv) == 2 {
+			k := strings.TrimSpace(kv[0])
+			v := strings.TrimSpace(kv[1])
+			switch k {
+			case "username":
+				socks.Username = v
+			case "password":
+				socks.Password = v
+			case "tls":
+				socks.TLS = v == "true"
+			}
 		}
 	}
 
-	return socks, nil
+	return utils.ToMihomoProxy(socks)
 }
 
 // ParseClash parses a Clash config map
@@ -140,7 +159,7 @@ func (p *Socks5Parser) ParseClash(config map[string]interface{}) (core.Subconver
 		Password: password,
 		TLS:      tls,
 	}
-	return socks, nil
+	return utils.ToMihomoProxy(socks)
 }
 
 // ParseNetch parses a Netch config map
@@ -161,7 +180,7 @@ func (p *Socks5Parser) ParseNetch(config map[string]interface{}) (core.Subconver
 		Username: username,
 		Password: password,
 	}
-	return socks, nil
+	return utils.ToMihomoProxy(socks)
 }
 
 // ParseSSTap parses a SSTap config map
@@ -182,7 +201,7 @@ func (p *Socks5Parser) ParseSSTap(config map[string]interface{}) (core.Subconver
 		Username: username,
 		Password: password,
 	}
-	return socks, nil
+	return utils.ToMihomoProxy(socks)
 }
 
 func (p *Socks5Parser) ParseTelegram(line string) (core.SubconverterProxy, error) {
@@ -211,5 +230,5 @@ func (p *Socks5Parser) ParseTelegram(line string) (core.SubconverterProxy, error
 	proxy.Password = pass
 	proxy.Remark = remark
 
-	return proxy, nil
+	return utils.ToMihomoProxy(proxy)
 }

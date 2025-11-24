@@ -33,11 +33,13 @@ func (g *SurgeGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 	output.WriteString("\n\n[Proxy]\n")
 
 	// Generate proxy section
+	var validProxies []pc.ProxyInterface
 	for _, proxy := range proxies {
 		line := convertToSurge(proxy, opts)
 		if line != "" {
 			output.WriteString(line)
 			output.WriteString("\n")
+			validProxies = append(validProxies, proxy)
 		} else {
 			log.Printf("Proxy %s skipped for Surge (not supported)", proxy.GetRemark())
 		}
@@ -48,7 +50,7 @@ func (g *SurgeGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 		output.WriteString("\n[Proxy Group]\n")
 
 		for _, group := range groups {
-			line := convertGroupToSurge(group, proxies)
+			line := convertGroupToSurge(group, validProxies)
 			if line != "" {
 				output.WriteString(line)
 				output.WriteString("\n")

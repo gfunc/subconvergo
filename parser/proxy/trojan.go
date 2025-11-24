@@ -31,10 +31,19 @@ func isSurgeTrojan(line string) bool {
 	return strings.HasPrefix(val, "trojan,")
 }
 
-func (p *TrojanParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *TrojanParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeTrojan(line) {
-		return p.ParseSurge(line)
+		parts := strings.SplitN(line, "=", 2)
+		remark := strings.TrimSpace(parts[0])
+		content := strings.TrimSpace(parts[1])
+
+		proxy, err := p.ParseSurge(content)
+		if err != nil {
+			return nil, err
+		}
+		proxy.SetRemark(remark)
+		return proxy, nil
 	}
 
 	if !strings.HasPrefix(line, "trojan://") {
@@ -126,17 +135,13 @@ func (p *TrojanParser) Parse(line string) (core.SubconverterProxy, error) {
 	return utils.ToMihomoProxy(pObj)
 }
 
-// ParseSurge parses a Surge format line
-func (p *TrojanParser) ParseSurge(line string) (core.SubconverterProxy, error) {
-	parts := strings.SplitN(line, "=", 2)
-	remark := strings.TrimSpace(parts[0])
-	params := strings.Split(strings.TrimSpace(parts[1]), ",")
-
-	if len(params) < 4 {
-		return nil, fmt.Errorf("invalid surge trojan format")
+// ParseSurge parses a Surge config string
+func (p *TrojanParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+	params := strings.Split(content, ",")
+	if len(params) < 3 {
+		return nil, fmt.Errorf("invalid surge trojan config: %s", content)
 	}
 
-	// params[0] is "trojan"
 	server := strings.TrimSpace(params[1])
 	portStr := strings.TrimSpace(params[2])
 	port, err := strconv.Atoi(portStr)
@@ -149,23 +154,32 @@ func (p *TrojanParser) ParseSurge(line string) (core.SubconverterProxy, error) {
 			Type:   "trojan",
 			Server: server,
 			Port:   port,
-			Remark: remark,
 		},
 	}
 
-	for i := 3; i < len(params); i++ {
-		arg := strings.TrimSpace(params[i])
-		if strings.HasPrefix(arg, "password=") {
-			trojan.Password = strings.TrimPrefix(arg, "password=")
-		} else if strings.HasPrefix(arg, "sni=") {
-			trojan.Host = strings.TrimPrefix(arg, "sni=")
-		} else if strings.HasPrefix(arg, "skip-cert-verify=") {
-			trojan.AllowInsecure = strings.TrimPrefix(arg, "skip-cert-verify=") == "true"
-		}
-		// Handle other args
+	startIdx := 3
+	if len(params) >= 4 && !strings.Contains(params[3], "=") {
+		trojan.Password = strings.TrimSpace(params[3])
+		startIdx = 4
 	}
 
-	return trojan, nil
+	for i := startIdx; i < len(params); i++ {
+		kv := strings.SplitN(strings.TrimSpace(params[i]), "=", 2)
+		if len(kv) == 2 {
+			k := strings.TrimSpace(kv[0])
+			v := strings.TrimSpace(kv[1])
+			switch k {
+			case "password":
+				trojan.Password = v
+			case "sni":
+				trojan.Host = v
+			case "skip-cert-verify":
+				trojan.AllowInsecure = v == "true"
+			}
+		}
+	}
+
+	return utils.ToMihomoProxy(trojan)
 }
 
 // ParseClash parses a Clash config map
@@ -204,5 +218,5 @@ func (p *TrojanParser) ParseClash(config map[string]interface{}) (core.Subconver
 		// If host is specified in headers, it might override SNI or be used for WS
 		// TrojanProxy struct has Host field which is usually SNI/Peer
 	}
-	return trojan, nil
+	return utils.ToMihomoProxy(trojan)
 }

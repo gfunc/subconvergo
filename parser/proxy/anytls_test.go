@@ -12,7 +12,7 @@ func TestAnyTLSParser_Parse(t *testing.T) {
 
 	// Test case 1: Full link
 	link := "anytls://password@1.2.3.4:443?peer=example.com&alpn=h2,http/1.1&hpkp=chrome&tfo=1&insecure=1&idle_session_check_interval=30&idle_session_timeout=60&min_idle_session=5#anytls-proxy"
-	proxy, err := parser.Parse(link)
+	proxy, err := parser.ParseSingle(link)
 	assert.NoError(t, err)
 	var anytlsProxy *impl.AnyTLSProxy
 	if mp, ok := proxy.(*impl.MihomoProxy); ok {
@@ -36,7 +36,7 @@ func TestAnyTLSParser_Parse(t *testing.T) {
 
 	// Test case 2: Minimal link
 	link = "anytls://password@1.2.3.4:443"
-	proxy, err = parser.Parse(link)
+	proxy, err = parser.ParseSingle(link)
 	assert.NoError(t, err)
 
 	var anytlsProxy2 *impl.AnyTLSProxy
@@ -54,6 +54,6 @@ func TestAnyTLSParser_Parse(t *testing.T) {
 	// Test case 3: Invalid link
 	link = "invalid://link"
 	assert.False(t, parser.CanParseLine(link))
-	_, err = parser.Parse(link)
+	_, err = parser.ParseSingle(link)
 	assert.Error(t, err)
 }

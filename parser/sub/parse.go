@@ -18,7 +18,7 @@ func ParseSubscription(content string) (*core.SubContent, error) {
 	if strings.Contains(content, "\"uiItem\"") || strings.Contains(content, "vnext") {
 		return (&V2RaySubscriptionParser{}).Parse(content)
 	}
-	if strings.Contains(content, "\"proxy_apps\"") {
+	if strings.Contains(content, "\"proxy_apps\"") || (strings.Contains(content, "\"server\"") && strings.Contains(content, "\"server_port\"") && strings.Contains(content, "\"method\"")) {
 		return (&SSAndroidSubscriptionParser{}).Parse(content)
 	}
 	if strings.Contains(content, "\"idInUse\"") {
@@ -43,6 +43,11 @@ func ParseSubscription(content string) (*core.SubContent, error) {
 		return clashParser.Parse(content)
 	}
 
-	// Base64 / Line-by-line (General)
-	return (&Base64SubscriptionParser{}).Parse(content)
+	// Surge
+	surgeParser := &SurgeSubscriptionParser{}
+	if surgeParser.CanParse(content) {
+		return surgeParser.Parse(content)
+	}
+	// General
+	return (&SingleSubscriptionParser{}).Parse(content)
 }

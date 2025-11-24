@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator/core"
+	"github.com/gfunc/subconvergo/generator/utils"
 	pc "github.com/gfunc/subconvergo/proxy/core"
 )
 
@@ -45,12 +47,22 @@ func (g *SingBoxGenerator) Generate(proxies []pc.ProxyInterface, groups []config
 	})
 
 	// Add proxy outbounds
+	var validProxies []pc.ProxyInterface
 	for _, proxy := range proxies {
 		outbound := convertToSingBox(proxy, opts)
 		if outbound != nil {
 			outbounds = append(outbounds, outbound)
+			validProxies = append(validProxies, proxy)
 		} else {
 			log.Printf("Proxy %s skipped for sing-box (not supported)", proxy.GetRemark())
+		}
+	}
+
+	// Generate proxy groups
+	for _, group := range groups {
+		outbound := convertGroupToSingBox(group, validProxies)
+		if outbound != nil {
+			outbounds = append(outbounds, outbound)
 		}
 	}
 
@@ -101,6 +113,46 @@ func convertToSingBox(p pc.ProxyInterface, opts core.GeneratorOptions) map[strin
 	}
 	log.Printf("Proxy %s skipped for sing-box (not supported)", p.GetRemark())
 	return nil
+}
+
+func convertGroupToSingBox(group config.ProxyGroupConfig, proxies []pc.ProxyInterface) map[string]interface{} {
+	// Filter proxies based on group rules using advanced filtering
+	filtered := utils.FilterProxiesByRules(proxies, group.Rule)
+	if len(filtered) == 0 {
+		filtered = []string{"DIRECT"}
+	}
+
+	outbound := map[string]interface{}{
+		"tag":       group.Name,
+		"outbounds": filtered,
+	}
+
+	switch strings.ToLower(group.Type) {
+	case "select":
+		outbound["type"] = "selector"
+	case "url-test":
+		outbound["type"] = "urltest"
+		if group.URL != "" {
+			outbound["url"] = group.URL
+		}
+		if group.Interval > 0 {
+			// sing-box interval is a duration string or number?
+			// Documentation says duration string (e.g. "30m", "10s")
+			// But subconverter output showed "interval":"30m" for NTP, but for url-test?
+			// Let's assume seconds if number, or format as string.
+			// subconverter uses seconds in config, but output?
+			// Let's use string format "Xs"
+			outbound["interval"] = fmt.Sprintf("%ds", group.Interval)
+		}
+		if group.Tolerance > 0 {
+			outbound["tolerance"] = group.Tolerance
+		}
+	default:
+		// Fallback to selector for unknown types
+		outbound["type"] = "selector"
+	}
+
+	return outbound
 }
 
 func generateSingBoxRules(rulesets []config.RulesetConfig) []map[string]interface{} {

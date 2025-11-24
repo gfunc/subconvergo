@@ -22,7 +22,7 @@ func (p *VLESSParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "vless://")
 }
 
-func (p *VLESSParser) Parse(line string) (core.SubconverterProxy, error) {
+func (p *VLESSParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "vless://") {
 		return nil, fmt.Errorf("not a valid vless:// link")
