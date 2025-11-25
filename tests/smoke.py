@@ -31,6 +31,12 @@ ORIGINAL_PREF_EXISTS = PREF_PATH.exists()
 ORIGINAL_PREF = PREF_PATH.read_text() if ORIGINAL_PREF_EXISTS else ""
 
 
+def save_result(case: str, content: str, filename: str = "subconvergo.txt") -> None:
+    out_dir = RESULTS_DIR / case
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / filename).write_text(content, encoding="utf-8")
+
+
 def base_pref() -> dict:
     return {
         "common": {
@@ -108,6 +114,9 @@ def pref_variant(case: str) -> dict:
     elif case == "sub_with_external_config":
         # keep defaults; no special pref needed beyond base
         pass
+    elif case == "clash_only_config":
+        # keep defaults
+        pass
     elif case == "filters_regex":
         pref["common"]["include_remarks"] = ["/^HK/"]
         pref["common"]["exclude_remarks"] = []
@@ -177,28 +186,36 @@ def wait_for_service(timeout: int = 120) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            resp = requests.get(f"{BASE_URL}/version", timeout=5)
-            resp2 = requests.get(f"{SUBCONVERTER_URL}/version", timeout=5)
-            if resp.status_code == 200 and resp2.status_code == 200:
-                return
+            api_get_subconvergo("/version")
+            api_get_subconverter("/version")
+            return
         except requests.RequestException:
             pass
         time.sleep(2)
     raise RuntimeError("service did not become ready in time")
 
 
-def api_get(path: str, *, params=None, expected=200) -> requests.Response:
-    resp = requests.get(f"{BASE_URL}{path}", params=params, timeout=30)
+def _api_get(base: str, path: str, *, params=None, expected=200) -> requests.Response:
+    path = path.lstrip("/")
+    resp = requests.get(f"{base}/{path}", params=params, timeout=30)
     codes = expected if isinstance(expected, (list, tuple)) else (expected,)
     if resp.status_code not in codes:
         raise AssertionError(f"GET {path} returned {resp.status_code}: {resp.text[:200]}")
     return resp
 
+def api_get_subconvergo(path: str, *, params=None, expected=200) -> requests.Response:
+    resp = _api_get(BASE_URL, path, params=params, expected=expected)
+    return resp
+
+def api_get_subconverter(path: str, *, params=None, expected=200) -> requests.Response:
+    resp = _api_get(SUBCONVERTER_URL, path, params=params, expected=expected)
+    return resp
 
 def reload_config(case: str) -> str:
     write_pref(case)
-    resp = api_get("/readconf", params={"token": TOKEN})
-    return resp.text.strip()
+    resp = api_get_subconvergo("/readconf", params={"token": TOKEN})
+    resp2 = api_get_subconverter("/readconf", params={"token": TOKEN})
+    return resp.text.strip() + " " + resp2.text.strip()
 
 
 def assert_proxies(struct: dict, names) -> None:
@@ -353,23 +370,25 @@ def compare_proxy_lists(cand_proxies: List[Dict[str, Any]], ref_proxies: List[Di
 
 
 
-def test_version() -> dict:
+def test_version(case: str) -> dict:
     # raise AssertionError("Forced failure")
-    resp = api_get("/version")
+    resp = api_get_subconvergo("/version")
+    save_result(case, resp.text)
     body = resp.text.strip()
     if not body.startswith("subconvergo"):
         raise AssertionError(f"unexpected version payload: {body}")
     return {"version": body}
 
 
-def test_sub() -> dict:
+def test_sub(case: str) -> dict:
     params = {
         "target": "clash",
         "url": f"{MOCK_BASE}/ss-subscription.txt",
         "udp": "true",
         "tfo": "true",
     }
-    resp = api_get("/sub", params=params)
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     assert_proxies(data, ["HK-Server-01"])
     assert_group_contains(data, "Auto", "HK-Server-01")
@@ -377,11 +396,12 @@ def test_sub() -> dict:
     return {"proxy_count": len(data.get("proxies", [])), "rule_count": len(data.get("rules", []))}
 
 
-def test_render() -> dict:
-    resp = api_get(
+def test_render(case: str) -> dict:
+    resp = api_get_subconvergo(
         "/render",
         params={"path": TEMPLATE_PATH, "token": TOKEN},
     )
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     assert_proxies(data, ["TestProxy"])
     assert_group_contains(data, "Auto", "TestProxy")
@@ -389,11 +409,12 @@ def test_render() -> dict:
     return {"lines": len(resp.text.splitlines())}
 
 
-def test_profile() -> dict:
-    resp = api_get(
+def test_profile(case: str) -> dict:
+    resp = api_get_subconvergo(
         "/getprofile",
         params={"name": "example_profile", "token": TOKEN},
     )
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     assert_proxies(data, ["Example"])
     assert_group_contains(data, "Auto", "Example")
@@ -401,24 +422,28 @@ def test_profile() -> dict:
     return {"bytes": len(resp.content)}
 
 
-def test_ruleset_remote() -> dict:
+def test_ruleset_remote(case: str) -> dict:
     encoded = base64.urlsafe_b64encode(f"{MOCK_BASE}/test_rules.list".encode()).decode()
-    resp = api_get("/getruleset", params={"url": encoded, "type": "clash"})
+    resp = api_get_subconvergo("/getruleset", params={"url": encoded, "type": "clash"})
+    save_result(case, resp.text)
     body = resp.text.strip()
     if "MATCH,Auto" not in body:
         raise AssertionError("ruleset body missing MATCH,Auto")
     return {"lines": len(body.splitlines())}
 
-def test_ruleset_compare_with_subconverter() -> dict:
+def test_ruleset_compare_with_subconverter(case: str) -> dict:
     url_plain = f"{MOCK_BASE}/test_rules.list"
     encoded = base64.urlsafe_b64encode(url_plain.encode()).decode()
     # Subconvergo (encoded)
     r1 = requests.get(f"{BASE_URL}/getruleset", params={"url": encoded, "type": "clash"}, timeout=30)
     r1.raise_for_status()
+    save_result(case, r1.text, "subconvergo.txt")
     # Subconverter may expect plain URL; try plain first, then encoded
-    r2 = requests.get(f"{SUBCONVERTER_URL}/getruleset", params={"url": url_plain, "type": "clash"}, timeout=30)
+    r2 = api_get_subconverter("/getruleset", params={"url": url_plain, "type": "clash"}, expected=[200, 400])
+    
     if r2.status_code != 200:
-        r2 = requests.get(f"{SUBCONVERTER_URL}/getruleset", params={"url": encoded, "type": "clash"}, timeout=30)
+        r2 = api_get_subconverter("/getruleset", params={"url": encoded, "type": "clash"}, expected=[200, 400])
+    save_result(case, r2.text, "subconverter.txt")
     if r2.status_code != 200:
         # Subconverter didn't support this combination; skip strict compare
         return {"skipped": True, "status": r2.status_code}
@@ -429,14 +454,15 @@ def test_ruleset_compare_with_subconverter() -> dict:
         raise AssertionError("ruleset output differs from subconverter")
     return {"lines": len(b1)}
 
-def test_filters_regex() -> dict:
+def test_filters_regex(case: str) -> dict:
     # Expect only HK* proxies due to include regex
     params = {
         "target": "clash",
         "url": f"{MOCK_BASE}/ss-subscription.txt",
     }
     # The pref for this case sets include_remarks to ["/^HK/"]
-    resp = api_get("/sub", params=params)
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     names = [p.get("name") for p in data.get("proxies", [])]
     hk_only = [n for n in names if n and n.startswith("HK")] 
@@ -444,14 +470,15 @@ def test_filters_regex() -> dict:
         raise AssertionError(f"regex filter did not restrict to HK*: {names}")
     return {"proxy_count": len(names)}
 
-def test_sub_with_external_config() -> dict:
+def test_sub_with_external_config(case: str) -> dict:
     # Use external config mounted at /base/resource/external.yml
     params = {
         "target": "clash",
         "url": f"{MOCK_BASE}/ss-subscription.txt",
         "config": "/base/resource/external.yml",
     }
-    resp = api_get("/sub", params=params)
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     # Same structural checks as base sub
     assert_proxies(data, ["HK-Server-01"])
@@ -460,10 +487,45 @@ def test_sub_with_external_config() -> dict:
     return {"proxy_count": len(data.get("proxies", [])), "rule_count": len(data.get("rules", []))}
 
 
-def test_exclude_remarks() -> dict:
+def test_clash_only_config(case: str) -> dict:
+    # Use external config mounted at /mock-data/clash_only.yaml
+    # Treat it as a subscription URL (local file)
+    params = {
+        "target": "clash",
+        "url": f"{MOCK_BASE}/clash_only.yaml",
+    }
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
+    data = yaml.safe_load(resp.text)
+    
+    # Verify Proxy
+    assert_proxies(data, ["sshtest"])
+    # Verify Proxy Type (ssh)
+    proxies = {p.get("name"): p for p in data.get("proxies", [])}
+    if proxies["sshtest"].get("type") != "ssh":
+        raise AssertionError(f"sshtest type mismatch: expected ssh, got {proxies['sshtest'].get('type')}")
+        
+    # Verify Proxy Group
+    assert_group_contains(data, "sshg", "sshtest")
+    
+    # Verify Rules
+    rules = data.get("rules", [])
+    expected_rules = [
+        "DOMAIN-SUFFIX,home.com,sshg",
+        "IP-CIDR,192.168.0.0/16,sshg,no-resolve"
+    ]
+    for rule in expected_rules:
+        if rule not in rules:
+             raise AssertionError(f"missing rule: {rule}")
+
+    return {"proxy_count": len(data.get("proxies", [])), "rule_count": len(rules)}
+
+
+def test_exclude_remarks(case: str) -> dict:
     # Exclude "HK"
     params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
-    resp = api_get("/sub", params=params)
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     names = [p.get("name") for p in data.get("proxies", [])]
     if any("HK" in n for n in names):
@@ -471,10 +533,11 @@ def test_exclude_remarks() -> dict:
     return {"proxy_count": len(names)}
 
 
-def test_include_remarks() -> dict:
+def test_include_remarks(case: str) -> dict:
     # Include only "HK"
     params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
-    resp = api_get("/sub", params=params)
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     names = [p.get("name") for p in data.get("proxies", [])]
     if not all("HK" in n for n in names):
@@ -482,10 +545,11 @@ def test_include_remarks() -> dict:
     return {"proxy_count": len(names)}
 
 
-def test_emoji_rule() -> dict:
+def test_emoji_rule(case: str) -> dict:
     # Check if HK gets flag
     params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
-    resp = api_get("/sub", params=params)
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     names = [p.get("name") for p in data.get("proxies", [])]
     # HK-Server-01 -> 🇭🇰 HK-Server-01
@@ -494,10 +558,11 @@ def test_emoji_rule() -> dict:
     return {"proxy_count": len(names)}
 
 
-def test_rename_node() -> dict:
+def test_rename_node(case: str) -> dict:
     # HK -> Hong Kong
     params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
-    resp = api_get("/sub", params=params)
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
     data = yaml.safe_load(resp.text)
     names = [p.get("name") for p in data.get("proxies", [])]
     if not any("Hong Kong" in n for n in names):
@@ -505,14 +570,15 @@ def test_rename_node() -> dict:
     return {"proxy_count": len(names)}
 
 
-def test_userinfo() -> dict:
+def test_userinfo(case: str) -> dict:
     # Just check it runs without error for now, as mock might not have userinfo
     params = {"target": "clash", "url": f"{MOCK_BASE}/ss-subscription.txt"}
-    resp = api_get("/sub", params=params)
+    resp = api_get_subconvergo("/sub", params=params)
+    save_result(case, resp.text)
     return {"status": "ok"}
 
 
-def test_settings_comparison() -> dict:
+def test_settings_comparison(case: str) -> dict:
     """Compare results with various settings (emoji, rules, etc)."""
     base_params = {
         "target": "clash",
@@ -542,7 +608,7 @@ def test_settings_comparison() -> dict:
         settings_compare_dir.mkdir(parents=True, exist_ok=True)
         # 1. Subconvergo
         try:
-            r1 = api_get("/sub", params=params)
+            r1 = api_get_subconvergo("/sub", params=params)
             c1 = count_proxies(r1.text, "clash")
             (settings_compare_dir / "subconvergo.txt").write_text(r1.text, encoding="utf-8")
         except Exception as e:
@@ -551,7 +617,7 @@ def test_settings_comparison() -> dict:
             
         # 2. Subconverter
         try:
-            r2 = requests.get(f"{SUBCONVERTER_URL}/sub", params=params, timeout=10)
+            r2 = api_get_subconverter("/sub", params=params, expected=[200, 400])
             c2 = count_proxies(r2.text, "clash")
             (settings_compare_dir / "subconverter.txt").write_text(r2.text, encoding="utf-8")
         except Exception as e:
@@ -597,7 +663,7 @@ def test_e2e_matrix(test_name: str) -> dict:
             
             # 1. Request from Subconvergo (Candidate)
             try:
-                r1 = api_get("/sub", params=params, expected=[200, 400])
+                r1 = api_get_subconvergo("/sub", params=params, expected=[200, 400])
                 content1 = r1.text
                 cand_status = r1.status_code
             except Exception as e:
@@ -607,7 +673,7 @@ def test_e2e_matrix(test_name: str) -> dict:
 
             # 2. Request from Subconverter (Reference)
             try:
-                r2 = requests.get(f"{SUBCONVERTER_URL}/sub", params=params, timeout=10)
+                r2 = api_get_subconverter("/sub", params=params, expected=[200, 400])
                 content2 = r2.text
                 ref_status = r2.status_code
             except Exception as e:
@@ -757,6 +823,7 @@ def main() -> None:
         ("rename_node", test_rename_node),
         ("userinfo", test_userinfo),
         ("sub_with_external_config", test_sub_with_external_config),
+        ("clash_only_config", test_clash_only_config),
         ("settings_comparison", test_settings_comparison),
         ("e2e_matrix", test_e2e_matrix),
         ("e2e_matrix_exclude", test_e2e_matrix),
@@ -788,10 +855,7 @@ def main() -> None:
             
             print(f"Running {case}...")
             try:
-                if func == test_e2e_matrix:
-                    res = func(case)
-                else:
-                    res = func()
+                res = func(case)
                 
                 results[case] = res
                 
