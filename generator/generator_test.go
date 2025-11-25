@@ -306,10 +306,11 @@ func TestGenerators_SkipUnsupportedProxies(t *testing.T) {
 		gen := &gimpl.LoonGenerator{}
 		output, err := gen.Generate(proxies, nil, nil, nil, opts)
 		assert.NoError(t, err)
-		// Loon supports SSR, VLESS, and WireGuard
+		// Loon supports SSR and WireGuard
 		assert.Contains(t, output, "ssr-proxy")
-		assert.Contains(t, output, "vless-proxy")
 		assert.Contains(t, output, "wg-proxy")
+		// VLESS is not supported in this implementation yet
+		assert.NotContains(t, output, "vless-proxy")
 	})
 }
 
