@@ -10,7 +10,6 @@ import (
 	"github.com/gfunc/subconvergo/generator/core"
 	"github.com/gfunc/subconvergo/generator/utils"
 	pc "github.com/gfunc/subconvergo/proxy/core"
-	"github.com/gfunc/subconvergo/proxy/impl"
 	C "github.com/metacubex/mihomo/config"
 	R "github.com/metacubex/mihomo/rules"
 	RC "github.com/metacubex/mihomo/rules/common"
@@ -48,23 +47,18 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 	var clashProxies []map[string]interface{}
 	var validProxies []pc.ProxyInterface
 	for _, p := range proxies {
-		var config map[string]interface{}
-		var err error
-		switch c := p.(type) {
-		case *impl.MihomoProxy:
-			config, err = c.ToClashConfig(&opts.ProxySetting)
-		case pc.SubconverterProxy:
-			config, err = c.ToClashConfig(&opts.ProxySetting)
-		default:
+		if mixin, ok := p.(pc.ClashConvertableMixin); ok {
+			config, err := mixin.ToClashConfig(&opts.ProxySetting)
+			if err != nil {
+				log.Printf("[ClashGenerator] failed to convert proxy %s: %v", p.GetRemark(), err)
+				continue
+			}
+			clashProxies = append(clashProxies, config)
+			validProxies = append(validProxies, p)
+		} else {
 			log.Printf("[ClashGenerator] unsupported proxy type=%T remark=%s", p, p.GetRemark())
 			continue
 		}
-		if err != nil {
-			log.Printf("[ClashGenerator] failed to convert proxy %s: %v", p.GetRemark(), err)
-			continue
-		}
-		clashProxies = append(clashProxies, config)
-		validProxies = append(validProxies, p)
 	}
 
 	// Set proxies field name based on Clash config

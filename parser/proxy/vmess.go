@@ -31,7 +31,7 @@ func isSurgeVMess(line string) bool {
 	return strings.HasPrefix(val, "vmess,")
 }
 
-func (p *VMessParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *VMessParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeVMess(line) {
 		parts := strings.SplitN(line, "=", 2)
@@ -72,7 +72,7 @@ func (p *VMessParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	return nil, fmt.Errorf("unknown vmess format")
 }
 
-func (p *VMessParser) parseStdVMess(line string) (core.SubconverterProxy, error) {
+func (p *VMessParser) parseStdVMess(line string) (core.ParsableProxy, error) {
 	parts := strings.SplitN(line, "@", 2)
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid standard vmess format")
@@ -154,7 +154,7 @@ func (p *VMessParser) parseStdVMess(line string) (core.SubconverterProxy, error)
 	return utils.ToMihomoProxy(pObj)
 }
 
-func (p *VMessParser) parseJSONVMess(decoded string) (core.SubconverterProxy, error) {
+func (p *VMessParser) parseJSONVMess(decoded string) (core.ParsableProxy, error) {
 	var vmessData map[string]interface{}
 	if err := json.Unmarshal([]byte(decoded), &vmessData); err != nil {
 		return nil, fmt.Errorf("failed to parse vmess JSON: %w", err)
@@ -220,7 +220,7 @@ func (p *VMessParser) parseJSONVMess(decoded string) (core.SubconverterProxy, er
 }
 
 // ParseSurge parses a Surge config string
-func (p *VMessParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+func (p *VMessParser) ParseSurge(content string) (core.ParsableProxy, error) {
 	params := strings.Split(content, ",")
 	if len(params) < 3 {
 		return nil, fmt.Errorf("invalid surge vmess config: %s", content)
@@ -268,7 +268,7 @@ func (p *VMessParser) ParseSurge(content string) (core.SubconverterProxy, error)
 }
 
 // ParseClash parses a Clash config map
-func (p *VMessParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *VMessParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	uuid := utils.GetStringField(config, "uuid")
@@ -312,7 +312,7 @@ func (p *VMessParser) ParseClash(config map[string]interface{}) (core.Subconvert
 }
 
 // ParseNetch parses a Netch config map
-func (p *VMessParser) ParseNetch(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *VMessParser) ParseNetch(config map[string]interface{}) (core.ParsableProxy, error) {
 	remark := utils.GetStringField(config, "Remark")
 	hostname := utils.GetStringField(config, "Hostname")
 	port := utils.GetIntField(config, "Port")
@@ -345,7 +345,7 @@ func (p *VMessParser) ParseNetch(config map[string]interface{}) (core.Subconvert
 }
 
 // ParseV2Ray parses a V2Ray config map (resolved)
-func (p *VMessParser) ParseV2Ray(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *VMessParser) ParseV2Ray(config map[string]interface{}) (core.ParsableProxy, error) {
 	// Expects resolved fields
 	server := utils.GetStringField(config, "address")
 	port := utils.GetIntField(config, "port")

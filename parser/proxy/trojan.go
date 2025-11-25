@@ -31,7 +31,7 @@ func isSurgeTrojan(line string) bool {
 	return strings.HasPrefix(val, "trojan,")
 }
 
-func (p *TrojanParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *TrojanParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeTrojan(line) {
 		parts := strings.SplitN(line, "=", 2)
@@ -136,7 +136,7 @@ func (p *TrojanParser) ParseSingle(line string) (core.SubconverterProxy, error) 
 }
 
 // ParseSurge parses a Surge config string
-func (p *TrojanParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+func (p *TrojanParser) ParseSurge(content string) (core.ParsableProxy, error) {
 	params := strings.Split(content, ",")
 	if len(params) < 3 {
 		return nil, fmt.Errorf("invalid surge trojan config: %s", content)
@@ -183,7 +183,7 @@ func (p *TrojanParser) ParseSurge(content string) (core.SubconverterProxy, error
 }
 
 // ParseClash parses a Clash config map
-func (p *TrojanParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *TrojanParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	name := utils.GetStringField(config, "name")

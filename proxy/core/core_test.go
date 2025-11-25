@@ -21,7 +21,7 @@ func (m *MockSubconverterProxy) ToClashConfig(ext *config.ProxySetting) (map[str
 
 func TestSubconverterProxy_Implements_SingleConvertableMixin(t *testing.T) {
 	var _ SingleConvertableMixin = (*MockSubconverterProxy)(nil)
-	var _ SubconverterProxy = (*MockSubconverterProxy)(nil)
+	var _ ParsableProxy = (*MockSubconverterProxy)(nil)
 }
 
 func TestBaseProxy_GettersAndSetters(t *testing.T) {

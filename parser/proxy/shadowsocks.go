@@ -30,7 +30,7 @@ func isSurgeSS(line string) bool {
 	return strings.HasPrefix(val, "ss,")
 }
 
-func (p *ShadowsocksParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeSS(line) {
 		parts := strings.SplitN(line, "=", 2)
@@ -172,7 +172,7 @@ func (p *ShadowsocksParser) ParseSingle(line string) (core.SubconverterProxy, er
 }
 
 // ParseSurge parses a Surge config string
-func (p *ShadowsocksParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseSurge(content string) (core.ParsableProxy, error) {
 	params := strings.Split(content, ",")
 	if len(params) < 3 {
 		return nil, fmt.Errorf("invalid surge ss config: %s", content)
@@ -234,7 +234,7 @@ func (p *ShadowsocksParser) ParseSurge(content string) (core.SubconverterProxy, 
 }
 
 // ParseClash parses a Clash config map
-func (p *ShadowsocksParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	cipher := utils.GetStringField(config, "cipher")
@@ -270,7 +270,7 @@ func (p *ShadowsocksParser) ParseClash(config map[string]interface{}) (core.Subc
 }
 
 // ParseNetch parses a Netch config map
-func (p *ShadowsocksParser) ParseNetch(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseNetch(config map[string]interface{}) (core.ParsableProxy, error) {
 	remark := utils.GetStringField(config, "Remark")
 	hostname := utils.GetStringField(config, "Hostname")
 	port := utils.GetIntField(config, "Port")
@@ -299,7 +299,7 @@ func (p *ShadowsocksParser) ParseNetch(config map[string]interface{}) (core.Subc
 }
 
 // ParseSSTap parses a SSTap config map
-func (p *ShadowsocksParser) ParseSSTap(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseSSTap(config map[string]interface{}) (core.ParsableProxy, error) {
 	name := utils.GetStringField(config, "name")
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
@@ -328,7 +328,7 @@ func (p *ShadowsocksParser) ParseSSTap(config map[string]interface{}) (core.Subc
 }
 
 // ParseSSD parses a SSD config map (resolved)
-func (p *ShadowsocksParser) ParseSSD(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseSSD(config map[string]interface{}) (core.ParsableProxy, error) {
 	// Expects keys: server, port, encryption, password, plugin, plugin_options, remarks, airport
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
@@ -366,7 +366,7 @@ func (p *ShadowsocksParser) ParseSSD(config map[string]interface{}) (core.Subcon
 	return utils.ToMihomoProxy(ss)
 }
 
-func (p *ShadowsocksParser) ParseSSAndroid(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseSSAndroid(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "server_port")
 	remarks := utils.GetStringField(config, "remarks")
@@ -400,7 +400,7 @@ func (p *ShadowsocksParser) ParseSSAndroid(config map[string]interface{}) (core.
 	return utils.ToMihomoProxy(ss)
 }
 
-func (p *ShadowsocksParser) ParseSS(cfg map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksParser) ParseSS(cfg map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(cfg, "server")
 	port := utils.GetIntField(cfg, "server_port")
 	if port == 0 {

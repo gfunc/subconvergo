@@ -24,12 +24,12 @@ func (p *WireGuardParser) CanParseLine(line string) bool {
 	return false
 }
 
-func (p *WireGuardParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *WireGuardParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	return nil, fmt.Errorf("wireguard link parsing not supported")
 }
 
 // ParseSurge parses a Surge config string
-func (p *WireGuardParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+func (p *WireGuardParser) ParseSurge(content string) (core.ParsableProxy, error) {
 	params := strings.Split(content, ",")
 	wg := &impl.WireGuardProxy{
 		BaseProxy: core.BaseProxy{
@@ -88,7 +88,7 @@ func (p *WireGuardParser) ParseSurge(content string) (core.SubconverterProxy, er
 }
 
 // ParseClash parses a Clash config map
-func (p *WireGuardParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *WireGuardParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	name := utils.GetStringField(config, "name")

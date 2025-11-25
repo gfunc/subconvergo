@@ -9,7 +9,7 @@ import (
 
 // ParseProxy parses a proxy line using explicit protocol detection
 // This mimics the routing logic in subconverter's explode function
-func ParseProxy(line string) (core.SubconverterProxy, error) {
+func ParseProxy(line string) (core.ParsableProxy, error) {
 	// ShadowsocksR
 	if strings.HasPrefix(line, "ssr://") {
 		return (&ShadowsocksRParser{}).ParseSingle(line)

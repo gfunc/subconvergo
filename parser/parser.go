@@ -266,7 +266,7 @@ func ProcessRemark(remark string, existingRemarks map[string]int) string {
 }
 
 // ParseProxy parses a proxy line and returns a ProxyInterface
-func ParseProxy(line string) (proxyCore.SubconverterProxy, error) {
+func ParseProxy(line string) (proxyCore.ParsableProxy, error) {
 	// Use the explicit routing logic
 	p, err := proxy.ParseProxy(line)
 	if err == nil {

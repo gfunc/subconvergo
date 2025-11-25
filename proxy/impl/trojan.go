@@ -156,15 +156,9 @@ func (p *TrojanProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, err
 	if p.AllowInsecure {
 		parts = append(parts, "tls-verification=false")
 	}
-	// if p.Network == "ws" {
-	// 	parts = append(parts, "obfs=wss")
-	// 	if p.Path != "" {
-	// 		parts = append(parts, fmt.Sprintf("obfs-uri=%s", p.Path))
-	// 	}
-	// 	if p.Host != "" {
-	// 		parts = append(parts, fmt.Sprintf("obfs-host=%s", p.Host))
-	// 	}
-	// }
+	// Note: obfs parameters for WS are not standard in Quantumult X Trojan URI format
+	// and are typically handled via specific fields if supported.
+	// We omit them here to match standard generator behavior.
 	if ext != nil {
 		if ext.TFO {
 			parts = append(parts, "fast-open=true")

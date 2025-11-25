@@ -80,14 +80,8 @@ func matchUserAgent(userAgent string) (target string, clashNewName *bool, surgeV
 	for _, x := range UAMatchList {
 		if strings.HasPrefix(userAgent, x.Head) {
 			if x.VersionMatch != "" {
-				// We need regex matching here.
-				// Since we don't want to compile regex every time, we should probably compile them once.
-				// But for now, let's just use regexp.MatchString or similar, or compile inside loop (inefficient but works).
-				// Better: compile in init().
-				// However, to keep it simple and match C++ logic:
-				// regGetMatch(user_agent, x.version_match, 2, 0, &version)
-				// This implies extracting the 2nd group (index 1 in Go).
-
+				// Compile regex on the fly. For performance critical paths, these should be pre-compiled.
+				// We extract the version from the first capturing group.
 				re, err := regexp.Compile(x.VersionMatch)
 				if err != nil {
 					continue

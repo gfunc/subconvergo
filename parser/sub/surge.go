@@ -80,7 +80,7 @@ func (p *SurgeSubscriptionParser) Parse(content string) (*core.SubContent, error
 			continue
 		}
 
-		var p proxyCore.SubconverterProxy
+		var p proxyCore.ParsableProxy
 		var parseErr error
 
 		switch strings.ToLower(proxyType) {

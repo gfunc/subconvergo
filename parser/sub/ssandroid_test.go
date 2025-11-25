@@ -9,15 +9,8 @@ import (
 func TestSSAndroidSubscriptionParser_Parse(t *testing.T) {
 	parser := &SSAndroidSubscriptionParser{}
 
-	// Example content from subconverter tests or constructed
-	// {"nodes":[{"server":"1.2.3.4","server_port":8388,"password":"pass","method":"aes-256-gcm","remarks":"test","plugin":"obfs-local","plugin_opts":"obfs=http;obfs-host=example.com"}]}
-	// But SSAndroid format is usually just the list of nodes inside "proxy_apps" or similar?
-	// Wait, CanParse checks for "proxy_apps".
-	// But Parse wraps content in {"nodes": ...}.
-	// So the input content should be `[{"server":...}, ...]`?
-	// Let's check subconverter logic.
-	// subconverter: `std::string content = "{\"nodes\":" + body + "}";`
-	// So body is expected to be a JSON array `[...]`.
+	// Example content constructed to match SSAndroid format expectations.
+	// The parser expects a JSON array of node objects.
 
 	content := `[
 		{

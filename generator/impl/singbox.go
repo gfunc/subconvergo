@@ -136,12 +136,7 @@ func convertGroupToSingBox(group config.ProxyGroupConfig, proxies []pc.ProxyInte
 			outbound["url"] = group.URL
 		}
 		if group.Interval > 0 {
-			// sing-box interval is a duration string or number?
-			// Documentation says duration string (e.g. "30m", "10s")
-			// But subconverter output showed "interval":"30m" for NTP, but for url-test?
-			// Let's assume seconds if number, or format as string.
-			// subconverter uses seconds in config, but output?
-			// Let's use string format "Xs"
+			// Format interval as a duration string (e.g., "30s").
 			outbound["interval"] = fmt.Sprintf("%ds", group.Interval)
 		}
 		if group.Tolerance > 0 {

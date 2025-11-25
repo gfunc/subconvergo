@@ -99,12 +99,9 @@ func (p *WireGuardProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) 
 	if p.PreSharedKey != "" {
 		peerParts = append(peerParts, fmt.Sprintf("preshared-key = %s", p.PreSharedKey))
 	}
-	// AllowedIPs is not in BaseProxy, assuming 0.0.0.0/0 if not present?
-	// Mihomo WireGuard struct might not have AllowedIPs exposed easily or it's in a different field?
-	// Checking WireGuardProxy struct: no AllowedIPs field.
-	// But subconverter output has allowed-ips.
-	// If input doesn't have it, maybe default?
-	// subconverter generatePeer uses node.AllowedIPs.
+	// AllowedIPs is not currently stored in BaseProxy or WireGuardProxy.
+	// Subconverter defaults to 0.0.0.0/0 if not present.
+	// We rely on the generator to handle this or add it if we extend the struct.
 
 	peerStr := strings.Join(peerParts, ", ")
 	parts = append(parts, fmt.Sprintf("peers=[{%s}]", peerStr))

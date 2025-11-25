@@ -24,7 +24,7 @@ func (m *MihomoProxy) ToSingleConfig(opts *config.ProxySetting) (string, error) 
 		return "", fmt.Errorf("Plain proxy is not set")
 	}
 	switch p := m.ProxyInterface.(type) {
-	case core.SubconverterProxy:
+	case core.ParsableProxy:
 		return p.ToSingleConfig(opts)
 	default:
 		clashConfig, err := m.ToClashConfig(opts)
@@ -41,7 +41,7 @@ func (m *MihomoProxy) ToSingleConfig(opts *config.ProxySetting) (string, error) 
 }
 
 func (m *MihomoProxy) ToClashConfig(opts *config.ProxySetting) (map[string]interface{}, error) {
-	if p, ok := m.ProxyInterface.(core.SubconverterProxy); ok {
+	if p, ok := m.ProxyInterface.(core.ClashConvertableMixin); ok {
 		return p.ToClashConfig(opts)
 	}
 	options, err := m.proxyOptions()

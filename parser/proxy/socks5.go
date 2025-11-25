@@ -33,7 +33,7 @@ func isSurgeSocks5(line string) bool {
 	return strings.HasPrefix(val, "socks5,") || strings.HasPrefix(val, "socks5-tls,")
 }
 
-func (p *Socks5Parser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *Socks5Parser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeSocks5(line) {
 		parts := strings.SplitN(line, "=", 2)
@@ -87,7 +87,7 @@ func (p *Socks5Parser) ParseSingle(line string) (core.SubconverterProxy, error) 
 }
 
 // ParseSurge parses a Surge config string
-func (p *Socks5Parser) ParseSurge(content string) (core.SubconverterProxy, error) {
+func (p *Socks5Parser) ParseSurge(content string) (core.ParsableProxy, error) {
 	params := strings.Split(content, ",")
 	if len(params) < 3 {
 		return nil, fmt.Errorf("invalid surge socks5 config: %s", content)
@@ -140,7 +140,7 @@ func (p *Socks5Parser) ParseSurge(content string) (core.SubconverterProxy, error
 }
 
 // ParseClash parses a Clash config map
-func (p *Socks5Parser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *Socks5Parser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	name := utils.GetStringField(config, "name")
@@ -163,7 +163,7 @@ func (p *Socks5Parser) ParseClash(config map[string]interface{}) (core.Subconver
 }
 
 // ParseNetch parses a Netch config map
-func (p *Socks5Parser) ParseNetch(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *Socks5Parser) ParseNetch(config map[string]interface{}) (core.ParsableProxy, error) {
 	remark := utils.GetStringField(config, "Remark")
 	hostname := utils.GetStringField(config, "Hostname")
 	port := utils.GetIntField(config, "Port")
@@ -184,7 +184,7 @@ func (p *Socks5Parser) ParseNetch(config map[string]interface{}) (core.Subconver
 }
 
 // ParseSSTap parses a SSTap config map
-func (p *Socks5Parser) ParseSSTap(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *Socks5Parser) ParseSSTap(config map[string]interface{}) (core.ParsableProxy, error) {
 	name := utils.GetStringField(config, "name")
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
@@ -204,7 +204,7 @@ func (p *Socks5Parser) ParseSSTap(config map[string]interface{}) (core.Subconver
 	return utils.ToMihomoProxy(socks)
 }
 
-func (p *Socks5Parser) ParseTelegram(line string) (core.SubconverterProxy, error) {
+func (p *Socks5Parser) ParseTelegram(line string) (core.ParsableProxy, error) {
 	u, err := url.Parse(line)
 	if err != nil {
 		return nil, fmt.Errorf("invalid telegram link: %w", err)

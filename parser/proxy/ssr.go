@@ -22,7 +22,7 @@ func (p *ShadowsocksRParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "ssr://")
 }
 
-func (p *ShadowsocksRParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *ShadowsocksRParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "ssr://") {
 		return nil, fmt.Errorf("not a valid ssr:// link")
@@ -115,7 +115,7 @@ func (p *ShadowsocksRParser) ParseSingle(line string) (core.SubconverterProxy, e
 }
 
 // ParseClash parses a Clash config map
-func (p *ShadowsocksRParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksRParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	name := utils.GetStringField(config, "name")
@@ -144,7 +144,7 @@ func (p *ShadowsocksRParser) ParseClash(config map[string]interface{}) (core.Sub
 }
 
 // ParseNetch parses a Netch config map
-func (p *ShadowsocksRParser) ParseNetch(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksRParser) ParseNetch(config map[string]interface{}) (core.ParsableProxy, error) {
 	remark := utils.GetStringField(config, "Remark")
 	hostname := utils.GetStringField(config, "Hostname")
 	port := utils.GetIntField(config, "Port")
@@ -173,7 +173,7 @@ func (p *ShadowsocksRParser) ParseNetch(config map[string]interface{}) (core.Sub
 }
 
 // ParseSSTap parses a SSTap config map
-func (p *ShadowsocksRParser) ParseSSTap(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *ShadowsocksRParser) ParseSSTap(config map[string]interface{}) (core.ParsableProxy, error) {
 	name := utils.GetStringField(config, "name")
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")

@@ -16,10 +16,9 @@ type ProxyInterface interface {
 	SetGroupId(groupId int)
 }
 
-type SubconverterProxy interface {
+type ParsableProxy interface {
 	ProxyInterface
 	SingleConvertableMixin
-	ToClashConfig(ext *config.ProxySetting) (map[string]interface{}, error)
 }
 
 type ClashConvertableMixin interface {

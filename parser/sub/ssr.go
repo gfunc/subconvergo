@@ -86,13 +86,8 @@ func parseSSRNode(cfg map[string]interface{}) proxyCore.ProxyInterface {
 		obfsParam = utils.ToString(cfg["obfs_param"])
 	}
 
-	// Check if it's actually SS (subconverter logic)
-	// if(find(ss_ciphers.begin(), ss_ciphers.end(), method) != ss_ciphers.end() && (obfs.empty() || obfs == "plain") && (protocol.empty() || protocol == "origin"))
-	// We skip this check for now and assume SSR if protocol/obfs are present, or SS if not?
-	// But we are constructing SSRProxy.
-	// If it's SS, we should construct SSProxy.
-	// Let's just construct SSRProxy for now, as SSR is superset?
-	// Or better, check if protocol/obfs are empty/plain/origin.
+	// Check if it's actually SS.
+	// If protocol and obfs are empty or default ("origin", "plain"), treat as SS.
 
 	isSS := false
 	if (obfs == "" || obfs == "plain") && (protocol == "" || protocol == "origin") {

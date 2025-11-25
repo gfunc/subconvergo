@@ -36,33 +36,33 @@ type SubscriptionParser interface {
 
 type SingeSourceParserMixin interface {
 	// ParseSingle converts the content into a ProxyInterface
-	ParseSingle(content string) (core.SubconverterProxy, error)
+	ParseSingle(content string) (core.ParsableProxy, error)
 }
 
 type ClashSourceParserMixin interface {
-	ParseClash(config map[string]interface{}) (core.SubconverterProxy, error)
+	ParseClash(config map[string]interface{}) (core.ParsableProxy, error)
 }
 
 type V2RaySourceParserMixin interface {
-	ParseV2Ray(config map[string]interface{}) (core.SubconverterProxy, error)
+	ParseV2Ray(config map[string]interface{}) (core.ParsableProxy, error)
 }
 
 type NetchSourceParserMixin interface {
-	ParseNetch(config map[string]interface{}) (core.SubconverterProxy, error)
+	ParseNetch(config map[string]interface{}) (core.ParsableProxy, error)
 }
 
 type SSSourceParserMixin interface {
-	ParseSS(config map[string]interface{}) (core.SubconverterProxy, error)
+	ParseSS(config map[string]interface{}) (core.ParsableProxy, error)
 }
 
 type SSTapSourceParserMixin interface {
-	ParseSSTap(config map[string]interface{}) (core.SubconverterProxy, error)
+	ParseSSTap(config map[string]interface{}) (core.ParsableProxy, error)
 }
 type SSAndroidSourceParserMixin interface {
-	ParseSSAndroid(config map[string]interface{}) (core.SubconverterProxy, error)
+	ParseSSAndroid(config map[string]interface{}) (core.ParsableProxy, error)
 }
 
 // SurgeSourceParserMixin defines the interface for proxies that can be parsed from Surge config lines
 type SurgeSourceParserMixin interface {
-	ParseSurge(content string) (core.SubconverterProxy, error)
+	ParseSurge(content string) (core.ParsableProxy, error)
 }

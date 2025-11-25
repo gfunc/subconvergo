@@ -21,7 +21,7 @@ func (p *TUICParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "tuic://")
 }
 
-func (p *TUICParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *TUICParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "tuic://") {
 		return nil, fmt.Errorf("not a valid tuic link")
@@ -93,7 +93,7 @@ func (p *TUICParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 	return utils.ToMihomoProxy(pObj)
 }
 
-func (p *TUICParser) ParseClash(option map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *TUICParser) ParseClash(option map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(option, "server")
 	port := utils.GetIntField(option, "port")
 	name := utils.GetStringField(option, "name")

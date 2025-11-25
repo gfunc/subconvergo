@@ -30,7 +30,7 @@ func isSurgeSnell(line string) bool {
 	return strings.HasPrefix(val, "snell,")
 }
 
-func (p *SnellParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *SnellParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeSnell(line) {
 		parts := strings.SplitN(line, "=", 2)
@@ -77,7 +77,7 @@ func (p *SnellParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 }
 
 // ParseSurge parses a Surge config string
-func (p *SnellParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+func (p *SnellParser) ParseSurge(content string) (core.ParsableProxy, error) {
 	params := strings.Split(content, ",")
 	if len(params) < 3 {
 		return nil, fmt.Errorf("invalid surge snell config: %s", content)
@@ -123,7 +123,7 @@ func (p *SnellParser) ParseSurge(content string) (core.SubconverterProxy, error)
 }
 
 // ParseClash parses a Clash config map
-func (p *SnellParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *SnellParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	name := utils.GetStringField(config, "name")

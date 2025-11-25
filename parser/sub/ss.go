@@ -33,14 +33,9 @@ func (p *SSSubscriptionParser) Parse(content string) (*core.SubContent, error) {
 			section = "servers"
 		}
 	}
-	// subconverter logic: const char *section = json.HasMember("version") && json.HasMember("servers") ? "servers" : "configs";
-	// But if it has "servers" but no "version", it defaults to "configs"?
-	// Wait, if it has "servers" but no "version", subconverter uses "configs".
-	// But if "configs" doesn't exist, it returns.
-	// So if it has "servers" only, it might fail in subconverter unless "configs" also exists?
-	// Let's follow subconverter logic exactly.
-	// But wait, if I have a file with ONLY "servers", subconverter might fail?
-	// Let's be more flexible.
+	// Determine which section to use ("servers" or "configs").
+	// Subconverter logic prefers "servers" if "version" is present, otherwise defaults to "configs".
+	// We check for existence of keys to be robust.
 	if _, ok := js["servers"]; ok {
 		section = "servers"
 	}

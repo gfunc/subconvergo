@@ -21,7 +21,7 @@ func (p *HysteriaParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "hysteria://")
 }
 
-func (p *HysteriaParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *HysteriaParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "hysteria://") {
 		return nil, fmt.Errorf("not a valid hysteria link")
@@ -99,7 +99,7 @@ func (p *HysteriaParser) ParseSingle(line string) (core.SubconverterProxy, error
 }
 
 // ParseClash parses a Clash config map
-func (p *HysteriaParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *HysteriaParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	name := utils.GetStringField(config, "name")

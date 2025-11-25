@@ -22,7 +22,7 @@ func (p *VLESSParser) CanParseLine(line string) bool {
 	return strings.HasPrefix(line, "vless://")
 }
 
-func (p *VLESSParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "vless://") {
 		return nil, fmt.Errorf("not a valid vless:// link")
@@ -120,7 +120,7 @@ func (p *VLESSParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 }
 
 // ParseClash parses a Clash config map
-func (p *VLESSParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *VLESSParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	name := utils.GetStringField(config, "name")

@@ -13,27 +13,35 @@ import (
 	"github.com/metacubex/mihomo/adapter"
 )
 
-func ToMihomoProxy(pObj core.SubconverterProxy) (core.SubconverterProxy, error) {
+func ToMihomoProxy(pObj core.ParsableProxy) (core.ParsableProxy, error) {
 	return ToMihomoProxyWithSetting(pObj, &config.ProxySetting{})
 }
 
-func ToMihomoProxyWithSetting(pObj core.SubconverterProxy, config *config.ProxySetting) (core.SubconverterProxy, error) {
-	option, err := pObj.ToClashConfig(config)
-	if err != nil {
-		log.Printf("[toMihomoProxy] Failed to convert proxy to Clash config: %v", err)
+func ToMihomoProxyWithSetting(pObj core.ParsableProxy, config *config.ProxySetting) (core.ParsableProxy, error) {
+	if _, ok := pObj.(*impl.MihomoProxy); ok {
 		return pObj, nil
 	}
-	mihomoProxy, err := adapter.ParseProxy(option)
-	if err != nil {
-		log.Printf("[toMihomoProxy] Converted proxy: %+v to Mihomo format: %+v, err: %v", pObj, mihomoProxy, err)
-		return pObj, nil
-	} else {
-		return &impl.MihomoProxy{
-			ProxyInterface: pObj,
-			Clash:          mihomoProxy,
-			Options:        option,
-		}, nil
+	if oObj, ok := pObj.(core.ClashConvertableMixin); ok {
+
+		option, err := oObj.ToClashConfig(config)
+		if err != nil {
+			log.Printf("[toMihomoProxy] Failed to convert proxy to Clash config: %v", err)
+			return pObj, nil
+		}
+
+		mihomoProxy, err := adapter.ParseProxy(option)
+		if err != nil {
+			log.Printf("[toMihomoProxy] Converted proxy: %+v to Mihomo format: %+v, err: %v", pObj, mihomoProxy, err)
+			return pObj, nil
+		} else {
+			return &impl.MihomoProxy{
+				ProxyInterface: pObj,
+				Clash:          mihomoProxy,
+				Options:        option,
+			}, nil
+		}
 	}
+	return pObj, nil
 }
 
 func GetStringField(m map[string]interface{}, key string) string {

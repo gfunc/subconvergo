@@ -32,7 +32,7 @@ func isSurgeHttp(line string) bool {
 	return strings.HasPrefix(val, "http,") || strings.HasPrefix(val, "https,")
 }
 
-func (p *HttpParser) ParseSingle(line string) (core.SubconverterProxy, error) {
+func (p *HttpParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = strings.TrimSpace(line)
 	if isSurgeHttp(line) {
 		parts := strings.SplitN(line, "=", 2)
@@ -87,7 +87,7 @@ func (p *HttpParser) ParseSingle(line string) (core.SubconverterProxy, error) {
 }
 
 // ParseSurge parses a Surge config string
-func (p *HttpParser) ParseSurge(content string) (core.SubconverterProxy, error) {
+func (p *HttpParser) ParseSurge(content string) (core.ParsableProxy, error) {
 	params := strings.Split(content, ",")
 	if len(params) < 3 {
 		return nil, fmt.Errorf("invalid surge http config: %s", content)
@@ -137,7 +137,7 @@ func (p *HttpParser) ParseSurge(content string) (core.SubconverterProxy, error) 
 }
 
 // ParseClash parses a Clash config map
-func (p *HttpParser) ParseClash(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *HttpParser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
 	name := utils.GetStringField(config, "name")
@@ -162,7 +162,7 @@ func (p *HttpParser) ParseClash(config map[string]interface{}) (core.Subconverte
 }
 
 // ParseSSTap parses a SSTap config map
-func (p *HttpParser) ParseSSTap(config map[string]interface{}) (core.SubconverterProxy, error) {
+func (p *HttpParser) ParseSSTap(config map[string]interface{}) (core.ParsableProxy, error) {
 	name := utils.GetStringField(config, "name")
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "port")
@@ -182,7 +182,7 @@ func (p *HttpParser) ParseSSTap(config map[string]interface{}) (core.Subconverte
 	return utils.ToMihomoProxy(http)
 }
 
-func (p *HttpParser) ParseTelegram(line string) (core.SubconverterProxy, error) {
+func (p *HttpParser) ParseTelegram(line string) (core.ParsableProxy, error) {
 	u, err := url.Parse(line)
 	if err != nil {
 		return nil, fmt.Errorf("invalid telegram link: %w", err)
