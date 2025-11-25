@@ -18,6 +18,9 @@ Complete reference for all configuration options, proxy filtering, rulesets, pro
 
 ---
 
+### [API Reference](./API.md)
+Detailed documentation of API endpoints, parameters, source formats, and target formats.
+
 ### [Development Guide](./GUIDE.md)
 Complete guide for building, testing, and developing subconvergo.
 
@@ -36,9 +39,6 @@ Complete guide for building, testing, and developing subconvergo.
 
 ---
 
-### [Implementation Summary](./IMPLEMENTATION_SUMMARY.md)
-Detailed implementation notes for all features.
-
 ### [Feature Parity Status](./FEATURE_PARITY.md)
 Comprehensive comparison with C++ subconverter - what's implemented, what's not, and migration guidance.
 
@@ -55,8 +55,8 @@ Comprehensive comparison with C++ subconverter - what's implemented, what's not,
 
 - **Main README**: [../README.md](../README.md)
 - **Configuration Reference**: [REFERENCE.md](./REFERENCE.md)
+- **API Reference**: [API.md](./API.md)
 - **Development Guide**: [GUIDE.md](./GUIDE.md)
-- **Implementation Summary**: [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)
 - **Source Code**: [../parser/](../parser/), [../generator/](../generator/), [../handler/](../handler/)
 - **Tests**: [../tests/smoke.py](../tests/smoke.py), [../tests/run-tests.sh](../tests/run-tests.sh)
 
@@ -67,7 +67,6 @@ Comprehensive comparison with C++ subconverter - what's implemented, what's not,
 1. **New to the project?** Start with the main [README](../README.md) Quick Start section
 2. **Need configuration help?** Check [Configuration Reference](./REFERENCE.md)
 3. **Setting up development?** Read [Development Guide](./GUIDE.md)
-4. **Want feature details?** See [Implementation Summary](./IMPLEMENTATION_SUMMARY.md)
 
 ---
 
@@ -95,8 +94,7 @@ When updating documentation:
 
 1. Update [REFERENCE.md](./REFERENCE.md) for config/protocol changes
 2. Update [GUIDE.md](./GUIDE.md) for architecture/workflow changes
-3. Update [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md) when features are added
-4. Keep examples up-to-date with code
+3. Keep examples up-to-date with code
 5. Add smoke test scenarios for user-facing features
 
 ---

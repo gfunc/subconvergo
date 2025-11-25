@@ -36,27 +36,38 @@ func NewSubHandler() *SubHandler {
 	return &SubHandler{}
 }
 
-// HandleSub processes /sub endpoint
-func (h *SubHandler) HandleSub(c *gin.Context) {
-	h.handleSubWithParams(c, nil)
+// RequestParams holds the parameters for subscription conversion
+type RequestParams struct {
+	Target    string `form:"target"`
+	URL       string `form:"url"`
+	Config    string `form:"config"`
+	UserAgent string `form:"ua"`
+	Group     string `form:"group"`
+	Include   string `form:"include"`
+	Exclude   string `form:"exclude"`
+	UDP       *bool  `form:"udp"`
+	TFO       *bool  `form:"tfo"`
+	SCV       *bool  `form:"scv"`
+	NewName   *bool  `form:"new_name"`
+	SurgeVer  *int   `form:"ver"`
 }
 
-// handleSubWithParams processes /sub with optional parameter overrides
-func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]string) {
-	// Extract parameters from params map or query
-	getParam := func(key string) string {
-		if params != nil {
-			if val, ok := params[key]; ok {
-				return val
-			}
-		}
-		return c.Query(key)
+// HandleSub processes /sub endpoint
+func (h *SubHandler) HandleSub(c *gin.Context) {
+	var params RequestParams
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.String(http.StatusBadRequest, "Invalid parameters: "+err.Error())
+		return
 	}
+	h.processSubRequest(c, &params)
+}
 
-	target := getParam("target")
-	urlParam := getParam("url")
-	configParam := getParam("config")
-	uaParam := getParam("ua")
+// processSubRequest processes /sub with parsed parameters
+func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
+	target := params.Target
+	urlParam := params.URL
+	configParam := params.Config
+	uaParam := params.UserAgent
 
 	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s ua=%s", target, urlParam, configParam, uaParam)
 
@@ -186,15 +197,15 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	// Check custom group name override
-	if groupName := getParam("group"); groupName != "" {
+	if params.Group != "" {
 		for _, p := range allProxies {
-			p.SetGroup(groupName)
+			p.SetGroup(params.Group)
 		}
 	}
 
 	// Prepare filter patterns
-	include := getParam("include")
-	exclude := getParam("exclude")
+	include := params.Include
+	exclude := params.Exclude
 
 	var includePatterns []string
 	if len(config.Global.Common.IncludeRemarks) > 0 {
@@ -265,22 +276,20 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	// Parse boolean options
-	if udp := getParam("udp"); udp != "" {
-		opts.UDP = udp == "true"
+	if params.UDP != nil {
+		opts.UDP = *params.UDP
 	}
-	if tfo := getParam("tfo"); tfo != "" {
-		opts.TFO = tfo == "true"
+	if params.TFO != nil {
+		opts.TFO = *params.TFO
 	}
-	if scv := getParam("scv"); scv != "" {
-		opts.SCV = scv == "true"
+	if params.SCV != nil {
+		opts.SCV = *params.SCV
 	}
-	if newName := getParam("new_name"); newName != "" {
-		opts.ProxySetting.ClashUseNewField = newName == "true"
+	if params.NewName != nil {
+		opts.ProxySetting.ClashUseNewField = *params.NewName
 	}
-	if ver := getParam("ver"); ver != "" {
-		if v, err := strconv.Atoi(ver); err == nil {
-			opts.ProxySetting.SurgeVer = v
-		}
+	if params.SurgeVer != nil {
+		opts.ProxySetting.SurgeVer = *params.SurgeVer
 	}
 
 	// Default Surge version to 3 if not set
@@ -958,16 +967,58 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 	contents["token"] = token
 
 	// Build merged params
-	params := make(map[string]string)
+	paramsMap := make(map[string]string)
 	for key, value := range contents {
-		params[key] = value
+		paramsMap[key] = value
 	}
 
-	// Store params in context for handleSubWithParams to use
-	c.Set("_merged_params", params)
+	// Convert map to RequestParams
+	params := &RequestParams{
+		Target:    paramsMap["target"],
+		URL:       paramsMap["url"],
+		Config:    paramsMap["config"],
+		UserAgent: paramsMap["ua"],
+		Group:     paramsMap["group"],
+		Include:   paramsMap["include"],
+		Exclude:   paramsMap["exclude"],
+	}
+
+	if v, ok := paramsMap["udp"]; ok {
+		b := v == "true"
+		params.UDP = &b
+	}
+	if v, ok := paramsMap["tfo"]; ok {
+		b := v == "true"
+		params.TFO = &b
+	}
+	if v, ok := paramsMap["scv"]; ok {
+		b := v == "true"
+		params.SCV = &b
+	}
+	if v, ok := paramsMap["new_name"]; ok {
+		b := v == "true"
+		params.NewName = &b
+	}
+	if v, ok := paramsMap["ver"]; ok {
+		if i, err := strconv.Atoi(v); err == nil {
+			params.SurgeVer = &i
+		}
+	}
 
 	// Forward to /sub handler
-	h.handleSubWithParams(c, params)
+	h.processSubRequest(c, params)
+}
+
+// HandleSurge2Clash processes /surge2clash endpoint
+func (h *SubHandler) HandleSurge2Clash(c *gin.Context) {
+	var params RequestParams
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.String(http.StatusBadRequest, "Invalid parameters: "+err.Error())
+		return
+	}
+	// Force target to clash
+	params.Target = "clash"
+	h.processSubRequest(c, &params)
 }
 
 // fileExists checks if a file exists

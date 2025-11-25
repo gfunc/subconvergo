@@ -146,6 +146,9 @@ def pref_variant(case: str) -> dict:
     elif case == "settings_comparison":
         # Use base pref
         pass
+    elif case == "surge2clash":
+        # Use base pref
+        pass
     else:
         raise ValueError(f"unknown pref case: {case}")
     return pref
@@ -394,6 +397,25 @@ def test_sub(case: str) -> dict:
     assert_group_contains(data, "Auto", "HK-Server-01")
     assert_rules(data)
     return {"proxy_count": len(data.get("proxies", [])), "rule_count": len(data.get("rules", []))}
+
+
+def test_surge2clash(case: str) -> dict:
+    # Test /surge2clash endpoint
+    # It should behave like /sub?target=clash&url=...
+    url = f"{MOCK_BASE}/surge-subscription.ini"
+    params = {"url": url}
+    resp = api_get_subconvergo("/surge2clash", params=params)
+    save_result(case, resp.text)
+    
+    # Verify it's valid Clash YAML
+    data = yaml.safe_load(resp.text)
+    if not isinstance(data, dict) or "proxies" not in data:
+        raise AssertionError("surge2clash did not return valid Clash config")
+        
+    # Verify content
+    assert_proxies(data, ["SS-Example"])
+    
+    return {"proxy_count": len(data.get("proxies", []))}
 
 
 def test_render(case: str) -> dict:
@@ -812,6 +834,7 @@ def main() -> None:
     cases = [
         ("version", test_version),
         ("sub", test_sub),
+        ("surge2clash", test_surge2clash),
         ("render", test_render),
         ("profile", test_profile),
         ("ruleset_remote", test_ruleset_remote),

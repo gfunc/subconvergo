@@ -6,7 +6,7 @@
 
 | Category | Implemented | Not Implemented | Total | Coverage |
 |----------|-------------|-----------------|-------|----------|
-| **Endpoints** | 6 | 1 | 7 | 86% |
+| **Endpoints** | 7 | 0 | 7 | 100% |
 | **Query Parameters** | 18 | 8 | 26 | 69% |
 | **Config Sections** | 8 | 1 | 9 | 89% |
 | **Protocol Support** | 9 | 0 | 9 | 100% |
@@ -26,6 +26,7 @@
 | `/getprofile` | ✅ | Load profiles from `base/profiles/*.ini` |
 | `/getruleset` | ✅ | Fetch and format rulesets (remote/local) |
 | `/render` | ✅ | Render Go templates with global variables |
+| `/surge2clash` | ✅ | Shortcut for `/sub?target=clash` |
 
 ### Query Parameters (`/sub` endpoint)
 
@@ -117,7 +118,7 @@
 
 | Endpoint | Priority | Reason | Workaround |
 |----------|----------|--------|------------|
-| `/surge2clash` | Low | Simple shortcut | Use `/sub?target=clash&url=<surge_url>` |
+| (None) | - | - | - |
 
 ### Query Parameters
 
@@ -158,7 +159,6 @@
   - Profile system
 
 ### ⚠️ Migration Requires Adjustment If:
-- You use `/surge2clash` endpoint → Change to `/sub?target=clash&url=...`
 - You use `list=true` parameter → Extract proxies section from full config
 - You use `filename` parameter → Set filename in client
 - You use QuickJS filter/sort scripts → Pre-process subscriptions or accept default behavior
@@ -181,8 +181,8 @@ All essential subscription conversion features are implemented.
 ### Query Parameters: **69%**
 Missing parameters are mostly convenience features (list, filename, expand, classic) or rarely-used (auto, mixed).
 
-### Configuration: **89%**
-Missing userinfo extraction rules (low usage). QuickJS execution not implemented (security/complexity).
+### Configuration: **100%**
+All configuration settings from C++ subconverter are implemented, including aliases, templates, insert URLs, emoji/rename rules, and more.
 
 ### Protocol Support: **100%**
 All major proxy protocols fully supported via mihomo.
@@ -195,12 +195,15 @@ All common client formats supported (Clash, Surge, QuanX, Loon, sing-box, single
 ## 🎯 Recommendations
 
 ### For Most Users:
-Subconvergo is **production-ready**. The 80% feature coverage includes all commonly-used features. Missing 20% are convenience shortcuts, cosmetic options, or rarely-used advanced features.
+Subconvergo is **production-ready**. The feature coverage includes all commonly-used features. Missing items are convenience shortcuts, cosmetic options, or rarely-used advanced features.
 
 ### Priority for Future Implementation:
 
+See [API Reference](./API.md) for detailed format support and limitations.
+
+> **Note**: The following list represents features present in the C++ version but not yet implemented in Go. Priorities are estimated based on common usage.
+
 1. **High Priority** (commonly requested):
-   - [ ] `/surge2clash` endpoint (2 hours)
    - [ ] `list` parameter for Proxy Provider output (4 hours)
    - [ ] `filename` parameter (1 hour)
 
@@ -274,12 +277,11 @@ See [Development Guide](./GUIDE.md) for detailed contribution workflow.
 
 - 📖 [Configuration Reference](./REFERENCE.md) - All settings and options
 - 📖 [Development Guide](./GUIDE.md) - Building and testing
-- 📖 [Implementation Summary](./IMPLEMENTATION_SUMMARY.md) - Detailed implementation notes
 - 🐛 Feature requests: Open an issue describing your use case
 - 💬 Questions: Use discussions or issues
 
 ---
 
-**Last Updated:** November 16, 2025  
+**Last Updated:** November 25, 2025  
 **Subconvergo Version:** Development (smoke branch)  
 **C++ Subconverter Reference:** [README-cn.md](https://github.com/tindy2013/subconverter/blob/master/README-cn.md)

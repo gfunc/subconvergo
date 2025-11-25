@@ -201,12 +201,14 @@ make coverage-view  # Opens HTML report
 - `ruleset_compare` - Compare with subconverter
 - `filters_regex` - Regex filtering
 - `sub_with_external_config` - External config merging
+- `clash_only_config` - Generic protocol support check (e.g. SSH via mihomo)
 
 **Run manually:**
 ```bash
 cd /path/to/subconvergo
 python -m tests.smoke
 # Results: tests/results/smoke_summary.json
+# Artifacts: tests/results/<case_name>/subconvergo.txt
 ```
 
 ### Benchmarks
@@ -324,18 +326,6 @@ export PORT=8080
 ---
 
 ## Performance
-
-### Benchmarks (Nov 2024)
-
-| Operation | Time | Memory |
-|-----------|------|--------|
-| SS Parse | ~7.6µs | 3.2KB |
-| VMess Parse | ~24.4µs | 8.1KB |
-| Hysteria Parse | ~10.9µs | 4.5KB |
-| TUIC Parse | ~16.1µs | 6.2KB |
-| Clash Generate | ~2.1ms | 145KB |
-
-**Test coverage: 81.8%**
 
 ### Optimization Tips
 
@@ -482,4 +472,4 @@ export PORT=8080
 
 ## License
 
-GPL-3.0 - Same as original subconverter project
+MIT- Same as original subconverter project

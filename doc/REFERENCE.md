@@ -656,5 +656,5 @@ curl "http://localhost:25500/sub?target=clash&url=https://example.com/sub&includ
 ## See Also
 
 - [Development Guide](GUIDE.md) - Building, testing, and development workflow
-- [Implementation Summary](IMPLEMENTATION_SUMMARY.md) - Feature parity with C++ version
+- [Feature Parity](FEATURE_PARITY.md) - Feature parity with C++ version
 - [README](../README.md) - Quick start and overview

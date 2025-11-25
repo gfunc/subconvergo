@@ -117,6 +117,7 @@ func startServer() {
 	router.GET("/version", h.HandleVersion)
 	router.GET("/sub", h.HandleSub)
 	router.HEAD("/sub", h.HandleSub)
+	router.GET("/surge2clash", h.HandleSurge2Clash)
 	router.GET("/readconf", h.HandleReadConf)
 	router.GET("/getruleset", h.HandleGetRuleset)
 	router.GET("/getprofile", h.HandleGetProfile)
