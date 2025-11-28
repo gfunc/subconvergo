@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gin-gonic/gin"
 )
@@ -156,6 +157,7 @@ func TestLoadExternalConfigFunc(t *testing.T) {
 }
 
 func TestLoadExternalConfig_YAMLRemote(t *testing.T) {
+	cache.Init(t.TempDir())
 	h := NewSubHandler()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, ""+
@@ -187,6 +189,8 @@ func TestLoadExternalConfig_YAMLRemote(t *testing.T) {
 func TestLoadExternalConfig_LocalTOML(t *testing.T) {
 	h := NewSubHandler()
 	dir := t.TempDir()
+	cache.Init(dir) // Initialize cache for test
+
 	content := []byte(`
 		[proxy_groups]
 		[[proxy_groups.custom_groups]]
@@ -306,6 +310,7 @@ func TestHandleGetRulesetWithParams(t *testing.T) {
 }
 
 func TestHandleGetRuleset_RemoteFetch(t *testing.T) {
+	cache.Init(t.TempDir())
 	gin.SetMode(gin.TestMode)
 	h := NewSubHandler()
 
@@ -332,6 +337,7 @@ func TestHandleGetRuleset_RemoteFetch(t *testing.T) {
 }
 
 func TestHandleGetRuleset_LocalPath(t *testing.T) {
+	cache.Init(t.TempDir())
 	gin.SetMode(gin.TestMode)
 	h := NewSubHandler()
 

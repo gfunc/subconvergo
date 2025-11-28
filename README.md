@@ -58,6 +58,7 @@ While Subconvergo aims for full compatibility with the C++ version, there are so
 
 1.  **Clash Source Format**: When parsing a Clash configuration as a subscription source, Subconvergo **preserves** the `proxy-groups` and `rules` defined in the source file and adds them to the target output. This allows for easier migration of complex Clash configs.
 2.  **Protocol Parsing**: Subconvergo uses `mihomo` adapters for parsing, which may have stricter or slightly different validation logic compared to the custom parsers in the C++ version.
+3.  **Local File URI**: Subconvergo supports `file://` URIs for subscription sources
 
 ---
 

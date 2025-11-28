@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
 	_ "github.com/gfunc/subconvergo/generator/impl"
 	"github.com/gfunc/subconvergo/handler"
@@ -54,6 +55,9 @@ func main() {
 	} else {
 		log.Printf("Configuration loaded from: %s", configFile)
 	}
+
+	// Initialize cache
+	cache.Init(config.GetBasePath())
 
 	// Check for environment variable overrides
 	checkEnvOverrides()
@@ -122,6 +126,7 @@ func startServer() {
 	router.GET("/getruleset", h.HandleGetRuleset)
 	router.GET("/getprofile", h.HandleGetProfile)
 	router.GET("/render", h.HandleRender)
+	router.GET("/flushcache", h.HandleFlushCache)
 
 	// Additional routes when not in API mode
 	if !config.Global.Common.APIMode {

@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/parser/core"
 	"github.com/gfunc/subconvergo/parser/proxy"
@@ -202,6 +203,16 @@ func (sp *SubParser) ParseSubscriptionFile() (*core.SubContent, error) {
 }
 
 func (sp *SubParser) fetchSubscription() (string, error) {
+	// Check cache first
+	cacheKey := ""
+	if config.Global.Advanced.EnableCache {
+		cacheKey = cache.GlobalManager.GetKey(sp.URL)
+		if data, ok := cache.GlobalManager.Get(cacheKey, config.Global.Advanced.CacheSubscription); ok {
+			log.Printf("[parser.fetchSubscription] index=%d url=%s served from cache", sp.Index, sp.URL)
+			return string(data), nil
+		}
+	}
+
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
@@ -234,6 +245,13 @@ func (sp *SubParser) fetchSubscription() (string, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("[parser.fetchSubscription] index=%d url=%s error=%v", sp.Index, sp.URL, err)
+		// Try stale cache if enabled
+		if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+			if data, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+				log.Printf("[parser.fetchSubscription] index=%d url=%s served from stale cache", sp.Index, sp.URL)
+				return string(data), nil
+			}
+		}
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -241,6 +259,13 @@ func (sp *SubParser) fetchSubscription() (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		statusErr := fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 		log.Printf("[parser.fetchSubscription] index=%d url=%s status=%d statusText=%s", sp.Index, sp.URL, resp.StatusCode, resp.Status)
+		// Try stale cache if enabled
+		if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+			if data, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+				log.Printf("[parser.fetchSubscription] index=%d url=%s served from stale cache", sp.Index, sp.URL)
+				return string(data), nil
+			}
+		}
 		return "", statusErr
 	}
 
@@ -248,6 +273,13 @@ func (sp *SubParser) fetchSubscription() (string, error) {
 	if err != nil {
 		log.Printf("[parser.fetchSubscription] index=%d url=%s read error=%v", sp.Index, sp.URL, err)
 		return "", err
+	}
+
+	// Save to cache
+	if config.Global.Advanced.EnableCache {
+		if err := cache.GlobalManager.Set(cacheKey, body); err != nil {
+			log.Printf("[parser.fetchSubscription] failed to save cache: %v", err)
+		}
 	}
 
 	log.Printf("[parser.fetchSubscription] index=%d url=%s size=%d", sp.Index, sp.URL, len(body))

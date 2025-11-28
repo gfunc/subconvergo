@@ -44,7 +44,7 @@ test: ## Run smoke tests (integration/API tests with Docker)
 
 test-unit: ## Run unit tests only
 	@echo "Running unit tests..."
-	./tests/run-tests.sh unit
+	$(GO) test -v -race ./...
 
 test-all: test-unit test ## Run unit tests and smoke tests
 	@echo "All tests completed"
@@ -52,7 +52,12 @@ test-all: test-unit test ## Run unit tests and smoke tests
 # Coverage targets
 coverage: ## Generate coverage report
 	@echo "Generating coverage report..."
-	./tests/run-tests.sh coverage
+	@mkdir -p coverage
+	$(GO) test -v -race -coverprofile=coverage/coverage.out ./...
+	$(GO) tool cover -html=coverage/coverage.out -o coverage/coverage.html
+	$(GO) tool cover -func=coverage/coverage.out | tee coverage/coverage.txt
+	@echo "Total coverage: $$(go tool cover -func=coverage/coverage.out | grep total | awk '{print $$3}')"
+	@echo "Coverage report: coverage/coverage.html"
 
 coverage-view: coverage ## Open coverage report in browser
 	@echo "Opening coverage report..."
@@ -119,7 +124,8 @@ docker-run: docker-build ## Run Docker container
 # Benchmark
 bench: ## Run benchmarks
 	@echo "Running benchmarks..."
-	./tests/run-tests.sh bench
+	@mkdir -p coverage
+	$(GO) test -bench=. -benchmem ./... | tee coverage/benchmark.txt
 
 # Security
 security-scan: ## Run security scan

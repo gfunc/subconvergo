@@ -217,6 +217,7 @@ type AdvancedConfig struct {
 	ScriptCleanContext     bool   `yaml:"script_clean_context" toml:"script_clean_context" ini:"script_clean_context"`
 	AsyncFetchRuleset      bool   `yaml:"async_fetch_ruleset" toml:"async_fetch_ruleset" ini:"async_fetch_ruleset"`
 	SkipFailedLinks        bool   `yaml:"skip_failed_links" toml:"skip_failed_links" ini:"skip_failed_links"`
+	ServeCacheOnFetchFail  bool   `yaml:"serve_cache_on_fetch_fail" toml:"serve_cache_on_fetch_fail" ini:"serve_cache_on_fetch_fail"`
 }
 
 type ProxySetting struct {
@@ -276,6 +277,7 @@ func (s *Settings) init() {
 	s.Advanced.CacheConfig = 300
 	s.Advanced.CacheRuleset = 21600
 	s.Advanced.ScriptCleanContext = true
+	s.Advanced.ServeCacheOnFetchFail = true
 }
 
 // LoadConfig loads configuration from pref files

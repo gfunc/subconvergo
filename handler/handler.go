@@ -18,6 +18,7 @@ import (
 	pc "github.com/gfunc/subconvergo/proxy/core"
 
 	"github.com/BurntSushi/toml"
+	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator"
 	"github.com/gfunc/subconvergo/generator/core"
@@ -540,20 +541,60 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 
 	// Determine source: http(s) or local file
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		resp, err := http.Get(path)
-		if err != nil {
-			log.Printf("[handler.loadExternalConfig] http fetch failed path=%s err=%v", path, err)
-			return nil, err
+		// Check cache first
+		cacheKey := ""
+		if config.Global.Advanced.EnableCache {
+			cacheKey = cache.GlobalManager.GetKey(path)
+			if cachedData, ok := cache.GlobalManager.Get(cacheKey, config.Global.Advanced.CacheConfig); ok {
+				log.Printf("[handler.loadExternalConfig] path=%s served from cache", path)
+				data = cachedData
+			}
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("[handler.loadExternalConfig] http fetch path=%s status=%d", path, resp.StatusCode)
-			return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
-		}
-		data, err = io.ReadAll(resp.Body)
-		if err != nil {
-			log.Printf("[handler.loadExternalConfig] http read failed path=%s err=%v", path, err)
-			return nil, err
+
+		if data == nil {
+			resp, err := http.Get(path)
+			if err != nil {
+				log.Printf("[handler.loadExternalConfig] http fetch failed path=%s err=%v", path, err)
+				// Try stale cache
+				if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+					if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+						log.Printf("[handler.loadExternalConfig] path=%s served from stale cache", path)
+						data = cachedData
+					} else {
+						return nil, err
+					}
+				} else {
+					return nil, err
+				}
+			} else {
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					log.Printf("[handler.loadExternalConfig] http fetch path=%s status=%d", path, resp.StatusCode)
+					// Try stale cache
+					if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+						if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+							log.Printf("[handler.loadExternalConfig] path=%s served from stale cache", path)
+							data = cachedData
+						} else {
+							return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
+						}
+					} else {
+						return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
+					}
+				} else {
+					data, err = io.ReadAll(resp.Body)
+					if err != nil {
+						log.Printf("[handler.loadExternalConfig] http read failed path=%s err=%v", path, err)
+						return nil, err
+					}
+					// Save to cache
+					if config.Global.Advanced.EnableCache {
+						if err := cache.GlobalManager.Set(cacheKey, data); err != nil {
+							log.Printf("[handler.loadExternalConfig] failed to save cache: %v", err)
+						}
+					}
+				}
+			}
 		}
 	} else {
 		// resolve candidate paths
@@ -660,22 +701,64 @@ func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 
 	// Remote fetch
 	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
-		resp, err := http.Get(target)
-		if err != nil {
-			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: %v", err))
-			return
+		// Check cache first
+		cacheKey := ""
+		if config.Global.Advanced.EnableCache {
+			cacheKey = cache.GlobalManager.GetKey(target)
+			if cachedData, ok := cache.GlobalManager.Get(cacheKey, config.Global.Advanced.CacheRuleset); ok {
+				log.Printf("[handler.HandleGetRuleset] url=%s served from cache", target)
+				content = cachedData
+			}
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: status %d", resp.StatusCode))
-			return
+
+		if content == nil {
+			resp, err := http.Get(target)
+			if err != nil {
+				// Try stale cache
+				if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+					if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+						log.Printf("[handler.HandleGetRuleset] url=%s served from stale cache", target)
+						content = cachedData
+					} else {
+						c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: %v", err))
+						return
+					}
+				} else {
+					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: %v", err))
+					return
+				}
+			} else {
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					// Try stale cache
+					if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+						if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+							log.Printf("[handler.HandleGetRuleset] url=%s served from stale cache", target)
+							content = cachedData
+						} else {
+							c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: status %d", resp.StatusCode))
+							return
+						}
+					} else {
+						c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: status %d", resp.StatusCode))
+						return
+					}
+				} else {
+					body, err := io.ReadAll(resp.Body)
+					if err != nil {
+						c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to read ruleset: %v", err))
+						return
+					}
+					content = body
+					// Save to cache
+					if config.Global.Advanced.EnableCache {
+						if err := cache.GlobalManager.Set(cacheKey, content); err != nil {
+							log.Printf("[handler.HandleGetRuleset] failed to save cache: %v", err)
+						}
+					}
+				}
+			}
 		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to read ruleset: %v", err))
-			return
-		}
-		content = body
 	} else {
 		// Local path resolution attempts
 		candidates := []string{
@@ -1019,6 +1102,25 @@ func (h *SubHandler) HandleSurge2Clash(c *gin.Context) {
 	// Force target to clash
 	params.Target = "clash"
 	h.processSubRequest(c, &params)
+}
+
+// HandleFlushCache processes /flushcache endpoint
+func (h *SubHandler) HandleFlushCache(c *gin.Context) {
+	// Check token
+	if config.Global.Common.APIAccessToken != "" {
+		token := c.Query("token")
+		if token != config.Global.Common.APIAccessToken {
+			c.String(http.StatusForbidden, "Forbidden\n")
+			return
+		}
+	}
+
+	if err := cache.GlobalManager.Flush(); err != nil {
+		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to flush cache: %v\n", err))
+		return
+	}
+
+	c.String(http.StatusOK, "Cache flushed\n")
 }
 
 // fileExists checks if a file exists
