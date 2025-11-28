@@ -1,0 +1,60 @@
+common:
+  api_mode: true
+  api_access_token: password
+  default_url:
+  - http://mock-subscription/ss-subscription.txt
+  base_path: base
+  clash_rule_base: base/all_base.tpl
+  surge_rule_base: base/all_base.tpl
+  surfboard_rule_base: base/all_base.tpl
+  mellow_rule_base: base/all_base.tpl
+  quan_rule_base: base/all_base.tpl
+  quanx_rule_base: base/all_base.tpl
+  loon_rule_base: base/all_base.tpl
+  sssub_rule_base: base/all_base.tpl
+  singbox_rule_base: base/all_base.tpl
+  proxy_subscription: NONE
+  proxy_config: NONE
+  proxy_ruleset: NONE
+  include_remarks: []
+  exclude_remarks: []
+node_pref:
+  append_sub_userinfo: false
+  clash_use_new_field_name: true
+  clash_proxies_style: flow
+  clash_proxy_groups_style: block
+  singbox_add_clash_modes: true
+rulesets:
+  enabled: true
+  overwrite_original_rules: false
+  update_ruleset_on_request: false
+  rulesets:
+  - ruleset: rules/custom_test_rules.list
+    group: Auto
+  - rule: MATCH,Auto
+    group: Auto
+proxy_groups:
+  custom_proxy_group:
+  - name: Auto
+    type: select
+    rule:
+    - .*
+template:
+  template_path: base
+  globals:
+  - key: clash.http_port
+    value: 7890
+  - key: clash.socks_port
+    value: 7891
+  - key: clash.allow_lan
+    value: true
+managed_config:
+  write_managed_config: false
+  managed_config_prefix: ''
+  config_update_interval: 86400
+  config_update_strict: false
+server:
+  listen: 0.0.0.0
+  port: 25500
+advanced:
+  log_level: info

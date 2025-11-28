@@ -1,0 +1,15 @@
+proxies:
+  - name: "sshtest"
+    type: ssh
+    server: "192.168.1.100"
+    username: user
+    password: passwd
+    port: 22
+proxy-groups:
+  - name: "sshg"
+    type: select
+    proxies:
+      - sshtest
+rules:
+  - DOMAIN-SUFFIX,home.com,sshg
+  - IP-CIDR,192.168.0.0/16,sshg,no-resolve

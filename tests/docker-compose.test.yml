@@ -4,11 +4,11 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    container_name: subconvergo-app
     ports:
       - "25500:25500"
     volumes:
-      - ../base:/app
+      - ./base:/base
+    working_dir: /base
     environment:
       - API_MODE=true
       - PORT=25500
@@ -20,65 +20,31 @@ services:
       start_period: 5s
     networks:
       - subconvergo-network
-
-  # Test service
-  subconvergo-test:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      target: builder
-    container_name: subconvergo-test
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    volumes:
-      - ..:/test
-    working_dir: /test
-    command: >
-      sh -c "
-        echo '=== Running Unit Tests ===' &&
-        mkdir -p coverage &&
-        CGO_ENABLED=1 go test -v -race -coverprofile=coverage/coverage.out ./... &&
-        echo '' &&
-        echo '=== Test Coverage ===' &&
-        go tool cover -func=coverage/coverage.out &&
-        echo '' &&
-        echo '=== Generating HTML Coverage Report ===' &&
-        go tool cover -html=coverage/coverage.out -o coverage/coverage.html &&
-        echo 'Coverage report generated at coverage/coverage.html'
-        echo '=== Running Benchmarks ===' &&
-        go test -bench=. -benchmem ./... | tee coverage/benchmark.txt &&
-        echo 'Benchmark report generated at coverage/benchmark.txt'
-      "
-    networks:
-      - subconvergo-network
-
-  # Integration test service
-  integration-test:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      target: builder
-    container_name: subconvergo-integration
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     depends_on:
-      subconvergo:
-        condition: service_healthy
+      - mock-subscription
+
+  subconverter:
+    image: metacubex/subconverter:latest
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    ports:
+      - "25550:25500"
     volumes:
-      - ..:/test
-    working_dir: /test
+      - ./base:/base
+      - ./subconverter/all_base.tpl:/base/base/all_base.tpl
+    working_dir: /base
     environment:
-      - SUBCONVERGO_URL=http://subconvergo:25500
-    command: >
-      sh -c "
-        echo '=== Waiting for service to be ready ===' &&
-        sleep 5 &&
-        echo '=== Running Integration Tests ===' &&
-        go test -v ./tests/... &&
-        echo '' &&
-        echo '=== Running API Tests ===' &&
-        sh /app/tests/test-api.sh
-      "
+      - API_MODE=true
+      - PORT=25500
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:25500/version"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     networks:
       - subconvergo-network
+    depends_on:
+      - mock-subscription
 
   # Mock subscription server for testing
   mock-subscription:

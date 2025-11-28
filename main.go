@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
+	_ "github.com/gfunc/subconvergo/generator/impl"
 	"github.com/gfunc/subconvergo/handler"
 	"github.com/gin-gonic/gin"
 )
@@ -54,6 +56,9 @@ func main() {
 		log.Printf("Configuration loaded from: %s", configFile)
 	}
 
+	// Initialize cache
+	cache.Init(config.GetBasePath())
+
 	// Check for environment variable overrides
 	checkEnvOverrides()
 
@@ -70,18 +75,22 @@ func main() {
 func checkEnvOverrides() {
 	if apiMode := os.Getenv("API_MODE"); apiMode != "" {
 		config.Global.Common.APIMode = apiMode == "true"
+		log.Println("API_MODE override from env")
 	}
 
 	if managedPrefix := os.Getenv("MANAGED_PREFIX"); managedPrefix != "" {
 		config.Global.ManagedConfig.ManagedConfigPrefix = managedPrefix
+		log.Println("MANAGED_PREFIX override from env")
 	}
 
 	if token := os.Getenv("API_TOKEN"); token != "" {
 		config.Global.Common.APIAccessToken = token
+		log.Println("API_TOKEN override from env")
 	}
 
 	if port := os.Getenv("PORT"); port != "" {
 		fmt.Sscanf(port, "%d", &config.Global.Server.Port)
+		log.Println("PORT override from env")
 	}
 }
 
@@ -112,10 +121,12 @@ func startServer() {
 	router.GET("/version", h.HandleVersion)
 	router.GET("/sub", h.HandleSub)
 	router.HEAD("/sub", h.HandleSub)
+	router.GET("/surge2clash", h.HandleSurge2Clash)
 	router.GET("/readconf", h.HandleReadConf)
 	router.GET("/getruleset", h.HandleGetRuleset)
 	router.GET("/getprofile", h.HandleGetProfile)
 	router.GET("/render", h.HandleRender)
+	router.GET("/flushcache", h.HandleFlushCache)
 
 	// Additional routes when not in API mode
 	if !config.Global.Common.APIMode {

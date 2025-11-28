@@ -31,7 +31,7 @@ RUN apk --no-cache add ca-certificates tzdata
 COPY --from=builder /app/subconvergo /usr/bin/subconvergo
 
 # Copy base configuration from parent directory
-COPY base /app
+COPY base /base
 
 # Set environment
 ENV TZ=UTC
@@ -41,11 +41,11 @@ RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
 # Create non-root user
 RUN addgroup -g 1000 subconvergo && \
     adduser -D -u 1000 -G subconvergo subconvergo && \
-    chown -R subconvergo:subconvergo /app
+    chown -R subconvergo:subconvergo /base
 
-WORKDIR /app
+WORKDIR /base
 
 USER subconvergo
 EXPOSE 25500
 
-CMD ["subconvergo"]
+ENTRYPOINT ["subconvergo"]

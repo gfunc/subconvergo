@@ -4,23 +4,29 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
+	"strconv"
+
 	"strings"
 	"text/template"
 
-	"github.com/gfunc/subconvergo/proxy"
+	pc "github.com/gfunc/subconvergo/proxy/core"
 
+	"github.com/BurntSushi/toml"
+	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator"
+	"github.com/gfunc/subconvergo/generator/core"
+	"github.com/gfunc/subconvergo/generator/transformers"
 	"github.com/gfunc/subconvergo/parser"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/ini.v1"
+	"gopkg.in/yaml.v3"
 )
 
 // SubHandler handles subscription conversion requests
@@ -31,26 +37,55 @@ func NewSubHandler() *SubHandler {
 	return &SubHandler{}
 }
 
-// HandleSub processes /sub endpoint
-func (h *SubHandler) HandleSub(c *gin.Context) {
-	h.handleSubWithParams(c, nil)
+// RequestParams holds the parameters for subscription conversion
+type RequestParams struct {
+	Target    string `form:"target"`
+	URL       string `form:"url"`
+	Config    string `form:"config"`
+	UserAgent string `form:"ua"`
+	Group     string `form:"group"`
+	Include   string `form:"include"`
+	Exclude   string `form:"exclude"`
+	UDP       *bool  `form:"udp"`
+	TFO       *bool  `form:"tfo"`
+	SCV       *bool  `form:"scv"`
+	NewName   *bool  `form:"new_name"`
+	SurgeVer  *int   `form:"ver"`
 }
 
-// handleSubWithParams processes /sub with optional parameter overrides
-func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]string) {
-	// Extract parameters from params map or query
-	getParam := func(key string) string {
-		if params != nil {
-			if val, ok := params[key]; ok {
-				return val
-			}
-		}
-		return c.Query(key)
+// HandleSub processes /sub endpoint
+func (h *SubHandler) HandleSub(c *gin.Context) {
+	var params RequestParams
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.String(http.StatusBadRequest, "Invalid parameters: "+err.Error())
+		return
 	}
+	h.processSubRequest(c, &params)
+}
 
-	target := getParam("target")
-	urlParam := getParam("url")
-	configParam := getParam("config")
+// processSubRequest processes /sub with parsed parameters
+func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
+	target := params.Target
+	urlParam := params.URL
+	configParam := params.Config
+	uaParam := params.UserAgent
+
+	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s ua=%s", target, urlParam, configParam, uaParam)
+
+	// Handle auto target detection
+	var clashNewName *bool
+	var surgeVer int = -1
+
+	if target == "auto" {
+		ua := c.Request.Header.Get("User-Agent")
+		matchedTarget, cnn, sv := matchUserAgent(ua)
+		if matchedTarget != "" {
+			target = matchedTarget
+			clashNewName = cnn
+			surgeVer = sv
+			log.Printf("[handler.HandleSub] Auto-detected target=%s from UA=%s", target, ua)
+		}
+	}
 
 	// Validate required parameters
 	if target == "" {
@@ -77,6 +112,13 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 		return
 	}
 
+	// Reload config on request if enabled
+	if config.Global.Common.ReloadConfOnRequest {
+		if _, err := config.LoadConfig(); err == nil {
+			// Config reloaded successfully
+		}
+	}
+
 	// Handle insert URLs first if enabled
 	var urlsToProcess []string
 	if config.Global.Common.EnableInsert && len(config.Global.Common.InsertURL) > 0 {
@@ -94,6 +136,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 			urlsToProcess = append(urlsToProcess, config.Global.Common.InsertURL...)
 		}
 	}
+	log.Printf("[handler.HandleSub] target=%s urls=%d urlLen=%d config=%s client=%s", target, len(urlsToProcess), len(urlParam), configParam, c.ClientIP())
 
 	// Load external config if specified
 	proxyGroups := config.Global.ProxyGroups.CustomProxyGroups
@@ -102,7 +145,10 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	if configParam != "" {
 		// Load external config (can be URL or file path)
 		extConfig, err := h.loadExternalConfig(configParam)
-		if err == nil {
+		if err != nil {
+			log.Printf("[handler.HandleSub] failed to load external config %s: %v", configParam, err)
+		} else if extConfig != nil {
+			log.Printf("[handler.HandleSub] loaded external config %s proxyGroups=%d rulesets=%d", configParam, len(extConfig.ProxyGroups), len(extConfig.Rulesets))
 			// Merge external config
 			if len(extConfig.ProxyGroups) > 0 {
 				proxyGroups = extConfig.ProxyGroups
@@ -114,96 +160,76 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	// Parse subscription URLs (support multiple URLs separated by |)
-	var allProxies []proxy.ProxyInterface
+	var allProxies []pc.ProxyInterface
 	var otherProxyGroups []config.ProxyGroupConfig
 	var rawRules []string
-	for _, url := range urlsToProcess {
+	for index, url := range urlsToProcess {
 		url = strings.TrimSpace(url)
 		if url == "" {
 			continue
 		}
-		if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
-			// Parse subscription
-			custom, err := parser.ParseSubscription(url, config.Global.Common.ProxySubscription)
-			if err != nil {
-				if !config.Global.Advanced.SkipFailedLinks {
-					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription: %v", err))
-					return
-				}
-				log.Printf("Failed to parse subscription: %s, %v", url, err)
-				continue
-			}
-			allProxies = append(allProxies, custom.Proxies...)
-			if custom.Proxies != nil {
-				otherProxyGroups = append(otherProxyGroups, custom.Groups...)
-			}
-			if custom.RawRules != nil {
-				rawRules = append(rawRules, custom.RawRules...)
-			}
-		} else if strings.HasPrefix(url, "file://") {
-			// Parse subscription file
-			custom, err := parser.ParseSubscriptionFile(url)
-			if err != nil {
-				if !config.Global.Advanced.SkipFailedLinks {
-					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription file: %v", err))
-					return
-				}
-				log.Printf("Failed to parse subscription file: %s, %v", url, err)
-				continue
-			}
-			allProxies = append(allProxies, custom.Proxies...)
-			if custom.Proxies != nil {
-				otherProxyGroups = append(otherProxyGroups, custom.Groups...)
-			}
-			if custom.RawRules != nil {
-				rawRules = append(rawRules, custom.RawRules...)
-			}
-		} else {
-			parserProxy, err := parser.ParseProxyLine(url)
-			if err != nil {
-				if !config.Global.Advanced.SkipFailedLinks {
-					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse proxy line: %v", err))
-					return
-				}
-			}
-			allProxies = append(allProxies, parserProxy)
+		sp := &parser.SubParser{
+			Index:     index,
+			URL:       url,
+			Proxy:     config.Global.Common.ProxySubscription,
+			UserAgent: uaParam,
 		}
-
+		custom, err := sp.Parse()
+		if err == nil {
+			log.Printf("[handler.HandleSub] Parsed URL %s: %d proxies, %d groups, %d rules", url, len(custom.Proxies), len(custom.Groups), len(custom.RawRules))
+			allProxies = append(allProxies, custom.Proxies...)
+			otherProxyGroups = append(otherProxyGroups, custom.Groups...)
+			rawRules = append(rawRules, custom.RawRules...)
+			continue
+		} else if !config.Global.Advanced.SkipFailedLinks {
+			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription (%s): %v", url, err))
+			return
+		} else {
+			log.Printf("[handler.HandleSub] failed to parse subscription (index=%d url=%s): %v", index, url, err)
+		}
 	}
 
+	log.Printf("[handler.HandleSub] Parsed %d proxies, %d groups from %d URLs", len(allProxies), len(proxyGroups), len(urlsToProcess))
+
 	if len(allProxies) == 0 {
+		log.Printf("[handler.HandleSub] no valid proxies parsed from %d url(s)", len(urlsToProcess))
 		c.String(http.StatusBadRequest, "No valid proxies found")
 		return
 	}
 
-	// Apply filters
-	allProxies = h.applyFilters(allProxies, c)
-
-	// Apply rename rules
-	allProxies = h.applyRenameRules(allProxies)
-
-	// Apply emoji rules
-	if config.Global.Emojis.AddEmoji {
-		allProxies = h.applyEmojiRules(allProxies)
-	}
-
-	// Apply sort if enabled
-	if config.Global.NodePref.SortFlag {
-		allProxies = h.sortProxies(allProxies)
-	}
-
-	// Append proxy type if configured
-	if config.Global.Common.AppendProxyType {
-		for i := range allProxies {
-			allProxies[i].SetRemark(fmt.Sprintf("%s [%s]", allProxies[i].GetRemark(), allProxies[i].GetType()))
+	// Check custom group name override
+	if params.Group != "" {
+		for _, p := range allProxies {
+			p.SetGroup(params.Group)
 		}
 	}
 
-	// Reload config on request if enabled
-	if config.Global.Common.ReloadConfOnRequest {
-		if _, err := config.LoadConfig(); err == nil {
-			// Config reloaded successfully
-		}
+	// Prepare filter patterns
+	include := params.Include
+	exclude := params.Exclude
+
+	var includePatterns []string
+	if len(config.Global.Common.IncludeRemarks) > 0 {
+		includePatterns = append(includePatterns, config.Global.Common.IncludeRemarks...)
+	}
+	if include != "" {
+		includePatterns = append(includePatterns, include)
+	}
+
+	var excludePatterns []string
+	if len(config.Global.Common.ExcludeRemarks) > 0 {
+		excludePatterns = append(excludePatterns, config.Global.Common.ExcludeRemarks...)
+	}
+	if exclude != "" {
+		excludePatterns = append(excludePatterns, exclude)
+	}
+
+	// Construct transformation pipeline
+	pipeline := []transformers.Transformer{
+		transformers.NewFilterTransformer(includePatterns, excludePatterns),
+		transformers.NewRenameTransformer(config.Global.NodePref.RenameNodes),
+		transformers.NewEmojiTransformer(config.Global.Emojis),
+		transformers.NewSortTransformer(config.Global.NodePref.SortFlag),
 	}
 
 	if len(otherProxyGroups) > 0 {
@@ -211,44 +237,65 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	// Prepare generator options
-	opts := generator.GeneratorOptions{
-		Target:              target,
-		ProxyGroups:         proxyGroups,
-		Rulesets:            rulesets,
-		RawRules:            rawRules,
-		EnableRuleGen:       config.Global.Rulesets.Enabled,
-		ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
-		ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
-		SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
-		AppendProxyType:     config.Global.Common.AppendProxyType,
+	opts := core.GeneratorOptions{
+		Target:          target,
+		ProxyGroups:     proxyGroups,
+		Rulesets:        rulesets,
+		RawRules:        rawRules,
+		AppendProxyType: config.Global.Common.AppendProxyType,
+		EnableRuleGen:   config.Global.Rulesets.Enabled,
+		Pipelines:       pipeline,
+
+		ProxySetting: config.ProxySetting{
+			ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
+			ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
+			SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
+			ClashUseNewField:    config.Global.NodePref.ClashUseNewField,
+		},
+	}
+
+	// Apply auto-detected settings
+	if clashNewName != nil {
+		opts.ProxySetting.ClashUseNewField = *clashNewName
+	}
+	if surgeVer != -1 {
+		opts.ProxySetting.SurgeVer = surgeVer
 	}
 
 	// Apply node preferences to generator options
 	if config.Global.NodePref.UDPFlag != nil {
-		opts.UDP = config.Global.NodePref.UDPFlag
+		opts.UDP = *config.Global.NodePref.UDPFlag
 	}
 	if config.Global.NodePref.TCPFastOpenFlag != nil {
-		opts.TFO = config.Global.NodePref.TCPFastOpenFlag
+		opts.TFO = *config.Global.NodePref.TCPFastOpenFlag
 	}
 	if config.Global.NodePref.SkipCertVerifyFlag != nil {
-		opts.SkipCertVerify = config.Global.NodePref.SkipCertVerifyFlag
+		opts.SCV = *config.Global.NodePref.SkipCertVerifyFlag
 	}
 	if config.Global.NodePref.TLS13Flag != nil {
-		opts.TLS13 = config.Global.NodePref.TLS13Flag
+		opts.TLS13 = *config.Global.NodePref.TLS13Flag
 	}
 
 	// Parse boolean options
-	if udp := getParam("udp"); udp != "" {
-		val := udp == "true"
-		opts.UDP = &val
+	if params.UDP != nil {
+		opts.UDP = *params.UDP
 	}
-	if tfo := getParam("tfo"); tfo != "" {
-		val := tfo == "true"
-		opts.TFO = &val
+	if params.TFO != nil {
+		opts.TFO = *params.TFO
 	}
-	if scv := getParam("scv"); scv != "" {
-		val := scv == "true"
-		opts.SkipCertVerify = &val
+	if params.SCV != nil {
+		opts.SCV = *params.SCV
+	}
+	if params.NewName != nil {
+		opts.ProxySetting.ClashUseNewField = *params.NewName
+	}
+	if params.SurgeVer != nil {
+		opts.ProxySetting.SurgeVer = *params.SurgeVer
+	}
+
+	// Default Surge version to 3 if not set
+	if opts.ProxySetting.SurgeVer == 0 {
+		opts.ProxySetting.SurgeVer = 3
 	}
 
 	// Prepare request parameters for template rendering
@@ -265,6 +312,7 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	// Load base configuration
 	baseConfig, err := h.loadBaseConfig(target, requestParams)
 	if err != nil {
+		log.Printf("[handler.HandleSub] loadBaseConfig target=%s err=%v", target, err)
 		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to load base config: %v", err))
 		return
 	}
@@ -272,7 +320,12 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	// Generate output
 	output, err := generator.Generate(allProxies, opts, baseConfig)
 	if err != nil {
-		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to generate config: %v", err))
+		log.Printf("[handler.HandleSub] generator failed target=%s proxies=%d err=%v", target, len(allProxies), err)
+		if err.Error() == "No valid proxies found" {
+			c.String(http.StatusBadRequest, err.Error())
+		} else {
+			c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to generate config: %v", err))
+		}
 		return
 	}
 
@@ -312,54 +365,6 @@ func (h *SubHandler) handleSubWithParams(c *gin.Context, params map[string]strin
 	}
 
 	c.Data(http.StatusOK, contentType, []byte(output))
-}
-
-func (h *SubHandler) applyFilters(proxies []proxy.ProxyInterface, c *gin.Context) []proxy.ProxyInterface {
-	// Get filter params
-	include := c.Query("include")
-	exclude := c.Query("exclude")
-
-	// Apply exclude filter
-	if exclude != "" || len(config.Global.Common.ExcludeRemarks) > 0 {
-		patterns := append(config.Global.Common.ExcludeRemarks, exclude)
-		proxies = filterProxies(proxies, patterns, false)
-	}
-
-	// Apply include filter
-	if include != "" || len(config.Global.Common.IncludeRemarks) > 0 {
-		patterns := append(config.Global.Common.IncludeRemarks, include)
-		proxies = filterProxies(proxies, patterns, true)
-	}
-
-	return proxies
-}
-
-func filterProxies(proxies []proxy.ProxyInterface, patterns []string, include bool) []proxy.ProxyInterface {
-	if len(patterns) == 0 {
-		return proxies
-	}
-
-	var result []proxy.ProxyInterface
-	for _, proxy := range proxies {
-		match := false
-		for _, pattern := range patterns {
-			if pattern == "" {
-				continue
-			}
-			// Simple substring match for now
-			// TODO: Implement regex matching
-			if strings.Contains(proxy.GetRemark(), pattern) {
-				match = true
-				break
-			}
-		}
-
-		if include == match {
-			result = append(result, proxy)
-		}
-	}
-
-	return result
 }
 
 func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]string) (string, error) {
@@ -415,224 +420,6 @@ func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]stri
 	return baseContent, nil
 }
 
-// applyRenameRules applies rename rules to proxy remarks
-func (h *SubHandler) applyRenameRules(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
-	if len(config.Global.NodePref.RenameNodes) == 0 {
-		return proxies
-	}
-
-	for i := range proxies {
-		originalRemark := proxies[i].GetRemark()
-
-		for _, rule := range config.Global.NodePref.RenameNodes {
-			// Skip if no match pattern or both match and replace are empty
-			if rule.Match == "" && rule.Script == "" {
-				continue
-			}
-
-			// TODO: Implement script support if rule.Script is provided
-
-			// Apply matcher-based filtering (supports !!TYPE=, !!GROUP=, etc.)
-			if rule.Match != "" {
-				matched, realRule := h.applyMatcherForRename(rule.Match, proxies[i])
-				if !matched {
-					continue
-				}
-
-				// If there's a real regex rule after the matcher, apply it
-				if realRule != "" {
-					re, err := regexp.Compile(realRule)
-					if err != nil {
-						continue
-					}
-					proxies[i].SetRemark(re.ReplaceAllString(proxies[i].GetRemark(), rule.Replace))
-				}
-			}
-		}
-
-		// If remark is empty after processing, restore original
-		if proxies[i].GetRemark() == "" {
-			proxies[i].SetRemark(originalRemark)
-		}
-	}
-
-	return proxies
-}
-
-// applyMatcherForRename applies special matchers for rename rules
-func (h *SubHandler) applyMatcherForRename(rule string, proxy proxy.ProxyInterface) (bool, string) {
-	// Similar to generator's applyMatcher but for rename context
-
-	// Handle !!GROUP= matcher
-	if strings.HasPrefix(rule, "!!GROUP=") {
-		parts := strings.SplitN(rule, "!!", 3)
-		if len(parts) >= 2 {
-			groupPattern := strings.TrimPrefix(parts[1], "GROUP=")
-			realRule := ""
-			if len(parts) > 2 {
-				realRule = parts[2]
-			}
-			matched, _ := regexp.MatchString(groupPattern, proxy.GetGroup())
-			return matched, realRule
-		}
-	}
-
-	// Handle !!TYPE= matcher
-	if strings.HasPrefix(rule, "!!TYPE=") {
-		parts := strings.SplitN(rule, "!!", 3)
-		if len(parts) >= 2 {
-			typePattern := strings.TrimPrefix(parts[1], "TYPE=")
-			realRule := ""
-			if len(parts) > 2 {
-				realRule = parts[2]
-			}
-			proxyType := strings.ToUpper(proxy.GetType())
-			matched, _ := regexp.MatchString("(?i)^("+typePattern+")$", proxyType)
-			return matched, realRule
-		}
-	}
-
-	// Handle !!PORT= matcher
-	if strings.HasPrefix(rule, "!!PORT=") {
-		parts := strings.SplitN(rule, "!!", 3)
-		if len(parts) >= 2 {
-			portPattern := strings.TrimPrefix(parts[1], "PORT=")
-			realRule := ""
-			if len(parts) > 2 {
-				realRule = parts[2]
-			}
-			matched := h.matchRange(portPattern, proxy.GetPort())
-			return matched, realRule
-		}
-	}
-
-	// Handle !!SERVER= matcher
-	if strings.HasPrefix(rule, "!!SERVER=") {
-		parts := strings.SplitN(rule, "!!", 3)
-		if len(parts) >= 2 {
-			serverPattern := strings.TrimPrefix(parts[1], "SERVER=")
-			realRule := ""
-			if len(parts) > 2 {
-				realRule = parts[2]
-			}
-			matched, _ := regexp.MatchString(serverPattern, proxy.GetServer())
-			return matched, realRule
-		}
-	}
-
-	// No special matcher, return rule as-is
-	return true, rule
-}
-
-// matchRange checks if a value matches a range pattern
-func (h *SubHandler) matchRange(pattern string, value int) bool {
-	pattern = strings.TrimSpace(pattern)
-	if pattern == "" {
-		return true
-	}
-
-	// Handle comma-separated values
-	if strings.Contains(pattern, ",") {
-		parts := strings.Split(pattern, ",")
-		for _, part := range parts {
-			if h.matchRange(strings.TrimSpace(part), value) {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Handle ranges: "8000-9000"
-	if strings.Contains(pattern, "-") {
-		parts := strings.Split(pattern, "-")
-		if len(parts) == 2 {
-			start, err1 := fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", new(int))
-			end, err2 := fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", new(int))
-			if start == 1 && end == 1 && err1 == nil && err2 == nil {
-				var startNum, endNum int
-				fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", &startNum)
-				fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &endNum)
-				return value >= startNum && value <= endNum
-			}
-		}
-	}
-
-	// Handle single value
-	var num int
-	if n, err := fmt.Sscanf(pattern, "%d", &num); err == nil && n == 1 {
-		return value == num
-	}
-
-	return false
-}
-
-// applyEmojiRules applies emoji rules to proxy remarks
-func (h *SubHandler) applyEmojiRules(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
-	if len(config.Global.Emojis.Rules) == 0 {
-		return proxies
-	}
-
-	for i := range proxies {
-		// Remove old emoji first if configured
-		if config.Global.Emojis.RemoveOldEmoji {
-			proxies[i].SetRemark(removeEmoji(proxies[i].GetRemark()))
-		}
-
-		// Add new emoji based on rules
-		for _, rule := range config.Global.Emojis.Rules {
-			if (rule.Match == "" && rule.Script == "") || rule.Emoji == "" {
-				continue
-			}
-
-			// TODO: Implement script support if rule.Script is provided
-
-			// Apply matcher-based filtering (supports !!TYPE=, !!GROUP=, etc.)
-			if rule.Match != "" {
-				matched, realRule := h.applyMatcherForRename(rule.Match, proxies[i])
-				if !matched {
-					continue
-				}
-
-				// If there's a real regex rule after the matcher, check if remark matches
-				if realRule != "" {
-					matched, err := regexp.MatchString(realRule, proxies[i].GetRemark())
-					if err != nil || !matched {
-						continue
-					}
-				}
-
-				// Add emoji and break (only first matching rule)
-				proxies[i].SetRemark(rule.Emoji + " " + proxies[i].GetRemark())
-				break
-			}
-		}
-	}
-
-	return proxies
-}
-
-// removeEmoji removes emoji characters from a string
-func removeEmoji(s string) string {
-	// Simple implementation - remove common emoji patterns
-	// This regex removes most emoji and flag sequences
-	re := regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{1F900}-\x{1F9FF}\x{1F1E0}-\x{1F1FF}]`)
-	s = re.ReplaceAllString(s, "")
-
-	// Remove leading/trailing spaces
-	return strings.TrimSpace(s)
-}
-
-// sortProxies sorts proxies based on configuration
-func (h *SubHandler) sortProxies(proxies []proxy.ProxyInterface) []proxy.ProxyInterface {
-	// Simple alphabetical sort by remark
-	// TODO: Implement script-based sorting if sortScript is provided
-	sort.Slice(proxies, func(i, j int) bool {
-		return proxies[i].GetRemark() < proxies[j].GetRemark()
-	})
-
-	return proxies
-}
-
 // renderTemplate renders template with global variables and request context
 func (h *SubHandler) renderTemplate(content string) (string, error) {
 	return h.renderTemplateWithContext(content, nil)
@@ -648,11 +435,9 @@ func (h *SubHandler) renderTemplateWithContext(content string, requestParams map
 		setNestedValue(data, g.Key, g.Value)
 	}
 
-	// Add request parameters under "request" namespace
-	if requestParams != nil {
-		for key, value := range requestParams {
-			setNestedValue(data, "request."+key, value)
-		}
+	// Add request parameters under "request" namespace (nil-safe range)
+	for key, value := range requestParams {
+		setNestedValue(data, "request."+key, value)
 	}
 
 	// Define template functions
@@ -752,8 +537,118 @@ type ExternalConfig struct {
 
 // loadExternalConfig loads external configuration from URL or file
 func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
-	// TODO: Implement full external config loading with URL fetching
-	// For now, return empty config
+	var data []byte
+
+	// Determine source: http(s) or local file
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		// Check cache first
+		cacheKey := ""
+		if config.Global.Advanced.EnableCache {
+			cacheKey = cache.GlobalManager.GetKey(path)
+			if cachedData, ok := cache.GlobalManager.Get(cacheKey, config.Global.Advanced.CacheConfig); ok {
+				log.Printf("[handler.loadExternalConfig] path=%s served from cache", path)
+				data = cachedData
+			}
+		}
+
+		if data == nil {
+			resp, err := http.Get(path)
+			if err != nil {
+				log.Printf("[handler.loadExternalConfig] http fetch failed path=%s err=%v", path, err)
+				// Try stale cache
+				if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+					if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+						log.Printf("[handler.loadExternalConfig] path=%s served from stale cache", path)
+						data = cachedData
+					} else {
+						return nil, err
+					}
+				} else {
+					return nil, err
+				}
+			} else {
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					log.Printf("[handler.loadExternalConfig] http fetch path=%s status=%d", path, resp.StatusCode)
+					// Try stale cache
+					if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+						if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+							log.Printf("[handler.loadExternalConfig] path=%s served from stale cache", path)
+							data = cachedData
+						} else {
+							return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
+						}
+					} else {
+						return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
+					}
+				} else {
+					data, err = io.ReadAll(resp.Body)
+					if err != nil {
+						log.Printf("[handler.loadExternalConfig] http read failed path=%s err=%v", path, err)
+						return nil, err
+					}
+					// Save to cache
+					if config.Global.Advanced.EnableCache {
+						if err := cache.GlobalManager.Set(cacheKey, data); err != nil {
+							log.Printf("[handler.loadExternalConfig] failed to save cache: %v", err)
+						}
+					}
+				}
+			}
+		}
+	} else {
+		// resolve candidate paths
+		candidates := []string{path}
+		if !filepath.IsAbs(path) {
+			candidates = append(candidates, filepath.Join(config.GetBasePath(), path))
+			candidates = append(candidates, filepath.Join(config.GetBasePath(), "config", path))
+		}
+		var readErr error
+		for _, p := range candidates {
+			if b, err := os.ReadFile(p); err == nil {
+				data = b
+				readErr = nil
+				break
+			} else {
+				log.Printf("[handler.loadExternalConfig] file read failed candidate=%s err=%v", p, err)
+				readErr = err
+			}
+		}
+		if data == nil {
+			log.Printf("[handler.loadExternalConfig] file candidates exhausted for path=%s lastErr=%v", path, readErr)
+			return nil, fmt.Errorf("external config not found: %v", readErr)
+		}
+	}
+
+	// Try YAML -> TOML -> INI using the Settings struct to leverage existing tags
+	var extSettings config.Settings
+	if err := yaml.Unmarshal(data, &extSettings); err == nil {
+		return &ExternalConfig{
+			ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
+			Rulesets:    extSettings.Rulesets.Rulesets,
+			BasePath:    extSettings.Common.BasePath,
+		}, nil
+	}
+
+	if _, err := toml.Decode(string(data), &extSettings); err == nil {
+		return &ExternalConfig{
+			ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
+			Rulesets:    extSettings.Rulesets.Rulesets,
+			BasePath:    extSettings.Common.BasePath,
+		}, nil
+	}
+
+	if cfg, err := ini.Load(data); err == nil {
+		if err := cfg.MapTo(&extSettings); err == nil {
+			return &ExternalConfig{
+				ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
+				Rulesets:    extSettings.Rulesets.Rulesets,
+				BasePath:    extSettings.Common.BasePath,
+			}, nil
+		}
+	}
+
+	// If all failed, return empty (non-nil) config to avoid breaking caller
 	return &ExternalConfig{}, nil
 }
 
@@ -795,14 +690,101 @@ func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 	}
 
 	// URL decode
-	_, err := base64.URLEncoding.DecodeString(urlParam)
+	decoded, err := base64.URLEncoding.DecodeString(urlParam)
 	if err != nil {
 		c.String(http.StatusBadRequest, "Invalid URL encoding")
 		return
 	}
 
-	// TODO: Implement ruleset fetching and conversion
-	c.String(http.StatusOK, "Ruleset endpoint not yet fully implemented\n")
+	target := string(decoded)
+	var content []byte
+
+	// Remote fetch
+	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
+		// Check cache first
+		cacheKey := ""
+		if config.Global.Advanced.EnableCache {
+			cacheKey = cache.GlobalManager.GetKey(target)
+			if cachedData, ok := cache.GlobalManager.Get(cacheKey, config.Global.Advanced.CacheRuleset); ok {
+				log.Printf("[handler.HandleGetRuleset] url=%s served from cache", target)
+				content = cachedData
+			}
+		}
+
+		if content == nil {
+			resp, err := http.Get(target)
+			if err != nil {
+				// Try stale cache
+				if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+					if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+						log.Printf("[handler.HandleGetRuleset] url=%s served from stale cache", target)
+						content = cachedData
+					} else {
+						c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: %v", err))
+						return
+					}
+				} else {
+					c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: %v", err))
+					return
+				}
+			} else {
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					// Try stale cache
+					if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
+						if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
+							log.Printf("[handler.HandleGetRuleset] url=%s served from stale cache", target)
+							content = cachedData
+						} else {
+							c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: status %d", resp.StatusCode))
+							return
+						}
+					} else {
+						c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: status %d", resp.StatusCode))
+						return
+					}
+				} else {
+					body, err := io.ReadAll(resp.Body)
+					if err != nil {
+						c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to read ruleset: %v", err))
+						return
+					}
+					content = body
+					// Save to cache
+					if config.Global.Advanced.EnableCache {
+						if err := cache.GlobalManager.Set(cacheKey, content); err != nil {
+							log.Printf("[handler.HandleGetRuleset] failed to save cache: %v", err)
+						}
+					}
+				}
+			}
+		}
+	} else {
+		// Local path resolution attempts
+		candidates := []string{
+			target,
+			filepath.Join(config.GetBasePath(), target),
+			filepath.Join(config.GetBasePath(), "rules", target),
+		}
+		var readErr error
+		for _, p := range candidates {
+			if data, err := os.ReadFile(p); err == nil {
+				content = data
+				readErr = nil
+				break
+			} else {
+				readErr = err
+			}
+		}
+		if content == nil {
+			c.String(http.StatusNotFound, fmt.Sprintf("Ruleset not found: %v", readErr))
+			return
+		}
+	}
+
+	// For now, return content as-is for supported types
+	_ = rulesetType // placeholder for future conversions
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", content)
 }
 
 // HandleRender processes /render endpoint for template rendering
@@ -1068,16 +1050,77 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 	contents["token"] = token
 
 	// Build merged params
-	params := make(map[string]string)
+	paramsMap := make(map[string]string)
 	for key, value := range contents {
-		params[key] = value
+		paramsMap[key] = value
 	}
 
-	// Store params in context for handleSubWithParams to use
-	c.Set("_merged_params", params)
+	// Convert map to RequestParams
+	params := &RequestParams{
+		Target:    paramsMap["target"],
+		URL:       paramsMap["url"],
+		Config:    paramsMap["config"],
+		UserAgent: paramsMap["ua"],
+		Group:     paramsMap["group"],
+		Include:   paramsMap["include"],
+		Exclude:   paramsMap["exclude"],
+	}
+
+	if v, ok := paramsMap["udp"]; ok {
+		b := v == "true"
+		params.UDP = &b
+	}
+	if v, ok := paramsMap["tfo"]; ok {
+		b := v == "true"
+		params.TFO = &b
+	}
+	if v, ok := paramsMap["scv"]; ok {
+		b := v == "true"
+		params.SCV = &b
+	}
+	if v, ok := paramsMap["new_name"]; ok {
+		b := v == "true"
+		params.NewName = &b
+	}
+	if v, ok := paramsMap["ver"]; ok {
+		if i, err := strconv.Atoi(v); err == nil {
+			params.SurgeVer = &i
+		}
+	}
 
 	// Forward to /sub handler
-	h.handleSubWithParams(c, params)
+	h.processSubRequest(c, params)
+}
+
+// HandleSurge2Clash processes /surge2clash endpoint
+func (h *SubHandler) HandleSurge2Clash(c *gin.Context) {
+	var params RequestParams
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.String(http.StatusBadRequest, "Invalid parameters: "+err.Error())
+		return
+	}
+	// Force target to clash
+	params.Target = "clash"
+	h.processSubRequest(c, &params)
+}
+
+// HandleFlushCache processes /flushcache endpoint
+func (h *SubHandler) HandleFlushCache(c *gin.Context) {
+	// Check token
+	if config.Global.Common.APIAccessToken != "" {
+		token := c.Query("token")
+		if token != config.Global.Common.APIAccessToken {
+			c.String(http.StatusForbidden, "Forbidden\n")
+			return
+		}
+	}
+
+	if err := cache.GlobalManager.Flush(); err != nil {
+		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to flush cache: %v\n", err))
+		return
+	}
+
+	c.String(http.StatusOK, "Cache flushed\n")
 }
 
 // fileExists checks if a file exists

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 	"gopkg.in/ini.v1"
@@ -84,6 +85,7 @@ type NodePrefConfig struct {
 	AppendSubUserinfo     bool               `yaml:"append_sub_userinfo" toml:"append_sub_userinfo" ini:"append_sub_userinfo"`
 	ClashProxiesStyle     string             `yaml:"clash_proxies_style" toml:"clash_proxies_style" ini:"clash_proxies_style"`
 	ClashProxyGroupsStyle string             `yaml:"clash_proxy_groups_style" toml:"clash_proxy_groups_style" ini:"clash_proxy_groups_style"`
+	ClashUseNewField      bool               `yaml:"clash_use_new_field_name" toml:"clash_use_new_field_name" ini:"clash_use_new_field_name"`
 	SingBoxAddClashModes  bool               `yaml:"singbox_add_clash_modes" toml:"singbox_add_clash_modes" ini:"singbox_add_clash_modes"`
 	RenameNodes           []RenameNodeConfig `yaml:"rename_node" toml:"rename_node" ini:"rename_node,,,allowshadow"`
 }
@@ -215,53 +217,77 @@ type AdvancedConfig struct {
 	ScriptCleanContext     bool   `yaml:"script_clean_context" toml:"script_clean_context" ini:"script_clean_context"`
 	AsyncFetchRuleset      bool   `yaml:"async_fetch_ruleset" toml:"async_fetch_ruleset" ini:"async_fetch_ruleset"`
 	SkipFailedLinks        bool   `yaml:"skip_failed_links" toml:"skip_failed_links" ini:"skip_failed_links"`
+	ServeCacheOnFetchFail  bool   `yaml:"serve_cache_on_fetch_fail" toml:"serve_cache_on_fetch_fail" ini:"serve_cache_on_fetch_fail"`
+}
+
+type ProxySetting struct {
+	ClashProxiesStyle string // deprecated
+	ClashGroupsStyle  string // deprecated
+	NodeList          bool   // deprecated
+
+	SingBoxAddClashMode bool
+	ClashUseNewField    bool
+	SurgeVer            int
+	UDP                 bool
+	TFO                 bool
+	SCV                 bool
+	TLS13               bool
 }
 
 // Global settings instance
 var Global = &Settings{}
+var lock = &sync.Mutex{}
 
 func init() {
+	Global.init()
+}
+
+func (s *Settings) init() {
 	// Set default values
-	Global.Common.APIMode = true
-	Global.Common.BasePath = "base"
-	Global.Common.ProxyConfig = "SYSTEM"
-	Global.Common.ProxyRuleset = "SYSTEM"
-	Global.Common.ProxySubscription = "NONE"
+	s.Common.APIMode = true
+	s.Common.BasePath = "base"
+	s.Common.ProxyConfig = "SYSTEM"
+	s.Common.ProxyRuleset = "SYSTEM"
+	s.Common.ProxySubscription = "NONE"
 
-	Global.NodePref.ClashProxiesStyle = "flow"
-	Global.NodePref.ClashProxyGroupsStyle = "block"
-	Global.NodePref.AppendSubUserinfo = true
-	Global.NodePref.SingBoxAddClashModes = true
+	s.NodePref.ClashProxiesStyle = "flow"
+	s.NodePref.ClashProxyGroupsStyle = "block"
+	s.NodePref.AppendSubUserinfo = true
+	s.NodePref.SingBoxAddClashModes = true
 
-	Global.ManagedConfig.WriteManagedConfig = true
-	Global.ManagedConfig.ManagedConfigPrefix = "http://127.0.0.1:25500"
-	Global.ManagedConfig.ConfigUpdateInterval = 86400
+	s.ManagedConfig.WriteManagedConfig = true
+	s.ManagedConfig.ManagedConfigPrefix = "http://127.0.0.1:25500"
+	s.ManagedConfig.ConfigUpdateInterval = 86400
 
-	Global.SurgeExternal.ResolveHostname = true
+	s.SurgeExternal.ResolveHostname = true
 
-	Global.Emojis.AddEmoji = true
-	Global.Emojis.RemoveOldEmoji = true
+	s.Emojis.AddEmoji = true
+	s.Emojis.RemoveOldEmoji = true
 
-	Global.Rulesets.Enabled = true
+	s.Rulesets.Enabled = true
 
-	Global.Server.Listen = "0.0.0.0"
-	Global.Server.Port = 25500
+	s.Server.Listen = "0.0.0.0"
+	s.Server.Port = 25500
 
-	Global.Advanced.LogLevel = "info"
-	Global.Advanced.MaxPendingConnections = 10240
-	Global.Advanced.MaxConcurrentThreads = 2
-	Global.Advanced.MaxAllowedRulesets = 64
-	Global.Advanced.CacheSubscription = 60
-	Global.Advanced.CacheConfig = 300
-	Global.Advanced.CacheRuleset = 21600
-	Global.Advanced.ScriptCleanContext = true
+	s.Advanced.LogLevel = "info"
+	s.Advanced.MaxPendingConnections = 10240
+	s.Advanced.MaxConcurrentThreads = 2
+	s.Advanced.MaxAllowedRulesets = 64
+	s.Advanced.CacheSubscription = 60
+	s.Advanced.CacheConfig = 300
+	s.Advanced.CacheRuleset = 21600
+	s.Advanced.ScriptCleanContext = true
+	s.Advanced.ServeCacheOnFetchFail = true
 }
 
 // LoadConfig loads configuration from pref files
 func LoadConfig() (string, error) {
-	// Check for config configFile existence in order: yml -> toml -> ini
+	lock.Lock()
+	defer lock.Unlock()
+	// Check for config configFile existence in order: yml/yaml -> toml -> ini
 	configFileList := []string{
 		"pref.yml",
+		"pref.yaml",
 		"pref.toml",
 		"pref.ini",
 		"pref.example.yml",
@@ -270,6 +296,8 @@ func LoadConfig() (string, error) {
 	}
 	var parseError error = fmt.Errorf("no configuration file found")
 	var effectiveConfig = ""
+	setting := Settings{}
+	setting.init()
 	for _, configFile := range configFileList {
 		if _, err := os.Stat(configFile); err == nil {
 			effectiveConfig = configFile
@@ -281,75 +309,75 @@ func LoadConfig() (string, error) {
 				}
 			}
 			if strings.HasSuffix(effectiveConfig, ".toml") {
-				parseError = loadTOMLConfig(effectiveConfig)
+				parseError = setting.loadTOMLConfig(effectiveConfig)
 			} else if strings.HasSuffix(effectiveConfig, ".yaml") || strings.HasSuffix(effectiveConfig, ".yml") {
-				parseError = loadYAMLConfig(effectiveConfig)
+				parseError = setting.loadYAMLConfig(effectiveConfig)
 			} else if strings.HasSuffix(effectiveConfig, ".ini") {
-				parseError = loadINIConfig(effectiveConfig)
+				parseError = setting.loadINIConfig(effectiveConfig)
 			}
 			if parseError == nil {
 				break
 			}
 		}
 	}
-
+	Global = &setting
 	return effectiveConfig, parseError
 }
 
-func loadYAMLConfig(path string) error {
+func (setting *Settings) loadYAMLConfig(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read YAML config: %w", err)
 	}
 
-	if err := yaml.Unmarshal(data, Global); err != nil {
+	if err := yaml.Unmarshal(data, setting); err != nil {
 		return fmt.Errorf("failed to parse YAML config: %w", err)
 	}
 
 	// Merge top-level custom_proxy_group into ProxyGroups.CustomProxyGroups
-	if len(Global.CustomGroups) > 0 {
-		Global.ProxyGroups.CustomProxyGroups = append(Global.ProxyGroups.CustomProxyGroups, Global.CustomGroups...)
-		Global.CustomGroups = nil // Clear to avoid confusion
+	if len(setting.CustomGroups) > 0 {
+		setting.ProxyGroups.CustomProxyGroups = append(setting.ProxyGroups.CustomProxyGroups, setting.CustomGroups...)
+		setting.CustomGroups = nil // Clear to avoid confusion
 	}
 
 	// Merge top-level rulesets into Rulesets.Rulesets
-	if len(Global.CustomRulesets) > 0 {
-		Global.Rulesets.Rulesets = append(Global.Rulesets.Rulesets, Global.CustomRulesets...)
-		Global.CustomRulesets = nil // Clear to avoid confusion
+	if len(setting.CustomRulesets) > 0 {
+		setting.Rulesets.Rulesets = append(setting.Rulesets.Rulesets, setting.CustomRulesets...)
+		setting.CustomRulesets = nil // Clear to avoid confusion
 	}
 
-	if err := processImports(); err != nil {
+	if err := setting.processImports(); err != nil {
 		return fmt.Errorf("failed to process imports: %w", err)
 	}
 
 	return nil
 }
 
-func loadTOMLConfig(path string) error {
-	if _, err := toml.DecodeFile(path, Global); err != nil {
+func (setting *Settings) loadTOMLConfig(path string) error {
+	if _, err := toml.DecodeFile(path, setting); err != nil {
 		return fmt.Errorf("failed to parse TOML config: %w", err)
 	}
 
 	// Merge top-level custom_groups into ProxyGroups.CustomProxyGroups
-	if len(Global.CustomGroups) > 0 {
-		Global.ProxyGroups.CustomProxyGroups = append(Global.ProxyGroups.CustomProxyGroups, Global.CustomGroups...)
-		Global.CustomGroups = nil // Clear to avoid confusion
+	if len(setting.CustomGroups) > 0 {
+		setting.ProxyGroups.CustomProxyGroups = append(setting.ProxyGroups.CustomProxyGroups, setting.CustomGroups...)
+		setting.CustomGroups = nil // Clear to avoid confusion
 	}
 
 	// Merge top-level rulesets into Rulesets.Rulesets
-	if len(Global.CustomRulesets) > 0 {
-		Global.Rulesets.Rulesets = append(Global.Rulesets.Rulesets, Global.CustomRulesets...)
-		Global.CustomRulesets = nil // Clear to avoid confusion
+	if len(setting.CustomRulesets) > 0 {
+		setting.Rulesets.Rulesets = append(setting.Rulesets.Rulesets, setting.CustomRulesets...)
+		setting.CustomRulesets = nil // Clear to avoid confusion
 	}
 
-	if err := processImports(); err != nil {
+	if err := setting.processImports(); err != nil {
 		return fmt.Errorf("failed to process imports: %w", err)
 	}
 
 	return nil
 }
 
-func loadINIConfig(path string) error {
+func (setting *Settings) loadINIConfig(path string) error {
 	cfg, err := ini.LoadSources(ini.LoadOptions{
 		AllowShadows:               true,
 		AllowBooleanKeys:           true,
@@ -364,127 +392,127 @@ func loadINIConfig(path string) error {
 	}
 
 	// Map INI to struct using reflection for common section
-	if err := cfg.Section("common").MapTo(&Global.Common); err != nil {
+	if err := cfg.Section("common").MapTo(&setting.Common); err != nil {
 		return fmt.Errorf("failed to map common section: %w", err)
 	}
 
 	// Parse userinfo section
 	if sec := cfg.Section("userinfo"); sec != nil {
-		Global.UserInfo.StreamRules = parseINIRules(sec, "stream_rule")
-		Global.UserInfo.TimeRules = parseINIRules(sec, "time_rule")
+		setting.UserInfo.StreamRules = parseINIRules(sec, "stream_rule")
+		setting.UserInfo.TimeRules = parseINIRules(sec, "time_rule")
 	}
 
 	// Parse node_pref section manually
 	if sec := cfg.Section("node_pref"); sec != nil {
 		if key := sec.Key("udp_flag"); key != nil && key.String() != "" {
 			val := key.MustBool()
-			Global.NodePref.UDPFlag = &val
+			setting.NodePref.UDPFlag = &val
 		}
 		if key := sec.Key("tcp_fast_open_flag"); key != nil && key.String() != "" {
 			val := key.MustBool()
-			Global.NodePref.TCPFastOpenFlag = &val
+			setting.NodePref.TCPFastOpenFlag = &val
 		}
 		if key := sec.Key("skip_cert_verify_flag"); key != nil && key.String() != "" {
 			val := key.MustBool()
-			Global.NodePref.SkipCertVerifyFlag = &val
+			setting.NodePref.SkipCertVerifyFlag = &val
 		}
 		if key := sec.Key("tls13_flag"); key != nil && key.String() != "" {
 			val := key.MustBool()
-			Global.NodePref.TLS13Flag = &val
+			setting.NodePref.TLS13Flag = &val
 		}
 		if key := sec.Key("sort_flag"); key != nil {
-			Global.NodePref.SortFlag = key.MustBool()
+			setting.NodePref.SortFlag = key.MustBool()
 		}
 		if key := sec.Key("sort_script"); key != nil {
-			Global.NodePref.SortScript = key.String()
+			setting.NodePref.SortScript = key.String()
 		}
 		if key := sec.Key("filter_deprecated_nodes"); key != nil {
-			Global.NodePref.FilterDeprecatedNodes = key.MustBool()
+			setting.NodePref.FilterDeprecatedNodes = key.MustBool()
 		}
 		if key := sec.Key("append_sub_userinfo"); key != nil {
-			Global.NodePref.AppendSubUserinfo = key.MustBool()
+			setting.NodePref.AppendSubUserinfo = key.MustBool()
 		}
 		if key := sec.Key("clash_proxies_style"); key != nil {
-			Global.NodePref.ClashProxiesStyle = key.String()
+			setting.NodePref.ClashProxiesStyle = key.String()
 		}
 		if key := sec.Key("clash_proxy_groups_style"); key != nil {
-			Global.NodePref.ClashProxyGroupsStyle = key.String()
+			setting.NodePref.ClashProxyGroupsStyle = key.String()
 		}
 		if key := sec.Key("singbox_add_clash_modes"); key != nil {
-			Global.NodePref.SingBoxAddClashModes = key.MustBool()
+			setting.NodePref.SingBoxAddClashModes = key.MustBool()
 		}
-		Global.NodePref.RenameNodes = parseINIRenameRules(sec, "rename_node")
+		setting.NodePref.RenameNodes = parseINIRenameRules(sec, "rename_node")
 	}
 
 	// Map managed_config section
-	if err := cfg.Section("managed_config").MapTo(&Global.ManagedConfig); err != nil {
+	if err := cfg.Section("managed_config").MapTo(&setting.ManagedConfig); err != nil {
 		return fmt.Errorf("failed to map managed_config section: %w", err)
 	}
 
 	// Map surge_external_proxy section
-	if err := cfg.Section("surge_external_proxy").MapTo(&Global.SurgeExternal); err != nil {
+	if err := cfg.Section("surge_external_proxy").MapTo(&setting.SurgeExternal); err != nil {
 		return fmt.Errorf("failed to map surge_external_proxy section: %w", err)
 	}
 
 	// Parse emojis section
 	if sec := cfg.Section("emojis"); sec != nil {
 		if key := sec.Key("add_emoji"); key != nil {
-			Global.Emojis.AddEmoji = key.MustBool(true)
+			setting.Emojis.AddEmoji = key.MustBool(true)
 		}
 		if key := sec.Key("remove_old_emoji"); key != nil {
-			Global.Emojis.RemoveOldEmoji = key.MustBool(true)
+			setting.Emojis.RemoveOldEmoji = key.MustBool(true)
 		}
-		Global.Emojis.Rules = parseINIEmojiRules(sec, "rule")
+		setting.Emojis.Rules = parseINIEmojiRules(sec, "rule")
 	}
 
 	// Parse rulesets section
 	if sec := cfg.Section("rulesets"); sec != nil {
 		if key := sec.Key("enabled"); key != nil {
-			Global.Rulesets.Enabled = key.MustBool(true)
+			setting.Rulesets.Enabled = key.MustBool(true)
 		}
 		if key := sec.Key("overwrite_original_rules"); key != nil {
-			Global.Rulesets.OverwriteOriginalRules = key.MustBool(false)
+			setting.Rulesets.OverwriteOriginalRules = key.MustBool(false)
 		}
 		if key := sec.Key("update_ruleset_on_request"); key != nil {
-			Global.Rulesets.UpdateRulesetOnRequest = key.MustBool(false)
+			setting.Rulesets.UpdateRulesetOnRequest = key.MustBool(false)
 		}
-		Global.Rulesets.Rulesets = parseINIRulesets(sec, "ruleset")
+		setting.Rulesets.Rulesets = parseINIRulesets(sec, "ruleset")
 	}
 
 	// Parse proxy_groups section
 	if sec := cfg.Section("proxy_groups"); sec != nil {
-		Global.ProxyGroups.CustomProxyGroups = parseINIProxyGroups(sec, "custom_proxy_group")
+		setting.ProxyGroups.CustomProxyGroups = parseINIProxyGroups(sec, "custom_proxy_group")
 	}
 
 	// Parse template section
 	if sec := cfg.Section("template"); sec != nil {
 		if key := sec.Key("template_path"); key != nil {
-			Global.Template.TemplatePath = key.String()
+			setting.Template.TemplatePath = key.String()
 		}
-		Global.Template.Globals = parseINITemplateGlobals(sec)
+		setting.Template.Globals = parseINITemplateGlobals(sec)
 	}
 
 	// Parse aliases section
 	if sec := cfg.Section("aliases"); sec != nil {
-		Global.Aliases = parseINIAliases(sec)
+		setting.Aliases = parseINIAliases(sec)
 	}
 
 	// Parse tasks section
 	if sec := cfg.Section("tasks"); sec != nil {
-		Global.Tasks = parseINITasks(sec, "task")
+		setting.Tasks = parseINITasks(sec, "task")
 	}
 
 	// Map server section
-	if err := cfg.Section("server").MapTo(&Global.Server); err != nil {
+	if err := cfg.Section("server").MapTo(&setting.Server); err != nil {
 		return fmt.Errorf("failed to map server section: %w", err)
 	}
 
 	// Map advanced section
-	if err := cfg.Section("advanced").MapTo(&Global.Advanced); err != nil {
+	if err := cfg.Section("advanced").MapTo(&setting.Advanced); err != nil {
 		return fmt.Errorf("failed to map advanced section: %w", err)
 	}
 
-	if err := processImports(); err != nil {
+	if err := setting.processImports(); err != nil {
 		return fmt.Errorf("failed to process imports: %w", err)
 	}
 
@@ -726,14 +754,14 @@ func parseINITasks(sec *ini.Section, keyName string) []TaskConfig {
 }
 
 // processImports processes import directives in config sections
-func processImports() error {
+func (setting *Settings) processImports() error {
 	// Process proxy group imports - iterate backwards to safely remove items
 	var indicesToRemove []int
-	for i := range Global.ProxyGroups.CustomProxyGroups {
-		group := &Global.ProxyGroups.CustomProxyGroups[i]
+	for i := range setting.ProxyGroups.CustomProxyGroups {
+		group := &setting.ProxyGroups.CustomProxyGroups[i]
 		if group.Import != "" {
 			importPath := resolveImportPath(group.Import)
-			if err := loadProxyGroupImport(importPath); err != nil {
+			if err := setting.loadProxyGroupImport(importPath); err != nil {
 				return fmt.Errorf("failed to load proxy group import %s: %w", group.Import, err)
 			}
 			// Mark for removal after processing
@@ -744,19 +772,19 @@ func processImports() error {
 	// Remove groups that were only import directives
 	for i := len(indicesToRemove) - 1; i >= 0; i-- {
 		idx := indicesToRemove[i]
-		Global.ProxyGroups.CustomProxyGroups = append(
-			Global.ProxyGroups.CustomProxyGroups[:idx],
-			Global.ProxyGroups.CustomProxyGroups[idx+1:]...,
+		setting.ProxyGroups.CustomProxyGroups = append(
+			setting.ProxyGroups.CustomProxyGroups[:idx],
+			setting.ProxyGroups.CustomProxyGroups[idx+1:]...,
 		)
 	}
 
 	// Process ruleset imports
 	indicesToRemove = nil
-	for i := range Global.Rulesets.Rulesets {
-		ruleset := &Global.Rulesets.Rulesets[i]
+	for i := range setting.Rulesets.Rulesets {
+		ruleset := &setting.Rulesets.Rulesets[i]
 		if ruleset.Import != "" {
 			importPath := resolveImportPath(ruleset.Import)
-			if err := loadRulesetImport(importPath); err != nil {
+			if err := setting.loadRulesetImport(importPath); err != nil {
 				return fmt.Errorf("failed to load ruleset import %s: %w", ruleset.Import, err)
 			}
 			indicesToRemove = append(indicesToRemove, i)
@@ -764,19 +792,19 @@ func processImports() error {
 	}
 	for i := len(indicesToRemove) - 1; i >= 0; i-- {
 		idx := indicesToRemove[i]
-		Global.Rulesets.Rulesets = append(
-			Global.Rulesets.Rulesets[:idx],
-			Global.Rulesets.Rulesets[idx+1:]...,
+		setting.Rulesets.Rulesets = append(
+			setting.Rulesets.Rulesets[:idx],
+			setting.Rulesets.Rulesets[idx+1:]...,
 		)
 	}
 
 	// Process rename node imports
 	indicesToRemove = nil
-	for i := range Global.NodePref.RenameNodes {
-		rename := &Global.NodePref.RenameNodes[i]
+	for i := range setting.NodePref.RenameNodes {
+		rename := &setting.NodePref.RenameNodes[i]
 		if rename.Import != "" {
 			importPath := resolveImportPath(rename.Import)
-			if err := loadRenameImport(importPath); err != nil {
+			if err := setting.loadRenameImport(importPath); err != nil {
 				return fmt.Errorf("failed to load rename import %s: %w", rename.Import, err)
 			}
 			indicesToRemove = append(indicesToRemove, i)
@@ -784,19 +812,19 @@ func processImports() error {
 	}
 	for i := len(indicesToRemove) - 1; i >= 0; i-- {
 		idx := indicesToRemove[i]
-		Global.NodePref.RenameNodes = append(
-			Global.NodePref.RenameNodes[:idx],
-			Global.NodePref.RenameNodes[idx+1:]...,
+		setting.NodePref.RenameNodes = append(
+			setting.NodePref.RenameNodes[:idx],
+			setting.NodePref.RenameNodes[idx+1:]...,
 		)
 	}
 
 	// Process emoji imports
 	indicesToRemove = nil
-	for i := range Global.Emojis.Rules {
-		emoji := &Global.Emojis.Rules[i]
+	for i := range setting.Emojis.Rules {
+		emoji := &setting.Emojis.Rules[i]
 		if emoji.Import != "" {
 			importPath := resolveImportPath(emoji.Import)
-			if err := loadEmojiImport(importPath); err != nil {
+			if err := setting.loadEmojiImport(importPath); err != nil {
 				return fmt.Errorf("failed to load emoji import %s: %w", emoji.Import, err)
 			}
 			indicesToRemove = append(indicesToRemove, i)
@@ -804,9 +832,9 @@ func processImports() error {
 	}
 	for i := len(indicesToRemove) - 1; i >= 0; i-- {
 		idx := indicesToRemove[i]
-		Global.Emojis.Rules = append(
-			Global.Emojis.Rules[:idx],
-			Global.Emojis.Rules[idx+1:]...,
+		setting.Emojis.Rules = append(
+			setting.Emojis.Rules[:idx],
+			setting.Emojis.Rules[idx+1:]...,
 		)
 	}
 
@@ -829,7 +857,7 @@ func resolveImportPath(importPath string) string {
 }
 
 // loadProxyGroupImport loads proxy groups from an import file
-func loadProxyGroupImport(path string) error {
+func (setting *Settings) loadProxyGroupImport(path string) error {
 	ext := filepath.Ext(path)
 
 	var imported struct {
@@ -851,21 +879,21 @@ func loadProxyGroupImport(path string) error {
 		}
 	case ".ini":
 		// For INI files, we need to parse differently
-		return loadProxyGroupImportINI(path)
+		return setting.loadProxyGroupImportINI(path)
 	case ".txt":
 		// Plain text format with backtick separators
-		return loadProxyGroupImportTXT(path)
+		return setting.loadProxyGroupImportTXT(path)
 	default:
 		return fmt.Errorf("unsupported import file format: %s", ext)
 	}
 
 	// Append imported groups to existing groups
-	Global.ProxyGroups.CustomProxyGroups = append(Global.ProxyGroups.CustomProxyGroups, imported.CustomGroups...)
+	setting.ProxyGroups.CustomProxyGroups = append(setting.ProxyGroups.CustomProxyGroups, imported.CustomGroups...)
 	return nil
 }
 
 // loadProxyGroupImportINI loads proxy groups from an INI file
-func loadProxyGroupImportINI(path string) error {
+func (setting *Settings) loadProxyGroupImportINI(path string) error {
 	cfg, err := ini.LoadSources(ini.LoadOptions{
 		AllowShadows:               true,
 		AllowBooleanKeys:           true,
@@ -892,7 +920,7 @@ func loadProxyGroupImportINI(path string) error {
 					Type: parts[1],
 					Rule: parts[2:],
 				}
-				Global.ProxyGroups.CustomProxyGroups = append(Global.ProxyGroups.CustomProxyGroups, group)
+				setting.ProxyGroups.CustomProxyGroups = append(setting.ProxyGroups.CustomProxyGroups, group)
 			}
 		}
 	}
@@ -901,7 +929,7 @@ func loadProxyGroupImportINI(path string) error {
 }
 
 // loadProxyGroupImportTXT loads proxy groups from a plain text file
-func loadProxyGroupImportTXT(path string) error {
+func (setting *Settings) loadProxyGroupImportTXT(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read TXT import: %w", err)
@@ -948,14 +976,14 @@ func loadProxyGroupImportTXT(path string) error {
 			}
 		}
 
-		Global.ProxyGroups.CustomProxyGroups = append(Global.ProxyGroups.CustomProxyGroups, group)
+		setting.ProxyGroups.CustomProxyGroups = append(setting.ProxyGroups.CustomProxyGroups, group)
 	}
 
 	return nil
 }
 
 // loadRulesetImport loads rulesets from an import file
-func loadRulesetImport(path string) error {
+func (setting *Settings) loadRulesetImport(path string) error {
 	ext := filepath.Ext(path)
 
 	var imported struct {
@@ -976,9 +1004,9 @@ func loadRulesetImport(path string) error {
 			return fmt.Errorf("failed to parse YAML import: %w", err)
 		}
 	case ".ini":
-		return loadRulesetImportINI(path)
+		return setting.loadRulesetImportINI(path)
 	case ".txt":
-		return loadRulesetImportTXT(path)
+		return setting.loadRulesetImportTXT(path)
 	default:
 		return fmt.Errorf("unsupported import file format: %s", ext)
 	}
@@ -993,12 +1021,12 @@ func loadRulesetImport(path string) error {
 	}
 
 	// Append imported rulesets to existing rulesets
-	Global.Rulesets.Rulesets = append(Global.Rulesets.Rulesets, imported.Rulesets...)
+	setting.Rulesets.Rulesets = append(setting.Rulesets.Rulesets, imported.Rulesets...)
 	return nil
 }
 
 // loadRulesetImportINI loads rulesets from an INI file
-func loadRulesetImportINI(path string) error {
+func (setting *Settings) loadRulesetImportINI(path string) error {
 	cfg, err := ini.LoadSources(ini.LoadOptions{
 		AllowShadows:               true,
 		AllowBooleanKeys:           true,
@@ -1026,7 +1054,7 @@ func loadRulesetImportINI(path string) error {
 				if len(parts) >= 3 {
 					ruleset.Type = parts[2]
 				}
-				Global.Rulesets.Rulesets = append(Global.Rulesets.Rulesets, ruleset)
+				setting.Rulesets.Rulesets = append(setting.Rulesets.Rulesets, ruleset)
 			}
 		}
 	}
@@ -1035,7 +1063,7 @@ func loadRulesetImportINI(path string) error {
 }
 
 // loadRulesetImportTXT loads rulesets from a plain text file
-func loadRulesetImportTXT(path string) error {
+func (setting *Settings) loadRulesetImportTXT(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read TXT import: %w", err)
@@ -1075,14 +1103,14 @@ func loadRulesetImportTXT(path string) error {
 			}
 		}
 
-		Global.Rulesets.Rulesets = append(Global.Rulesets.Rulesets, ruleset)
+		setting.Rulesets.Rulesets = append(setting.Rulesets.Rulesets, ruleset)
 	}
 
 	return nil
 }
 
 // loadRenameImport loads rename rules from an import file
-func loadRenameImport(path string) error {
+func (setting *Settings) loadRenameImport(path string) error {
 	ext := filepath.Ext(path)
 
 	var imported struct {
@@ -1105,17 +1133,17 @@ func loadRenameImport(path string) error {
 	case ".ini":
 		return fmt.Errorf("INI import for rename_node not yet implemented")
 	case ".txt":
-		return loadRenameImportTXT(path)
+		return setting.loadRenameImportTXT(path)
 	default:
 		return fmt.Errorf("unsupported import file format: %s", ext)
 	}
 
-	Global.NodePref.RenameNodes = append(Global.NodePref.RenameNodes, imported.RenameNodes...)
+	setting.NodePref.RenameNodes = append(setting.NodePref.RenameNodes, imported.RenameNodes...)
 	return nil
 }
 
 // loadRenameImportTXT loads rename rules from a plain text file
-func loadRenameImportTXT(path string) error {
+func (setting *Settings) loadRenameImportTXT(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read TXT import: %w", err)
@@ -1136,7 +1164,7 @@ func loadRenameImportTXT(path string) error {
 				Match:   parts[0],
 				Replace: parts[1],
 			}
-			Global.NodePref.RenameNodes = append(Global.NodePref.RenameNodes, rename)
+			setting.NodePref.RenameNodes = append(setting.NodePref.RenameNodes, rename)
 		}
 	}
 
@@ -1144,7 +1172,7 @@ func loadRenameImportTXT(path string) error {
 }
 
 // loadEmojiImport loads emoji rules from an import file
-func loadEmojiImport(path string) error {
+func (setting *Settings) loadEmojiImport(path string) error {
 	ext := filepath.Ext(path)
 
 	var imported struct {
@@ -1167,17 +1195,17 @@ func loadEmojiImport(path string) error {
 	case ".ini":
 		return fmt.Errorf("INI import for emoji not yet implemented")
 	case ".txt":
-		return loadEmojiImportTXT(path)
+		return setting.loadEmojiImportTXT(path)
 	default:
 		return fmt.Errorf("unsupported import file format: %s", ext)
 	}
 
-	Global.Emojis.Rules = append(Global.Emojis.Rules, imported.Rules...)
+	setting.Emojis.Rules = append(setting.Emojis.Rules, imported.Rules...)
 	return nil
 }
 
 // loadEmojiImportTXT loads emoji rules from a plain text file
-func loadEmojiImportTXT(path string) error {
+func (setting *Settings) loadEmojiImportTXT(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read TXT import: %w", err)
@@ -1198,7 +1226,7 @@ func loadEmojiImportTXT(path string) error {
 				Match: parts[0],
 				Emoji: parts[1],
 			}
-			Global.Emojis.Rules = append(Global.Emojis.Rules, emoji)
+			setting.Emojis.Rules = append(setting.Emojis.Rules, emoji)
 		}
 	}
 

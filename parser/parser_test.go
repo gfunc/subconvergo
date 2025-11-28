@@ -1,13 +1,17 @@
 package parser
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
-	P "github.com/gfunc/subconvergo/proxy"
+	"github.com/gfunc/subconvergo/parser/sub"
+	P "github.com/gfunc/subconvergo/proxy/impl"
+	"github.com/stretchr/testify/assert"
 )
 
-// TestProxyInterfaceGenerateLink tests that GenerateLink works correctly for all proxy types
+// TestProxyInterfaceGenerateLink tests that ToSingleConfig works correctly for all proxy types
 func TestProxyInterfaceGenerateLink(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -49,9 +53,9 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Parse the link using the OOP interface
-			proxyInterface, err := ParseProxyLine(tt.inputLink)
+			proxyInterface, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLineWithInterface() error = %v", err)
+				t.Fatalf("ParseProxy() error = %v", err)
 			}
 
 			// Verify the type
@@ -60,15 +64,16 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 			}
 
 			// Generate a new link
-			generatedLink, _ := proxyInterface.GenerateLink()
+			generatedLink, _ := proxyInterface.ToSingleConfig(nil)
+
 			if generatedLink == "" {
-				t.Errorf("GenerateLink() returned empty string")
+				t.Errorf("ToSingleConfig() returned empty string")
 			}
 
 			// Parse the generated link back and verify it matches
-			proxyInterface2, err := ParseProxyLine(generatedLink)
+			proxyInterface2, err := ParseProxy(generatedLink)
 			if err != nil {
-				t.Fatalf("ParseProxyLineWithInterface() of generated link error = %v", err)
+				t.Fatalf("ParseProxy() of generated link error = %v", err)
 			}
 
 			// Verify key fields match
@@ -89,9 +94,9 @@ func TestProxyInterfaceGenerateLink(t *testing.T) {
 func TestProxyInterfaceSetters(t *testing.T) {
 	inputLink := "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:8388#Test"
 
-	proxy, err := ParseProxyLine(inputLink)
+	proxy, err := ParseProxy(inputLink)
 	if err != nil {
-		t.Fatalf("ParseProxyLineWithInterface() error = %v", err)
+		t.Fatalf("ParseProxy() error = %v", err)
 	}
 
 	// Test SetRemark
@@ -109,7 +114,6 @@ func TestProxyInterfaceSetters(t *testing.T) {
 	}
 }
 
-// TestProxyInterfaceToLegacyProxy tests conversion to legacy Proxy struct
 // TestShadowsocksProxyGenerateLink tests Shadowsocks link generation
 func TestShadowsocksProxyGenerateLink(t *testing.T) {
 	tests := []struct {
@@ -128,18 +132,19 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseShadowsocks(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseShadowsocks error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.ToSingleConfig(nil)
+
 			if !strings.HasPrefix(link, "ss://") {
-				t.Errorf("GenerateLink() should start with ss://, got %v", link)
+				t.Errorf("ToSingleConfig() should start with ss://, got %v", link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseShadowsocks(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -151,31 +156,49 @@ func TestShadowsocksProxyGenerateLink(t *testing.T) {
 func TestVMessProxyGenerateLink(t *testing.T) {
 	inputLink := "vmess://eyJ2IjoiMiIsInBzIjoidGVzdCIsImFkZCI6ImV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoiMTIzNDU2NzgtMTIzNC0xMjM0LTEyMzQtMTIzNDU2Nzg5MDEyIiwiYWlkIjoiMCIsIm5ldCI6IndzIiwicGF0aCI6Ii9wYXRoIiwiaG9zdCI6ImV4YW1wbGUuY29tIiwidGxzIjoidGxzIn0="
 
-	proxy, err := parseVMess(inputLink)
+	proxy, err := ParseProxy(inputLink)
 	if err != nil {
-		t.Fatalf("parseVMess error = %v", err)
+		t.Fatalf("ParseProxy error = %v", err)
 	}
 
-	link, _ := proxy.GenerateLink()
+	link, _ := proxy.ToSingleConfig(nil)
+
 	if !strings.HasPrefix(link, "vmess://") {
-		t.Errorf("GenerateLink() should start with vmess://, got %v", link)
+		t.Errorf("ToSingleConfig() should start with vmess://, got %v", link)
 	}
 
 	// Verify it can be parsed back
-	proxy2, err := parseVMess(link)
+	proxy2, err := ParseProxy(link)
 	if err != nil {
 		t.Errorf("Generated link cannot be parsed back: %v", err)
 	}
 
-	proxyVMess, err := proxy.(*P.MihomoProxy).GetVmessProxy()
-	if err != nil {
-		t.Fatalf("proxy is not of type *VMessProxy")
+	// Type assertion to check fields
+	proxyVMess, ok := proxy.(*P.VMessProxy)
+	if !ok {
+		// Try MihomoProxy if it wraps it
+		if mp, ok := proxy.(*P.MihomoProxy); ok {
+			proxyVMess, ok = mp.ProxyInterface.(*P.VMessProxy)
+			if !ok {
+				t.Fatalf("Failed to get VMess proxy from MihomoProxy: %v", err)
+			}
+		} else {
+			t.Fatalf("proxy is not of type *VMessProxy")
+		}
 	}
 
-	proxy2VMess, err := proxy2.(*P.MihomoProxy).GetVmessProxy()
-	if err != nil {
-		t.Fatalf("proxy2 is not of type *VMessProxy")
+	proxy2VMess, ok := proxy2.(*P.VMessProxy)
+	if !ok {
+		if mp, ok := proxy2.(*P.MihomoProxy); ok {
+			proxy2VMess, ok = mp.ProxyInterface.(*P.VMessProxy)
+			if !ok {
+				t.Fatalf("Failed to get VMess proxy from MihomoProxy: %v", err)
+			}
+		} else {
+			t.Fatalf("proxy2 is not of type *VMessProxy")
+		}
 	}
+
 	// Verify critical fields match
 	if proxy2VMess.UUID != proxyVMess.UUID {
 		t.Errorf("Re-parsed UUID = %v, want %v", proxy2VMess.UUID, proxyVMess.UUID)
@@ -203,18 +226,19 @@ func TestTrojanProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseTrojan(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseTrojan error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.ToSingleConfig(nil)
+
 			if !strings.HasPrefix(link, "trojan://") {
-				t.Errorf("GenerateLink() should start with trojan://, got %v", link)
+				t.Errorf("ToSingleConfig() should start with trojan://, got %v", link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseTrojan(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -240,18 +264,19 @@ func TestVLESSProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseVLESS(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseVLESS error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.ToSingleConfig(nil)
+
 			if !strings.HasPrefix(link, "vless://") {
-				t.Errorf("GenerateLink() should start with vless://, got %v", link)
+				t.Errorf("ToSingleConfig() should start with vless://, got %v", link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseVLESS(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -280,18 +305,19 @@ func TestHysteriaProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseHysteria(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseHysteria error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.ToSingleConfig(nil)
+
 			if !strings.HasPrefix(link, tt.protocol+"://") {
-				t.Errorf("GenerateLink() should start with %s://, got %v", tt.protocol, link)
+				t.Errorf("ToSingleConfig() should start with %s://, got %v", tt.protocol, link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseHysteria(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
@@ -317,21 +343,159 @@ func TestTUICProxyGenerateLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			proxy, err := parseTUIC(tt.inputLink)
+			proxy, err := ParseProxy(tt.inputLink)
 			if err != nil {
-				t.Fatalf("parseTUIC error = %v", err)
+				t.Fatalf("ParseProxy error = %v", err)
 			}
 
-			link, _ := proxy.GenerateLink()
+			link, _ := proxy.ToSingleConfig(nil)
+
 			if !strings.HasPrefix(link, "tuic://") {
-				t.Errorf("GenerateLink() should start with tuic://, got %v", link)
+				t.Errorf("ToSingleConfig() should start with tuic://, got %v", link)
 			}
 
 			// Verify it can be parsed back
-			_, err = parseTUIC(link)
+			_, err = ParseProxy(link)
 			if err != nil {
 				t.Errorf("Generated link cannot be parsed back: %v", err)
 			}
 		})
 	}
+}
+
+func TestProcessRemark(t *testing.T) {
+	remarks := map[string]int{}
+	// First call returns original
+	if ProcessRemark("Test", remarks) != "Test" {
+		t.Error("ProcessRemark failed")
+	}
+	// Second call appends _2 (count+1)
+	if ProcessRemark("Test", remarks) != "Test_2" {
+		t.Error("ProcessRemark duplicate failed")
+	}
+}
+
+func TestParseProxy(t *testing.T) {
+	lines := []string{
+		"ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test",
+		"trojan://password@example.com:443#Test",
+	}
+	for _, line := range lines {
+		proxy, err := ParseProxy(line)
+		if err != nil || proxy == nil {
+			t.Errorf("ParseProxy failed for %s", line[:10])
+		}
+	}
+}
+
+func TestParseContentSkipsComments(t *testing.T) {
+	content := `# comment line
+ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test`
+	result, err := sub.ParseSubscription(content)
+	if err != nil {
+		t.Fatalf("parseContent returned error: %v", err)
+	}
+	if len(result.Proxies) != 1 {
+		t.Fatalf("expected 1 proxy, got %d", len(result.Proxies))
+	}
+}
+
+func TestSubParser_Parse_RawLine(t *testing.T) {
+	sp := &SubParser{
+		Index: 1,
+		URL:   "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:443#Test",
+	}
+	sc, err := sp.Parse()
+	assert.NoError(t, err)
+	assert.Len(t, sc.Proxies, 1)
+	assert.Equal(t, "Test", sc.Proxies[0].GetRemark())
+}
+
+func TestSubParser_Parse_TagAndTelegram(t *testing.T) {
+	// Test tag: prefix
+	sp := &SubParser{
+		Index: 0,
+		URL:   "tag:MyGroup,ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:8388#TestSS",
+	}
+	sc, err := sp.Parse()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(sc.Proxies))
+	assert.Equal(t, "TestSS", sc.Proxies[0].GetRemark())
+	assert.Equal(t, "MyGroup", sc.Proxies[0].GetGroup())
+
+	// Test tg://socks
+	sp = &SubParser{
+		Index: 0,
+		URL:   "tg://socks?server=1.2.3.4&port=1080&user=u&pass=p&remarks=TgSocks",
+	}
+	sc, err = sp.Parse()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(sc.Proxies))
+
+	var socks *P.Socks5Proxy
+	if mp, ok := sc.Proxies[0].(*P.MihomoProxy); ok {
+		socks = mp.ProxyInterface.(*P.Socks5Proxy)
+	} else {
+		socks = sc.Proxies[0].(*P.Socks5Proxy)
+	}
+
+	assert.Equal(t, "socks5", socks.Type)
+	assert.Equal(t, "1.2.3.4", socks.Server)
+	assert.Equal(t, 1080, socks.Port)
+	assert.Equal(t, "u", socks.Username)
+	assert.Equal(t, "p", socks.Password)
+	assert.Equal(t, "TgSocks", socks.Remark)
+
+	// Test tg://http
+	sp = &SubParser{
+		Index: 0,
+		URL:   "tg://http?server=1.2.3.4&port=8080&user=u&pass=p&remarks=TgHttp",
+	}
+	sc, err = sp.Parse()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(sc.Proxies))
+
+	var httpProxy *P.HttpProxy
+	if mp, ok := sc.Proxies[0].(*P.MihomoProxy); ok {
+		httpProxy = mp.ProxyInterface.(*P.HttpProxy)
+	} else {
+		httpProxy = sc.Proxies[0].(*P.HttpProxy)
+	}
+
+	assert.Equal(t, "http", httpProxy.Type)
+	assert.Equal(t, "1.2.3.4", httpProxy.Server)
+	assert.Equal(t, 8080, httpProxy.Port)
+	assert.Equal(t, "u", httpProxy.Username)
+	assert.Equal(t, "p", httpProxy.Password)
+	assert.Equal(t, "TgHttp", httpProxy.Remark)
+
+	// Test nullnode
+	sp = &SubParser{
+		Index: 0,
+		URL:   "nullnode",
+	}
+	sc, err = sp.Parse()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(sc.Proxies))
+}
+
+func TestSubParser_UserAgent(t *testing.T) {
+	expectedUA := "MyCustomUserAgent/1.0"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua := r.Header.Get("User-Agent")
+		if ua != expectedUA {
+			t.Errorf("Expected User-Agent %s, got %s", expectedUA, ua)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@example.com:8388#Test%20SS"))
+	}))
+	defer server.Close()
+
+	sp := &SubParser{
+		URL:       server.URL,
+		UserAgent: expectedUA,
+	}
+
+	_, err := sp.ParseSubscription()
+	assert.NoError(t, err)
 }

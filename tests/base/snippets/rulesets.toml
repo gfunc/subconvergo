@@ -1,0 +1,19 @@
+[[rulesets]]
+group = "🔰 节点选择"
+ruleset = "rules/global.list"
+
+[[rulesets]]
+group = "🌏 国内媒体"
+ruleset = "rules/media.list"
+
+[[rulesets]]
+group = "🎯 全球直连"
+ruleset = "rules/direct.list"
+
+[[rulesets]]
+group = "🎯 全球直连"
+ruleset = "[]GEOIP,CN"
+
+[[rulesets]]
+group = "🛑 全球拦截"
+ruleset = "rules/block.list"
