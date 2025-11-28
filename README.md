@@ -114,7 +114,6 @@ This Go implementation is a **drop-in replacement** for most use cases.
 - All proxy protocols (SS, SSR, VMess, Trojan, VLESS, Hysteria, etc.)
 
 ### ⚠️ **Not Implemented**
-- `/surge2clash` shortcut endpoint
 - `list` parameter (Node List/Proxy Provider output)
 - `filename` parameter
 - QuickJS filter/sort script execution
