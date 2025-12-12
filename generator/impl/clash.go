@@ -66,10 +66,167 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 	base[utils.GetFieldTag("yaml", "Proxy", clash, "proxies")] = clashProxies
 
 	// Generate proxy groups
+	var proxyGroups []map[string]interface{}
 	if len(groups) > 0 {
-		proxyGroups := generateClashProxyGroups(validProxies, groups)
+		proxyGroups = generateClashProxyGroups(validProxies, groups)
+	}
+
+	// Process relay groups migration to dialer-proxy using proxy-providers
+	providers := make(map[string]interface{})
+
+	// Build maps for quick lookup
+	proxyConfigMap := make(map[string]map[string]interface{})
+	for _, cfg := range clashProxies {
+		if name, ok := cfg["name"].(string); ok {
+			proxyConfigMap[name] = cfg
+		}
+	}
+
+	groupConfigMap := make(map[string]config.ProxyGroupConfig)
+	for _, g := range groups {
+		groupConfigMap[g.Name] = g
+	}
+
+	// Helper to resolve a hop name to its proxies and type
+	resolveHop := func(name string) ([]map[string]interface{}, string) {
+		// Check if it's a group
+		if g, ok := groupConfigMap[name]; ok {
+			pNames := utils.FilterProxiesByRules(validProxies, g.Rule)
+			var configs []map[string]interface{}
+			for _, pn := range pNames {
+				if c, ok := proxyConfigMap[pn]; ok {
+					configs = append(configs, c)
+				}
+			}
+			return configs, g.Type
+		}
+		// Check if it's a proxy
+		if c, ok := proxyConfigMap[name]; ok {
+			return []map[string]interface{}{c}, "select"
+		}
+		return nil, ""
+	}
+
+	for _, group := range groups {
+		if strings.ToLower(group.Type) == "relay" {
+			// Identify hops from rules
+			// We use FilterProxiesByRules to expand regexes and []Group references
+			hops := utils.FilterProxiesByRules(validProxies, group.Rule)
+			if len(hops) < 2 {
+				// Not enough hops, convert to select
+				for idx, g := range proxyGroups {
+					if g["name"] == group.Name {
+						proxyGroups[idx]["type"] = "select"
+						break
+					}
+				}
+				continue
+			}
+
+			previousDialer := hops[0]
+
+			// Iterate through subsequent hops
+			for j := 1; j < len(hops); j++ {
+				currentHopName := hops[j]
+				hopConfigs, hopType := resolveHop(currentHopName)
+
+				if len(hopConfigs) == 0 {
+					log.Printf("[ClashGenerator] Relay hop %s not found", currentHopName)
+					continue
+				}
+
+				// Create Provider
+				providerName := fmt.Sprintf("%s-%s-provider", group.Name, currentHopName)
+
+				// Rename proxies in payload to avoid conflicts and clarify context
+				var payload []map[string]interface{}
+				for _, cfg := range hopConfigs {
+					newCfg := make(map[string]interface{})
+					for k, v := range cfg {
+						newCfg[k] = v
+					}
+					originalName := newCfg["name"].(string)
+					newCfg["name"] = fmt.Sprintf("%s (via %s)", originalName, group.Name)
+					payload = append(payload, newCfg)
+				}
+
+				providers[providerName] = map[string]interface{}{
+					"type":    "inline",
+					"payload": payload,
+					"override": map[string]interface{}{
+						"dialer-proxy": previousDialer,
+					},
+				}
+
+				// Create Intermediate Group (or update final group)
+				// If this is the last hop, we update the original relay group
+				if j == len(hops)-1 {
+					for idx, g := range proxyGroups {
+						if g["name"] == group.Name {
+							proxyGroups[idx]["type"] = "select" // Or inherit hopType? Usually select is safe for the entry point.
+							// If the last hop was a url-test group, maybe we want url-test?
+							// But the relay group itself is the entry.
+							// Let's stick to select for the relay group itself, but it uses the provider.
+							// Wait, if we use provider in a group, the group type matters.
+							// If we want to load-balance or url-test the chained proxies, we should set type accordingly.
+							if hopType != "" && hopType != "relay" {
+								proxyGroups[idx]["type"] = hopType
+							} else {
+								proxyGroups[idx]["type"] = "select"
+							}
+
+							// Clear proxies and set use
+							delete(proxyGroups[idx], "proxies")
+							proxyGroups[idx]["use"] = []string{providerName}
+
+							// Copy other properties from the hop group if it was a group?
+							// E.g. url, interval.
+							if gConf, ok := groupConfigMap[currentHopName]; ok {
+								if gConf.URL != "" {
+									proxyGroups[idx]["url"] = gConf.URL
+								}
+								if gConf.Interval > 0 {
+									proxyGroups[idx]["interval"] = gConf.Interval
+								}
+							}
+							break
+						}
+					}
+				} else {
+					// Intermediate hop
+					intermediateGroupName := fmt.Sprintf("%s-%s", group.Name, currentHopName)
+					intermediateGroup := map[string]interface{}{
+						"name": intermediateGroupName,
+						"type": "select", // Default to select for intermediate?
+						"use":  []string{providerName},
+					}
+					if hopType != "" && hopType != "relay" {
+						intermediateGroup["type"] = hopType
+					}
+					// Copy properties
+					if gConf, ok := groupConfigMap[currentHopName]; ok {
+						if gConf.URL != "" {
+							intermediateGroup["url"] = gConf.URL
+						}
+						if gConf.Interval > 0 {
+							intermediateGroup["interval"] = gConf.Interval
+						}
+					}
+
+					proxyGroups = append(proxyGroups, intermediateGroup)
+					previousDialer = intermediateGroupName
+				}
+			}
+		}
+	}
+
+	if len(proxyGroups) > 0 {
 		clash.ProxyGroup = proxyGroups
 		base[utils.GetFieldTag("yaml", "ProxyGroup", clash, "proxy-groups")] = proxyGroups
+	}
+
+	if len(providers) > 0 {
+		base["proxy-providers"] = providers
 	}
 
 	// Generate rules if enabled

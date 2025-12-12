@@ -93,6 +93,23 @@ common:
   # Proxy options
   append_proxy_type: false                # Add [ss], [vmess] to names
 
+# Advanced Settings
+advanced:
+  log_level: "info"                       # Log level (debug, info, warn, error)
+  print_debug_info: false                 # Print debug info to stdout
+  max_pending_connections: 10240          # Max pending connections
+  max_concurrent_threads: 2               # Max concurrent threads
+  max_allowed_rulesets: 64                # Max allowed rulesets
+  max_allowed_rules: 0                    # Max allowed rules (0 = unlimited)
+  max_allowed_download_size: 0            # Max allowed download size (0 = unlimited)
+  
+  # Caching
+  enable_cache: false                     # Enable file-based caching
+  cache_subscription: 60                  # Subscription cache TTL (seconds)
+  cache_config: 300                       # Config cache TTL (seconds)
+  cache_ruleset: 21600                    # Ruleset cache TTL (seconds)
+  serve_cache_on_fetch_fail: true         # Serve stale cache on fetch failure
+
 # Node Preferences
 node_pref:
   # Clash options

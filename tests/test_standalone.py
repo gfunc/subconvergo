@@ -52,6 +52,40 @@ def setup_rename_node(pref):
 def setup_userinfo(pref):
     pref["node_pref"]["append_sub_userinfo"] = True
 
+def setup_relay_migration(pref):
+    pref["custom_proxy_group"] = [
+        {
+            "name": "SelectGroup",
+            "type": "select",
+            "rule": ["HK-Server-01"]
+        },
+        {
+            "name": "RelayGroup",
+            "type": "relay",
+            "rule": ["[]SelectGroup", "^US.*", "JP-Server-01"]
+        }
+    ]
+
+def validate_relay_migration(resp):
+    data = yaml.safe_load(resp.text)
+    if "proxy-providers" not in data:
+        return {"_failures": ["Missing proxy-providers"]}
+    
+    providers = data["proxy-providers"]
+    if "RelayGroup-US-Server-01-provider" not in providers:
+        return {"_failures": ["Missing RelayGroup-US-Server-01-provider"]}
+    
+    provider = providers["RelayGroup-US-Server-01-provider"]
+    # Expect dialer-proxy to be SelectGroup because of []SelectGroup rule
+    if provider.get("override", {}).get("dialer-proxy") != "SelectGroup":
+        return {"_failures": [f"Incorrect dialer-proxy: {provider.get('override', {}).get('dialer-proxy')}"]}
+        
+    groups = data.get("proxy-groups", [])
+    if not any(g["name"] == "RelayGroup-US-Server-01" for g in groups):
+        return {"_failures": ["Missing intermediate group RelayGroup-US-Server-01"]}
+        
+    return {"providers": len(providers)}
+
 CASES = [
     infra.StandaloneTestCase(
         name="version",
@@ -236,5 +270,14 @@ CASES = [
         query=lambda: infra.api_get_subconvergo("/sub", params={"target": "clash", "url": f"{infra.MOCK_BASE}/ss-subscription.txt"}),
         validate=lambda resp: {"status": "ok"},
         pref_modifier=setup_userinfo
+    ),
+    infra.StandaloneTestCase(
+        name="relay_migration",
+        query=lambda: infra.api_get_subconvergo("/sub", params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt",
+        }),
+        validate=validate_relay_migration,
+        pref_modifier=setup_relay_migration
     ),
 ]

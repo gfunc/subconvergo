@@ -70,7 +70,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	configParam := params.Config
 	uaParam := params.UserAgent
 
-	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s ua=%s", target, urlParam, configParam, uaParam)
+	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s ua=%s client=%s headers=%v", target, urlParam, configParam, uaParam, c.ClientIP(), c.Request.Header)
 
 	// Handle auto target detection
 	var clashNewName *bool
@@ -654,11 +654,14 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 
 // HandleVersion processes /version endpoint
 func (h *SubHandler) HandleVersion(c *gin.Context) {
+	log.Printf("[handler.HandleVersion] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
 	c.String(http.StatusOK, "subconvergo v0.1.0 backend\n")
 }
 
 // HandleReadConf processes /readconf endpoint
 func (h *SubHandler) HandleReadConf(c *gin.Context) {
+	log.Printf("[handler.HandleReadConf] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
+
 	// Check token
 	if config.Global.Common.APIAccessToken != "" {
 		token := c.Query("token")
@@ -683,6 +686,8 @@ func (h *SubHandler) HandleReadConf(c *gin.Context) {
 func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 	urlParam := c.Query("url")
 	rulesetType := c.Query("type")
+
+	log.Printf("[handler.HandleGetRuleset] Request received: url=%s type=%s client=%s headers=%v", urlParam, rulesetType, c.ClientIP(), c.Request.Header)
 
 	if urlParam == "" || rulesetType == "" {
 		c.String(http.StatusBadRequest, "Invalid request!")
@@ -800,6 +805,8 @@ func (h *SubHandler) HandleRender(c *gin.Context) {
 
 	// Get template path from query
 	templatePath := c.Query("path")
+	log.Printf("[handler.HandleRender] Request received: path=%s client=%s headers=%v", templatePath, c.ClientIP(), c.Request.Header)
+
 	if templatePath == "" {
 		c.String(http.StatusBadRequest, "Missing template path\n")
 		return
@@ -832,6 +839,8 @@ func (h *SubHandler) HandleRender(c *gin.Context) {
 func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 	name := c.Query("name")
 	token := c.Query("token")
+
+	log.Printf("[handler.HandleGetProfile] Request received: name=%s client=%s headers=%v", name, c.ClientIP(), c.Request.Header)
 
 	// Validate required parameters
 	if token == "" || name == "" {
@@ -1094,6 +1103,7 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 
 // HandleSurge2Clash processes /surge2clash endpoint
 func (h *SubHandler) HandleSurge2Clash(c *gin.Context) {
+	log.Printf("[handler.HandleSurge2Clash] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
 	var params RequestParams
 	if err := c.ShouldBindQuery(&params); err != nil {
 		c.String(http.StatusBadRequest, "Invalid parameters: "+err.Error())
@@ -1106,6 +1116,7 @@ func (h *SubHandler) HandleSurge2Clash(c *gin.Context) {
 
 // HandleFlushCache processes /flushcache endpoint
 func (h *SubHandler) HandleFlushCache(c *gin.Context) {
+	log.Printf("[handler.HandleFlushCache] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
 	// Check token
 	if config.Global.Common.APIAccessToken != "" {
 		token := c.Query("token")
