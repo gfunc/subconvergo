@@ -348,9 +348,36 @@ func LoadConfig(specificFile string) (string, error) {
 			return "", parseError
 		}
 	}
+
+	// Apply environment overrides
+	setting.ApplyEnvOverrides()
+
 	Global = &setting
 	currentConfigPath = effectiveConfig
 	return effectiveConfig, parseError
+}
+
+// ApplyEnvOverrides applies environment variable overrides to the settings
+func (s *Settings) ApplyEnvOverrides() {
+	if apiMode := os.Getenv("API_MODE"); apiMode != "" {
+		s.Common.APIMode = apiMode == "true"
+		log.Println("API_MODE override from env")
+	}
+
+	if managedPrefix := os.Getenv("MANAGED_PREFIX"); managedPrefix != "" {
+		s.ManagedConfig.ManagedConfigPrefix = managedPrefix
+		log.Println("MANAGED_PREFIX override from env")
+	}
+
+	if token := os.Getenv("API_TOKEN"); token != "" {
+		s.Common.APIAccessToken = token
+		log.Println("API_TOKEN override from env")
+	}
+
+	if port := os.Getenv("PORT"); port != "" {
+		fmt.Sscanf(port, "%d", &s.Server.Port)
+		log.Println("PORT override from env")
+	}
 }
 
 // ReloadConfig reloads the configuration from the last loaded file

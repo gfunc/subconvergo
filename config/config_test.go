@@ -744,3 +744,43 @@ func TestReloadConfig(t *testing.T) {
 		t.Errorf("Expected APIMode=false after reload, got true")
 	}
 }
+
+func TestReloadConfig_PersistsEnvOverrides(t *testing.T) {
+	// Setup temp dir
+	tmpDir := t.TempDir()
+	wd, _ := os.Getwd()
+	defer os.Chdir(wd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	// Set Env Var
+	os.Setenv("API_MODE", "true")
+	defer os.Unsetenv("API_MODE")
+
+	// Create config with api_mode=false
+	confName := "pref.toml"
+	if err := os.WriteFile(confName, []byte("[common]\napi_mode=false"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load
+	if _, err := LoadConfig(""); err != nil {
+		t.Fatalf("Initial load failed: %v", err)
+	}
+
+	// Verify Env Override applied
+	if !Global.Common.APIMode {
+		t.Errorf("Expected APIMode=true (from env), got false")
+	}
+
+	// Reload
+	if _, err := ReloadConfig(); err != nil {
+		t.Fatalf("Reload failed: %v", err)
+	}
+
+	// Verify Env Override STILL applied
+	if !Global.Common.APIMode {
+		t.Errorf("Expected APIMode=true (from env) after reload, got false")
+	}
+}

@@ -61,9 +61,6 @@ func main() {
 	// Initialize cache
 	cache.Init(config.GetBasePath())
 
-	// Check for environment variable overrides
-	checkEnvOverrides()
-
 	// Generator mode
 	if *genMode {
 		log.Println("Generator mode not yet implemented")
@@ -72,28 +69,6 @@ func main() {
 
 	// Start HTTP server
 	startServer()
-}
-
-func checkEnvOverrides() {
-	if apiMode := os.Getenv("API_MODE"); apiMode != "" {
-		config.Global.Common.APIMode = apiMode == "true"
-		log.Println("API_MODE override from env")
-	}
-
-	if managedPrefix := os.Getenv("MANAGED_PREFIX"); managedPrefix != "" {
-		config.Global.ManagedConfig.ManagedConfigPrefix = managedPrefix
-		log.Println("MANAGED_PREFIX override from env")
-	}
-
-	if token := os.Getenv("API_TOKEN"); token != "" {
-		config.Global.Common.APIAccessToken = token
-		log.Println("API_TOKEN override from env")
-	}
-
-	if port := os.Getenv("PORT"); port != "" {
-		fmt.Sscanf(port, "%d", &config.Global.Server.Port)
-		log.Println("PORT override from env")
-	}
 }
 
 func startServer() {
