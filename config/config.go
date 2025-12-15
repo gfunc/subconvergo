@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -237,6 +238,7 @@ type ProxySetting struct {
 // Global settings instance
 var Global = &Settings{}
 var lock = &sync.Mutex{}
+var currentConfigPath string
 
 func init() {
 	Global.init()
@@ -281,9 +283,13 @@ func (s *Settings) init() {
 }
 
 // LoadConfig loads configuration from pref files
-func LoadConfig() (string, error) {
+func LoadConfig(specificFile string) (string, error) {
 	lock.Lock()
 	defer lock.Unlock()
+
+	wd, _ := os.Getwd()
+	log.Printf("Config loader: Current working directory: %s", wd)
+
 	// Check for config configFile existence in order: yml/yaml -> toml -> ini
 	configFileList := []string{
 		"pref.yml",
@@ -294,20 +300,38 @@ func LoadConfig() (string, error) {
 		"pref.example.toml",
 		"pref.example.ini",
 	}
+
+	// If a specific file is provided, try to load it first (or exclusively?)
+	// The original logic implies -f sets the directory, but usually -f implies the file itself.
+	// Let's prepend it to the list if it's just a filename (since we chdir'd).
+	// If it's an absolute path, we should probably handle it, but we already chdir'd to its dir.
+	// So filepath.Base(specificFile) should be available.
+
+	if specificFile != "" {
+		baseName := filepath.Base(specificFile)
+		log.Printf("Config loader: Specific file requested: %s (base: %s)", specificFile, baseName)
+		// Prepend to the list
+		configFileList = append([]string{baseName}, configFileList...)
+	}
+
 	var parseError error = fmt.Errorf("no configuration file found")
 	var effectiveConfig = ""
 	setting := Settings{}
 	setting.init()
 	for _, configFile := range configFileList {
 		if _, err := os.Stat(configFile); err == nil {
+			log.Printf("Config loader: Found candidate file: %s", configFile)
 			effectiveConfig = configFile
 			if strings.Contains(configFile, "example.") {
 				effectiveConfig = strings.Replace(configFile, "example.", "", 1)
+				log.Printf("Config loader: Copying example config %s to %s", configFile, effectiveConfig)
 				err := copyFile(configFile, effectiveConfig)
 				if err != nil {
 					return "", err
 				}
 			}
+
+			log.Printf("Config loader: Attempting to load %s", effectiveConfig)
 			if strings.HasSuffix(effectiveConfig, ".toml") {
 				parseError = setting.loadTOMLConfig(effectiveConfig)
 			} else if strings.HasSuffix(effectiveConfig, ".yaml") || strings.HasSuffix(effectiveConfig, ".yml") {
@@ -315,13 +339,23 @@ func LoadConfig() (string, error) {
 			} else if strings.HasSuffix(effectiveConfig, ".ini") {
 				parseError = setting.loadINIConfig(effectiveConfig)
 			}
+
 			if parseError == nil {
+				log.Printf("Config loader: Successfully loaded %s", effectiveConfig)
 				break
 			}
+			log.Printf("Config loader: Failed to load %s: %v", effectiveConfig, parseError)
+			return "", parseError
 		}
 	}
 	Global = &setting
+	currentConfigPath = effectiveConfig
 	return effectiveConfig, parseError
+}
+
+// ReloadConfig reloads the configuration from the last loaded file
+func ReloadConfig() (string, error) {
+	return LoadConfig(currentConfigPath)
 }
 
 func (setting *Settings) loadYAMLConfig(path string) error {

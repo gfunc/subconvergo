@@ -612,3 +612,135 @@ func TestINIProxyGroupParsing(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfig_Precedence(t *testing.T) {
+	// Setup temp dir
+	tmpDir := t.TempDir()
+	wd, _ := os.Getwd()
+	defer os.Chdir(wd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	// Create pref.toml (should be ignored if pref.yml exists)
+	if err := os.WriteFile("pref.toml", []byte("[common]\napi_mode=true"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create pref.yml (highest priority)
+	if err := os.WriteFile("pref.yml", []byte("common:\n  api_mode: false"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load
+	loaded, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if loaded != "pref.yml" {
+		t.Errorf("Expected pref.yml to be loaded, got %s", loaded)
+	}
+	if Global.Common.APIMode {
+		t.Errorf("Expected APIMode=false (from pref.yml), got true")
+	}
+}
+
+func TestLoadConfig_SpecificFile(t *testing.T) {
+	// Setup temp dir
+	tmpDir := t.TempDir()
+	wd, _ := os.Getwd()
+	defer os.Chdir(wd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	// Create a specific file
+	customName := "custom.toml"
+	if err := os.WriteFile(customName, []byte("[common]\napi_mode=true"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create default pref.yml (should be ignored)
+	if err := os.WriteFile("pref.yml", []byte("common:\n  api_mode: false"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load specific
+	loaded, err := LoadConfig(customName)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if loaded != customName {
+		t.Errorf("Expected %s to be loaded, got %s", customName, loaded)
+	}
+	if !Global.Common.APIMode {
+		t.Errorf("Expected APIMode=true (from custom.toml), got false")
+	}
+}
+
+func TestLoadConfig_BrokenFile(t *testing.T) {
+	// Setup temp dir
+	tmpDir := t.TempDir()
+	wd, _ := os.Getwd()
+	defer os.Chdir(wd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	// Create broken pref.toml
+	if err := os.WriteFile("pref.toml", []byte("broken content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create valid pref.ini (should NOT be reached)
+	if err := os.WriteFile("pref.ini", []byte("[common]\napi_mode=true"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load
+	_, err := LoadConfig("")
+	if err == nil {
+		t.Fatal("Expected error loading broken config, got nil")
+	}
+}
+
+func TestReloadConfig(t *testing.T) {
+	// Setup temp dir
+	tmpDir := t.TempDir()
+	wd, _ := os.Getwd()
+	defer os.Chdir(wd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	// Create initial config
+	confName := "pref.toml"
+	if err := os.WriteFile(confName, []byte("[common]\napi_mode=true"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load
+	if _, err := LoadConfig(""); err != nil {
+		t.Fatalf("Initial load failed: %v", err)
+	}
+
+	// Modify config
+	if err := os.WriteFile(confName, []byte("[common]\napi_mode=false"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reload
+	reloaded, err := ReloadConfig()
+	if err != nil {
+		t.Fatalf("Reload failed: %v", err)
+	}
+
+	if reloaded != confName {
+		t.Errorf("Expected reloaded config to be %s, got %s", confName, reloaded)
+	}
+	if Global.Common.APIMode {
+		t.Errorf("Expected APIMode=false after reload, got true")
+	}
+}

@@ -114,7 +114,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 
 	// Reload config on request if enabled
 	if config.Global.Common.ReloadConfOnRequest {
-		if _, err := config.LoadConfig(); err == nil {
+		if _, err := config.ReloadConfig(); err == nil {
 			// Config reloaded successfully
 		}
 	}
@@ -672,7 +672,7 @@ func (h *SubHandler) HandleReadConf(c *gin.Context) {
 	}
 
 	// Reload configuration
-	if config, err := config.LoadConfig(); err != nil {
+	if config, err := config.ReloadConfig(); err != nil {
 		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to reload config: %v\n", err))
 		return
 	} else {

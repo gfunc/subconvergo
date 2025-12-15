@@ -37,11 +37,13 @@ func main() {
 	}
 
 	log.Printf("subconvergo %s starting up...", version)
+	log.Printf("Command line flags: configFile=%s", *configFile)
 
 	// Change to config directory
 	if *configFile != "" {
 		// TODO: Store pref path
 		dir := filepath.Dir(*configFile)
+		log.Printf("Changing directory to: %s", dir)
 		if dir != "." && dir != "" {
 			if err := os.Chdir(dir); err != nil {
 				log.Fatalf("Failed to change directory: %v", err)
@@ -50,7 +52,7 @@ func main() {
 	}
 
 	// Load configuration
-	if configFile, err := config.LoadConfig(); err != nil {
+	if configFile, err := config.LoadConfig(*configFile); err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	} else {
 		log.Printf("Configuration loaded from: %s", configFile)
