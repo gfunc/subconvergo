@@ -74,6 +74,13 @@ func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 		case "quic":
 			host = params.Get("quicSecurity")
 			path = params.Get("key")
+		default:
+			path = params.Get("path")
+			host = params.Get("host")
+		}
+
+		if path == "" {
+			path = "/"
 		}
 	}
 

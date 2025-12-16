@@ -106,6 +106,14 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 			h2Opts["host"] = []string{p.Host}
 		}
 		options["h2-opts"] = h2Opts
+
+	default:
+		if p.Path != "" {
+			options["path"] = p.Path
+		}
+		if p.Host != "" {
+			options["host"] = p.Host
+		}
 	}
 
 	return options, nil
