@@ -12,16 +12,18 @@ import (
 
 // VMessProxy represents a VMess proxy
 type VMessProxy struct {
-	core.BaseProxy `yaml:",inline"`
-	UUID           string `yaml:"uuid" json:"uuid"`
-	AlterID        int    `yaml:"alter_id" json:"alter_id"`
-	Cipher         string `yaml:"cipher" json:"cipher"`
-	Network        string `yaml:"network" json:"network"`
-	FakeType       string `yaml:"fake_type" json:"fake_type"` // Obfuscation type
-	Path           string `yaml:"path" json:"path"`
-	Host           string `yaml:"host" json:"host"`
-	TLS            bool   `yaml:"tls" json:"tls"`
-	SNI            string `yaml:"sni" json:"sni"`
+	core.BaseProxy      `yaml:",inline"`
+	UUID                string `yaml:"uuid" json:"uuid"`
+	AlterID             int    `yaml:"alter_id" json:"alter_id"`
+	Cipher              string `yaml:"cipher" json:"cipher"`
+	Network             string `yaml:"network" json:"network"`
+	FakeType            string `yaml:"fake_type" json:"fake_type"` // Obfuscation type
+	Path                string `yaml:"path" json:"path"`
+	Host                string `yaml:"host" json:"host"`
+	TLS                 bool   `yaml:"tls" json:"tls"`
+	SNI                 string `yaml:"sni" json:"sni"`
+	HttpUpgrade         bool   `yaml:"http_upgrade" json:"http_upgrade"`
+	HttpUpgradeFastOpen bool   `yaml:"http_upgrade_fast_open" json:"http_upgrade_fast_open"`
 }
 
 func (p *VMessProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
@@ -97,6 +99,12 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 			headers := make(map[string]string)
 			headers["Host"] = p.Host
 			wsOpts["headers"] = headers
+		}
+		if p.HttpUpgrade {
+			wsOpts["v2ray-http-upgrade"] = true
+		}
+		if p.HttpUpgradeFastOpen {
+			wsOpts["v2ray-http-upgrade-fast-open"] = true
 		}
 		options["ws-opts"] = wsOpts
 	case "httpupgrade":

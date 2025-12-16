@@ -284,13 +284,19 @@ func (p *VMessParser) ParseClash(config map[string]interface{}) (core.ParsablePr
 
 	// ws-opts, http-opts, etc.
 	var path, host string
+	var httpUpgrade, httpUpgradeFastOpen bool
 	if wsOpts, ok := config["ws-opts"].(map[string]interface{}); ok {
 		path = utils.GetStringField(wsOpts, "path")
 		if headers, ok := wsOpts["headers"].(map[string]interface{}); ok {
 			host = utils.GetStringField(headers, "Host")
 		}
+		if v, ok := wsOpts["v2ray-http-upgrade"].(bool); ok {
+			httpUpgrade = v
+		}
+		if v, ok := wsOpts["v2ray-http-upgrade-fast-open"].(bool); ok {
+			httpUpgradeFastOpen = v
+		}
 	}
-	// ... handle other transports
 
 	vmess := &impl.VMessProxy{
 		BaseProxy: core.BaseProxy{
@@ -299,14 +305,16 @@ func (p *VMessParser) ParseClash(config map[string]interface{}) (core.ParsablePr
 			Port:   port,
 			Remark: name,
 		},
-		UUID:    uuid,
-		AlterID: alterId,
-		Cipher:  cipher,
-		Network: network,
-		TLS:     tls,
-		SNI:     sni,
-		Path:    path,
-		Host:    host,
+		UUID:                uuid,
+		AlterID:             alterId,
+		Cipher:              cipher,
+		Network:             network,
+		TLS:                 tls,
+		SNI:                 sni,
+		Path:                path,
+		Host:                host,
+		HttpUpgrade:         httpUpgrade,
+		HttpUpgradeFastOpen: httpUpgradeFastOpen,
 	}
 	return utils.ToMihomoProxy(vmess)
 }

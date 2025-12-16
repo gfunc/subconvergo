@@ -54,7 +54,7 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 			continue
 		}
 
-		var p proxyCore.ProxyInterface
+		var p proxyCore.ParsableProxy
 		var err error
 
 		switch proxyType {
@@ -99,6 +99,14 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 			log.Printf("failed to parse proxy in clash format: %v", err)
 			continue
 		}
+
+		// Wrap in MihomoProxy to preserve original config
+		p, err = utils.ToMihomoProxyFromClash(p, proxyMap)
+		if err != nil {
+			log.Printf("failed to wrap proxy in mihomo proxy: %v", err)
+			continue
+		}
+
 		custom.Proxies = append(custom.Proxies, p)
 	}
 	custom.Groups = make([]config.ProxyGroupConfig, 0)
@@ -164,7 +172,7 @@ func parseMihomoProxy(options map[string]any) (*impl.MihomoProxy, error) {
 
 	return &impl.MihomoProxy{
 		ProxyInterface: &proxyCore.BaseProxy{
-			Type:   options["type"].(string),
+			Type:   utils.GetStringField(options, "type"),
 			Remark: remark,
 			Server: server,
 			Port:   port,

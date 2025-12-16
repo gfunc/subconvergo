@@ -17,6 +17,29 @@ func ToMihomoProxy(pObj core.ParsableProxy) (core.ParsableProxy, error) {
 	return ToMihomoProxyWithSetting(pObj, &config.ProxySetting{})
 }
 
+func ToMihomoProxyFromClash(pObj core.ParsableProxy, config map[string]interface{}) (core.ParsableProxy, error) {
+	// If it's already a MihomoProxy, just update the options
+	if mp, ok := pObj.(*impl.MihomoProxy); ok {
+		mp.Options = config
+		return mp, nil
+	}
+
+	mihomoProxy, err := adapter.ParseProxy(config)
+	if err != nil {
+		log.Printf("[ToMihomoProxyFromClash] Failed to parse proxy with adapter: %v", err)
+		return &impl.MihomoProxy{
+			ProxyInterface: pObj,
+			Options:        config,
+		}, nil
+	}
+
+	return &impl.MihomoProxy{
+		ProxyInterface: pObj,
+		Clash:          mihomoProxy,
+		Options:        config,
+	}, nil
+}
+
 func ToMihomoProxyWithSetting(pObj core.ParsableProxy, config *config.ProxySetting) (core.ParsableProxy, error) {
 	if _, ok := pObj.(*impl.MihomoProxy); ok {
 		return pObj, nil

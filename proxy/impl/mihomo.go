@@ -41,9 +41,40 @@ func (m *MihomoProxy) ToSingleConfig(opts *config.ProxySetting) (string, error) 
 }
 
 func (m *MihomoProxy) ToClashConfig(opts *config.ProxySetting) (map[string]interface{}, error) {
+	var generated map[string]interface{}
+	var err error
+
 	if p, ok := m.ProxyInterface.(core.ClashConvertableMixin); ok {
-		return p.ToClashConfig(opts)
+		generated, err = p.ToClashConfig(opts)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	// If we have original options, merge them
+	if m.Options != nil {
+		// Start with a copy of Options to preserve unknown fields
+		merged := make(map[string]interface{})
+		for k, v := range m.Options {
+			merged[k] = v
+		}
+
+		// Overwrite with generated fields (which are likely more up-to-date or processed)
+		if generated != nil {
+			for k, v := range generated {
+				merged[k] = v
+			}
+		}
+
+		// Ensure name matches remark
+		merged["name"] = m.GetRemark()
+		return merged, nil
+	}
+
+	if generated != nil {
+		return generated, nil
+	}
+
 	options, err := m.proxyOptions()
 	if err != nil {
 		log.Printf("failed to get proxy options: %v", err)
