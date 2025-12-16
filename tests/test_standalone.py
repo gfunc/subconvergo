@@ -2,11 +2,7 @@ import yaml
 import base64
 from . import infra
 from . import utils
-
-import yaml
-import base64
-from . import infra
-from . import utils
+from . import test_flags
 
 def setup_version(pref):
     pref["advanced"]["log_level"] = "warn"
@@ -96,6 +92,18 @@ CASES = [
             )
         )(),
         pref_modifier=setup_version
+    ),
+    infra.StandaloneTestCase(
+        name="default_flags",
+        query=lambda: infra.api_get_subconvergo("/sub?target=clash&url=ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388%23Example"),
+        validate=test_flags.validate_default_flags,
+        pref_modifier=test_flags.setup_default_flags
+    ),
+    infra.StandaloneTestCase(
+        name="explicit_flags",
+        query=lambda: infra.api_get_subconvergo("/sub?target=clash&url=ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388%23Example"),
+        validate=test_flags.validate_explicit_flags,
+        pref_modifier=test_flags.setup_explicit_flags
     ),
     infra.StandaloneTestCase(
         name="sub",

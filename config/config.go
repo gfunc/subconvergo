@@ -229,10 +229,10 @@ type ProxySetting struct {
 	SingBoxAddClashMode bool
 	ClashUseNewField    bool
 	SurgeVer            int
-	UDP                 bool
-	TFO                 bool
-	SCV                 bool
-	TLS13               bool
+	UDP                 *bool
+	TFO                 *bool
+	SCV                 *bool
+	TLS13               *bool
 }
 
 // Global settings instance

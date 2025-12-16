@@ -173,7 +173,7 @@ func (p *HysteriaProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) 
 	if p.Obfs != "" {
 		parts = append(parts, fmt.Sprintf("obfs=%s", p.Obfs))
 	}
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "tfo=true")
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil

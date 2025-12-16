@@ -73,7 +73,7 @@ func (p *SnellProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	if p.Version > 0 {
 		parts = append(parts, fmt.Sprintf("version=%d", p.Version))
 	}
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "tfo=true")
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil

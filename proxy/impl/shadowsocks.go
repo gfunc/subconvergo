@@ -54,8 +54,14 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) (map[string]i
 		"password": p.Password,
 	}
 
-	if ext != nil && ext.UDP {
+	if ext != nil && ext.UDP != nil && *ext.UDP {
 		options["udp"] = true
+	}
+	if ext != nil && ext.TFO != nil && *ext.TFO {
+		options["tfo"] = true
+	}
+	if ext != nil && ext.SCV != nil && *ext.SCV {
+		options["skip-cert-verify"] = true
 	}
 
 	if p.Plugin != "" {
@@ -75,7 +81,9 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) (map[string]i
 				opts["path"] = p.PluginOpts["path"]
 				opts["tls"] = p.PluginOpts["tls"]
 				opts["mux"] = p.PluginOpts["mux"]
-				opts["skip-cert-verify"] = ext.SCV
+				if ext.SCV != nil && *ext.SCV {
+					opts["skip-cert-verify"] = true
+				}
 			}
 			options["plugin-opts"] = opts
 		}
@@ -91,10 +99,10 @@ func (p *ShadowsocksProxy) ToSurgeConfig(ext *config.ProxySetting) (string, erro
 	parts := []string{"ss", p.Server, fmt.Sprintf("%d", p.Port)}
 	parts = append(parts, fmt.Sprintf("encrypt-method=%s", p.EncryptMethod))
 	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
-	if ext.UDP {
+	if ext.UDP != nil && *ext.UDP {
 		parts = append(parts, "udp-relay=true")
 	}
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "tfo=true")
 	}
 	if p.Plugin == "obfs-local" || p.Plugin == "simple-obfs" {
@@ -135,10 +143,10 @@ func (p *ShadowsocksProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string
 	parts = append(parts, "shadowsocks="+fmt.Sprintf("%s:%d", p.Server, p.Port))
 	parts = append(parts, fmt.Sprintf("method=%s", p.EncryptMethod))
 	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
-	if ext.UDP {
+	if ext.UDP != nil && *ext.UDP {
 		parts = append(parts, "udp-relay=true")
 	}
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "fast-open=true")
 	}
 	if p.Plugin == "obfs-local" || p.Plugin == "simple-obfs" {

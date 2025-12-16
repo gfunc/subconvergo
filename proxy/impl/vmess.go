@@ -66,14 +66,17 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 	}
 
 	if ext != nil {
-		if ext.UDP {
+		if ext.UDP != nil && *ext.UDP {
 			options["udp"] = true
 		}
-		if ext.SCV {
-			options["skip-cert-verify"] = true
+		if ext.SCV != nil {
+			options["skip-cert-verify"] = *ext.SCV
 		}
-		if ext.TLS13 {
+		if ext.TLS13 != nil && *ext.TLS13 {
 			options["tls13"] = true
+		}
+		if ext.TFO != nil {
+			options["tfo"] = *ext.TFO
 		}
 	}
 
@@ -173,16 +176,16 @@ func (p *VMessProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	}
 
 	if ext != nil {
-		if ext.TFO {
+		if ext.TFO != nil && *ext.TFO {
 			parts = append(parts, "tfo=true")
 		}
-		if ext.UDP {
+		if ext.UDP != nil && *ext.UDP {
 			parts = append(parts, "udp-relay=true")
 		}
-		if ext.TLS13 {
+		if ext.TLS13 != nil && *ext.TLS13 {
 			parts = append(parts, "tls13=true")
 		}
-		if ext.SCV {
+		if ext.SCV != nil && *ext.SCV {
 			parts = append(parts, "skip-cert-verify=true")
 		}
 	}
@@ -214,10 +217,10 @@ func (p *VMessProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 	}
 
 	if ext != nil {
-		if ext.TFO {
+		if ext.TFO != nil && *ext.TFO {
 			parts = append(parts, "tfo=true")
 		}
-		if ext.UDP {
+		if ext.UDP != nil && *ext.UDP {
 			parts = append(parts, "udp-relay=true")
 		}
 	}
@@ -244,10 +247,10 @@ func (p *VMessProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, erro
 	}
 
 	if ext != nil {
-		if ext.TFO {
+		if ext.TFO != nil && *ext.TFO {
 			parts = append(parts, "fast-open=true")
 		}
-		if ext.UDP {
+		if ext.UDP != nil && *ext.UDP {
 			parts = append(parts, "udp-relay=true")
 		}
 	}
@@ -274,7 +277,7 @@ func (p *VMessProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]inter
 		if p.SNI != "" {
 			tls["server_name"] = p.SNI
 		}
-		if ext.SCV {
+		if ext.SCV != nil && *ext.SCV {
 			tls["insecure"] = true
 		}
 		outbound["tls"] = tls

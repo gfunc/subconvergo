@@ -50,7 +50,7 @@ func (p *HttpProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 	}
 	if p.Tls {
 		options["tls"] = true
-		if p.SkipCertVerify || ext.SCV {
+		if p.SkipCertVerify || (ext.SCV != nil && *ext.SCV) {
 			options["skip-cert-verify"] = true
 		}
 	}
@@ -65,10 +65,10 @@ func (p *HttpProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	if p.Tls {
 		parts = append(parts, "tls=true")
 	}
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "tfo=true")
 	}
-	if p.Tls && (p.SkipCertVerify || ext.SCV) {
+	if p.Tls && (p.SkipCertVerify || (ext.SCV != nil && *ext.SCV)) {
 		parts = append(parts, "skip-cert-verify=true")
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
@@ -81,7 +81,7 @@ func (p *HttpProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 	}
 	// Format: http,server,port,username,"password"
 	part := fmt.Sprintf("%s,%s,%d,%s,\"%s\"", scheme, p.Server, p.Port, p.Username, p.Password)
-	if p.Tls && (p.SkipCertVerify || ext.SCV) {
+	if p.Tls && (p.SkipCertVerify || (ext.SCV != nil && *ext.SCV)) {
 		part += ",skip-cert-verify=true"
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, part), nil
@@ -104,7 +104,7 @@ func (p *HttpProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error
 	} else {
 		parts = append(parts, "over-tls=false")
 	}
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "fast-open=true")
 	}
 	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))

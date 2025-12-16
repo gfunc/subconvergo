@@ -106,7 +106,7 @@ func (p *TUICProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	if p.AllowInsecure {
 		parts = append(parts, "skip-cert-verify=true")
 	}
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "tfo=true")
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
@@ -147,7 +147,7 @@ func (p *TUICProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interf
 	tls := map[string]interface{}{
 		"enabled": true,
 	}
-	if p.AllowInsecure || ext.SCV {
+	if p.AllowInsecure || (ext.SCV != nil && *ext.SCV) {
 		tls["insecure"] = true
 	}
 	if p.Params != nil {

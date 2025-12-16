@@ -145,7 +145,7 @@ func (p *AnyTLSProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]inte
 		tls["server_name"] = p.SNI
 	}
 
-	if ext.SCV || p.AllowInsecure || p.Fingerprint != "" {
+	if (ext.SCV != nil && *ext.SCV) || p.AllowInsecure || p.Fingerprint != "" {
 		tls["insecure"] = true
 	}
 

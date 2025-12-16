@@ -116,7 +116,7 @@ func (p *TrojanProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 		parts = append(parts, "skip-cert-verify=true")
 	}
 
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "tfo=true")
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
@@ -160,10 +160,10 @@ func (p *TrojanProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, err
 	// and are typically handled via specific fields if supported.
 	// We omit them here to match standard generator behavior.
 	if ext != nil {
-		if ext.TFO {
+		if ext.TFO != nil && *ext.TFO {
 			parts = append(parts, "fast-open=true")
 		}
-		if ext.UDP {
+		if ext.UDP != nil && *ext.UDP {
 			parts = append(parts, "udp-relay=true")
 		}
 	}

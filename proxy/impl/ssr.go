@@ -125,10 +125,10 @@ func (p *ShadowsocksRProxy) ToQuantumultXConfig(ext *config.ProxySetting) (strin
 		parts = append(parts, fmt.Sprintf("obfs-host=%s", p.ObfsParam))
 	}
 
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "fast-open=true")
 	}
-	if ext.UDP {
+	if ext.UDP != nil && *ext.UDP {
 		parts = append(parts, "udp-relay=true")
 	}
 	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))

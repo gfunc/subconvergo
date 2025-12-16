@@ -8,6 +8,7 @@ import (
 	"github.com/gfunc/subconvergo/generator/core"
 	pc "github.com/gfunc/subconvergo/proxy/core"
 	"github.com/gfunc/subconvergo/proxy/impl"
+	"github.com/gfunc/subconvergo/utils"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 )
@@ -90,10 +91,10 @@ func TestClashGenerator_Generate_WithOptions(t *testing.T) {
 	opts := core.GeneratorOptions{
 		Base: "proxies: []\nproxy-groups: []\nrules: []",
 		ProxySetting: config.ProxySetting{
-			UDP:   true,
-			TFO:   true,
-			SCV:   true,
-			TLS13: true,
+			UDP:   utils.BoolPtr(true),
+			TFO:   utils.BoolPtr(true),
+			SCV:   utils.BoolPtr(true),
+			TLS13: utils.BoolPtr(true),
 		},
 	}
 

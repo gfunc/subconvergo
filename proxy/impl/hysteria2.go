@@ -89,7 +89,7 @@ func (p *Hysteria2Proxy) ToSurgeConfig(ext *config.ProxySetting) (string, error)
 			parts = append(parts, fmt.Sprintf("obfs-password=%s", p.ObfsPassword))
 		}
 	}
-	if ext.TFO {
+	if ext.TFO != nil && *ext.TFO {
 		parts = append(parts, "tfo=true")
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
@@ -103,7 +103,7 @@ func (p *Hysteria2Proxy) ToLoonConfig(ext *config.ProxySetting) (string, error) 
 	if p.Sni != "" {
 		parts = append(parts, fmt.Sprintf("sni=%s", p.Sni))
 	}
-	if p.SkipCertVerify || ext.SCV {
+	if p.SkipCertVerify || (ext.SCV != nil && *ext.SCV) {
 		parts = append(parts, "skip-cert-verify=true")
 	}
 	if p.Obfs != "" {

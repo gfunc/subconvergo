@@ -5,6 +5,7 @@ import (
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/generator/core"
+	"github.com/gfunc/subconvergo/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,8 +37,8 @@ func TestSurgeGenerator_Generate_WithOptions(t *testing.T) {
 	opts := core.GeneratorOptions{
 		Base: "[General]\nloglevel = notify",
 		ProxySetting: config.ProxySetting{
-			UDP: true,
-			TFO: true,
+			UDP: utils.BoolPtr(true),
+			TFO: utils.BoolPtr(true),
 		},
 	}
 

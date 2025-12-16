@@ -263,28 +263,20 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	}
 
 	// Apply node preferences to generator options
-	if config.Global.NodePref.UDPFlag != nil {
-		opts.UDP = *config.Global.NodePref.UDPFlag
-	}
-	if config.Global.NodePref.TCPFastOpenFlag != nil {
-		opts.TFO = *config.Global.NodePref.TCPFastOpenFlag
-	}
-	if config.Global.NodePref.SkipCertVerifyFlag != nil {
-		opts.SCV = *config.Global.NodePref.SkipCertVerifyFlag
-	}
-	if config.Global.NodePref.TLS13Flag != nil {
-		opts.TLS13 = *config.Global.NodePref.TLS13Flag
-	}
+	opts.UDP = config.Global.NodePref.UDPFlag
+	opts.TFO = config.Global.NodePref.TCPFastOpenFlag
+	opts.SCV = config.Global.NodePref.SkipCertVerifyFlag
+	opts.TLS13 = config.Global.NodePref.TLS13Flag
 
 	// Parse boolean options
 	if params.UDP != nil {
-		opts.UDP = *params.UDP
+		opts.UDP = params.UDP
 	}
 	if params.TFO != nil {
-		opts.TFO = *params.TFO
+		opts.TFO = params.TFO
 	}
 	if params.SCV != nil {
-		opts.SCV = *params.SCV
+		opts.SCV = params.SCV
 	}
 	if params.NewName != nil {
 		opts.ProxySetting.ClashUseNewField = *params.NewName
