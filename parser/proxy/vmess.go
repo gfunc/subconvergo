@@ -170,6 +170,7 @@ func (p *VMessParser) parseJSONVMess(decoded string) (core.ParsableProxy, error)
 	path := utils.GetStringField(vmessData, "path")
 	tls := utils.GetStringField(vmessData, "tls")
 	sni := utils.GetStringField(vmessData, "sni")
+	scv := utils.GetBoolPtrField(vmessData, "allowInsecure")
 
 	if net == "" {
 		net = "tcp"
@@ -207,6 +208,7 @@ func (p *VMessParser) parseJSONVMess(decoded string) (core.ParsableProxy, error)
 			Server: add,
 			Port:   portNum,
 			Group:  core.V2RAY_DEFAULT_GROUP,
+			SCV:    scv,
 		},
 		UUID:    id,
 		AlterID: alterID,
@@ -260,6 +262,18 @@ func (p *VMessParser) ParseSurge(content string) (core.ParsableProxy, error) {
 				vmess.TLS = v == "true"
 			case "sni":
 				vmess.SNI = v
+			case "tfo":
+				b := v == "true"
+				vmess.TFO = &b
+			case "udp-relay":
+				b := v == "true"
+				vmess.UDP = &b
+			case "tls13":
+				b := v == "true"
+				vmess.TLS13 = &b
+			case "skip-cert-verify":
+				b := v == "true"
+				vmess.SCV = &b
 			}
 		}
 	}
@@ -281,6 +295,11 @@ func (p *VMessParser) ParseClash(config map[string]interface{}) (core.ParsablePr
 	if sni == "" {
 		sni = utils.GetStringField(config, "sni")
 	}
+
+	udp := utils.GetBoolPtrField(config, "udp")
+	tfo := utils.GetBoolPtrField(config, "tfo")
+	scv := utils.GetBoolPtrField(config, "skip-cert-verify")
+	tls13 := utils.GetBoolPtrField(config, "tls13")
 
 	// ws-opts, http-opts, etc.
 	var path, host string
@@ -304,6 +323,10 @@ func (p *VMessParser) ParseClash(config map[string]interface{}) (core.ParsablePr
 			Server: server,
 			Port:   port,
 			Remark: name,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
+			TLS13:  tls13,
 		},
 		UUID:                uuid,
 		AlterID:             alterId,
@@ -333,12 +356,19 @@ func (p *VMessParser) ParseNetch(config map[string]interface{}) (core.ParsablePr
 	path := utils.GetStringField(config, "Path")
 	fakeType := utils.GetStringField(config, "FakeType")
 
+	udp := utils.GetBoolPtrField(config, "EnableUDP")
+	tfo := utils.GetBoolPtrField(config, "EnableTFO")
+	scv := utils.GetBoolPtrField(config, "AllowInsecure")
+
 	vmess := &impl.VMessProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "vmess",
 			Server: hostname,
 			Port:   port,
 			Remark: remark,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
 		},
 		UUID:     uuid,
 		AlterID:  alterId,
@@ -367,6 +397,7 @@ func (p *VMessParser) ParseV2Ray(config map[string]interface{}) (core.ParsablePr
 	tls := utils.GetStringField(config, "tls") == "true"
 	sni := utils.GetStringField(config, "sni")
 	remark := utils.GetStringField(config, "remark")
+	scv := utils.GetBoolPtrField(config, "allowInsecure")
 
 	vmess := &impl.VMessProxy{
 		BaseProxy: core.BaseProxy{
@@ -374,6 +405,7 @@ func (p *VMessParser) ParseV2Ray(config map[string]interface{}) (core.ParsablePr
 			Server: server,
 			Port:   port,
 			Remark: remark,
+			SCV:    scv,
 		},
 		UUID:     id,
 		AlterID:  aid,

@@ -20,8 +20,6 @@ type AnyTLSProxy struct {
 	IdleSessionCheckInterval int      `yaml:"idle_session_check_interval" json:"idle_session_check_interval"`
 	IdleSessionTimeout       int      `yaml:"idle_session_timeout" json:"idle_session_timeout"`
 	MinIdleSession           int      `yaml:"min_idle_session" json:"min_idle_session"`
-	TFO                      bool     `yaml:"tfo" json:"tfo"`
-	AllowInsecure            bool     `yaml:"allow_insecure" json:"allow_insecure"`
 }
 
 func (p *AnyTLSProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
@@ -38,10 +36,10 @@ func (p *AnyTLSProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 	if p.Fingerprint != "" {
 		values.Add("hpkp", p.Fingerprint)
 	}
-	if p.TFO {
+	if p.TFO != nil && *p.TFO {
 		values.Add("tfo", "1")
 	}
-	if p.AllowInsecure {
+	if p.SCV != nil && *p.SCV {
 		values.Add("insecure", "1")
 	}
 	if p.IdleSessionCheckInterval != 0 {
@@ -94,10 +92,20 @@ func (p *AnyTLSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interf
 	if p.MinIdleSession != 0 {
 		options["min-idle-session"] = p.MinIdleSession
 	}
-	if p.AllowInsecure {
+
+	var scv *bool = p.SCV
+	if ext.SCV != nil {
+		scv = ext.SCV
+	}
+	if scv != nil && *scv {
 		options["skip-cert-verify"] = true
 	}
-	if p.TFO {
+
+	var tfo *bool = p.TFO
+	if ext.TFO != nil {
+		tfo = ext.TFO
+	}
+	if tfo != nil && *tfo {
 		options["tfo"] = true
 	}
 
@@ -134,7 +142,12 @@ func (p *AnyTLSProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]inte
 	if p.MinIdleSession > 0 {
 		outbound["min_idle_session"] = p.MinIdleSession
 	}
-	if p.TFO {
+
+	var tfo *bool = p.TFO
+	if ext.TFO != nil {
+		tfo = ext.TFO
+	}
+	if tfo != nil && *tfo {
 		outbound["tcp_fast_open"] = true
 	}
 
@@ -145,7 +158,11 @@ func (p *AnyTLSProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]inte
 		tls["server_name"] = p.SNI
 	}
 
-	if (ext.SCV != nil && *ext.SCV) || p.AllowInsecure || p.Fingerprint != "" {
+	var scv *bool = p.SCV
+	if ext.SCV != nil {
+		scv = ext.SCV
+	}
+	if (scv != nil && *scv) || p.Fingerprint != "" {
 		tls["insecure"] = true
 	}
 

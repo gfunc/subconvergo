@@ -226,6 +226,12 @@ func (p *ShadowsocksParser) ParseSurge(content string) (core.ParsableProxy, erro
 					ss.PluginOpts = make(map[string]interface{})
 				}
 				ss.PluginOpts["obfs-host"] = v
+			case "udp-relay":
+				b := v == "true"
+				ss.UDP = &b
+			case "tfo":
+				b := v == "true"
+				ss.TFO = &b
 			}
 		}
 	}
@@ -242,12 +248,19 @@ func (p *ShadowsocksParser) ParseClash(config map[string]interface{}) (core.Pars
 	name := utils.GetStringField(config, "name")
 	plugin := utils.GetStringField(config, "plugin")
 
+	udp := utils.GetBoolPtrField(config, "udp")
+	tfo := utils.GetBoolPtrField(config, "tfo")
+	scv := utils.GetBoolPtrField(config, "skip-cert-verify")
+
 	ss := &impl.ShadowsocksProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "ss",
 			Server: server,
 			Port:   port,
 			Remark: name,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
 		},
 		Password:      password,
 		EncryptMethod: cipher,
@@ -279,12 +292,19 @@ func (p *ShadowsocksParser) ParseNetch(config map[string]interface{}) (core.Pars
 	plugin := utils.GetStringField(config, "Plugin")
 	pluginOptsStr := utils.GetStringField(config, "PluginOpts")
 
+	udp := utils.GetBoolPtrField(config, "EnableUDP")
+	tfo := utils.GetBoolPtrField(config, "EnableTFO")
+	scv := utils.GetBoolPtrField(config, "AllowInsecure")
+
 	ss := &impl.ShadowsocksProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "ss",
 			Server: hostname,
 			Port:   port,
 			Remark: remark,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
 		},
 		Password:      password,
 		EncryptMethod: method,

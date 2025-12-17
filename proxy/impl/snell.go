@@ -59,6 +59,18 @@ func (p *SnellProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 			"host": p.ObfsParam,
 		}
 	}
+
+	if ext != nil {
+		if ext.UDP != nil && *ext.UDP {
+			options["udp"] = true
+		}
+		if ext.TFO != nil && *ext.TFO {
+			options["tfo"] = true
+		}
+		if ext.SCV != nil && *ext.SCV {
+			options["skip-cert-verify"] = true
+		}
+	}
 	return options, nil
 }
 

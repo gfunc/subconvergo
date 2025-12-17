@@ -100,3 +100,37 @@ func TestTrojanProxy_ToClashConfig(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "/path", wsOpts["path"])
 }
+
+func TestTrojanProxy_ToClashConfig_GlobalOverrides(t *testing.T) {
+	proxy := &TrojanProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "trojan",
+			Remark: "test-trojan",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		Password: "password",
+	}
+
+	// Test with global overrides
+	udp := true
+	tfo := true
+	scv := true
+	tls13 := true
+	opts := &config.ProxySetting{
+		UDP:   &udp,
+		TFO:   &tfo,
+		SCV:   &scv,
+		TLS13: &tls13,
+	}
+
+	clashConfig, err := proxy.ToClashConfig(opts)
+	assert.NoError(t, err)
+	assert.NotNil(t, clashConfig)
+
+	// Verify overrides
+	assert.Equal(t, true, clashConfig["udp"])
+	assert.Equal(t, true, clashConfig["tfo"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+	assert.Equal(t, true, clashConfig["tls13"])
+}

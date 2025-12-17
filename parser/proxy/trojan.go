@@ -54,6 +54,7 @@ func (p *TrojanParser) ParseSingle(line string) (core.ParsableProxy, error) {
 
 	var remark, password, server, port, sni, network, path, group string
 	var allowInsecure bool
+	var udp, tfo, scv, tls13 *bool
 
 	if idx := strings.LastIndex(line, "#"); idx != -1 {
 		remark = utils.UrlDecode(line[idx+1:])
@@ -73,6 +74,21 @@ func (p *TrojanParser) ParseSingle(line string) (core.ParsableProxy, error) {
 
 		if params.Get("allowInsecure") == "1" || params.Get("allowInsecure") == "true" {
 			allowInsecure = true
+			b := true
+			scv = &b
+		}
+
+		if v := params.Get("tfo"); v == "1" || v == "true" {
+			b := true
+			tfo = &b
+		}
+		if v := params.Get("udp"); v == "1" || v == "true" {
+			b := true
+			udp = &b
+		}
+		if v := params.Get("tls13"); v == "1" || v == "true" {
+			b := true
+			tls13 = &b
 		}
 
 		group = utils.UrlDecode(params.Get("group"))
@@ -124,6 +140,10 @@ func (p *TrojanParser) ParseSingle(line string) (core.ParsableProxy, error) {
 			Server: server,
 			Port:   portNum,
 			Group:  group,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
+			TLS13:  tls13,
 		},
 		Password:      password,
 		Network:       network,
@@ -175,6 +195,17 @@ func (p *TrojanParser) ParseSurge(content string) (core.ParsableProxy, error) {
 				trojan.Host = v
 			case "skip-cert-verify":
 				trojan.AllowInsecure = v == "true"
+				b := v == "true"
+				trojan.SCV = &b
+			case "tfo":
+				b := v == "true"
+				trojan.TFO = &b
+			case "udp-relay":
+				b := v == "true"
+				trojan.UDP = &b
+			case "tls13":
+				b := v == "true"
+				trojan.TLS13 = &b
 			}
 		}
 	}
@@ -192,6 +223,11 @@ func (p *TrojanParser) ParseClash(config map[string]interface{}) (core.ParsableP
 	skipCertVerify := utils.GetStringField(config, "skip-cert-verify") == "true" || config["skip-cert-verify"] == true
 	network := utils.GetStringField(config, "network")
 
+	udp := utils.GetBoolPtrField(config, "udp")
+	tfo := utils.GetBoolPtrField(config, "tfo")
+	scv := utils.GetBoolPtrField(config, "skip-cert-verify")
+	tls13 := utils.GetBoolPtrField(config, "tls13")
+
 	// ws-opts, grpc-opts, etc.
 	var path, host string
 	if wsOpts, ok := config["ws-opts"].(map[string]interface{}); ok {
@@ -207,6 +243,10 @@ func (p *TrojanParser) ParseClash(config map[string]interface{}) (core.ParsableP
 			Server: server,
 			Port:   port,
 			Remark: name,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
+			TLS13:  tls13,
 		},
 		Password:      password,
 		Host:          sni, // SNI is usually Host in Trojan

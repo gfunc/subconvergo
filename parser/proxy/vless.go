@@ -32,6 +32,7 @@ func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 
 	var remark, uuid, server, port, network, flow, security, sni, path, host, group string
 	var allowInsecure bool
+	var udp, tfo, scv, tls13 *bool
 
 	if idx := strings.LastIndex(line, "#"); idx != -1 {
 		remark = utils.UrlDecode(line[idx+1:])
@@ -55,6 +56,21 @@ func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 
 		if params.Get("allowInsecure") == "1" || params.Get("allowInsecure") == "true" {
 			allowInsecure = true
+			b := true
+			scv = &b
+		}
+
+		if v := params.Get("tfo"); v == "1" || v == "true" {
+			b := true
+			tfo = &b
+		}
+		if v := params.Get("udp"); v == "1" || v == "true" {
+			b := true
+			udp = &b
+		}
+		if v := params.Get("tls13"); v == "1" || v == "true" {
+			b := true
+			tls13 = &b
 		}
 
 		group = utils.UrlDecode(params.Get("group"))
@@ -113,6 +129,10 @@ func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 			Server: server,
 			Port:   portNum,
 			Group:  group,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
+			TLS13:  tls13,
 		},
 		UUID:          uuid,
 		Network:       network,
@@ -137,12 +157,21 @@ func (p *VLESSParser) ParseClash(config map[string]interface{}) (core.ParsablePr
 	flow := utils.GetStringField(config, "flow")
 	servername := utils.GetStringField(config, "servername")
 
+	udp := utils.GetBoolPtrField(config, "udp")
+	tfo := utils.GetBoolPtrField(config, "tfo")
+	scv := utils.GetBoolPtrField(config, "skip-cert-verify")
+	tls13 := utils.GetBoolPtrField(config, "tls13")
+
 	v := &impl.VLESSProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "vless",
 			Server: server,
 			Port:   port,
 			Remark: name,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
+			TLS13:  tls13,
 		},
 		UUID:    uuid,
 		Network: network,
@@ -153,6 +182,8 @@ func (p *VLESSParser) ParseClash(config map[string]interface{}) (core.ParsablePr
 
 	if config["skip-cert-verify"] == true {
 		v.AllowInsecure = true
+		b := true
+		v.SCV = &b
 	}
 
 	if wsOpts, ok := config["ws-opts"].(map[string]interface{}); ok {

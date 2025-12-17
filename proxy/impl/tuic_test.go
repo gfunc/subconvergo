@@ -6,6 +6,7 @@ import (
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -98,4 +99,33 @@ func TestTUICProxy_ToClashConfig(t *testing.T) {
 	assert.Equal(t, "example.com", clashConfig["sni"])
 	assert.Equal(t, "bbr", clashConfig["congestion-controller"])
 	assert.Equal(t, "native", clashConfig["udp-relay-mode"])
+}
+
+func TestTUICProxy_ToClashConfig_GlobalOverrides(t *testing.T) {
+	proxy := &TUICProxy{
+		BaseProxy: core.BaseProxy{
+			Remark: "test-tuic",
+		},
+		UUID:          "uuid",
+		Password:      "password",
+		AllowInsecure: false,
+	}
+	proxy.Server = "1.2.3.4"
+	proxy.Port = 8443
+
+	globalSettings := &config.ProxySetting{
+		UDP:   utils.BoolPtr(true),
+		TFO:   utils.BoolPtr(true),
+		SCV:   utils.BoolPtr(true),
+		TLS13: utils.BoolPtr(true),
+	}
+
+	clashConfig, err := proxy.ToClashConfig(globalSettings)
+	assert.NoError(t, err)
+	assert.NotNil(t, clashConfig)
+
+	assert.Equal(t, true, clashConfig["udp"])
+	assert.Equal(t, true, clashConfig["tfo"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+	assert.Equal(t, true, clashConfig["tls13"])
 }

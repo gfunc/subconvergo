@@ -63,6 +63,21 @@ func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 			options["obfs-password"] = p.ObfsPassword
 		}
 	}
+
+	if ext != nil {
+		if ext.UDP != nil && *ext.UDP {
+			options["udp"] = true
+		}
+		if ext.TFO != nil && *ext.TFO {
+			options["tfo"] = true
+		}
+		if ext.SCV != nil && *ext.SCV {
+			options["skip-cert-verify"] = true
+		}
+		if ext.TLS13 != nil && *ext.TLS13 {
+			options["tls13"] = true
+		}
+	}
 	return options, nil
 }
 

@@ -146,5 +146,10 @@ func (p *TUICParser) ParseClash(option map[string]interface{}) (core.ParsablePro
 		AllowInsecure: utils.GetBoolField(option, "skip-cert-verify"),
 		Params:        params,
 	}
+	pObj.UDP = utils.GetBoolPtrField(option, "udp")
+	pObj.TFO = utils.GetBoolPtrField(option, "tfo")
+	pObj.SCV = utils.GetBoolPtrField(option, "skip-cert-verify")
+	pObj.TLS13 = utils.GetBoolPtrField(option, "tls13")
+
 	return utils.ToMihomoProxy(pObj)
 }

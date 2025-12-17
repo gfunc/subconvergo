@@ -48,12 +48,42 @@ func (p *HttpProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 	if p.Password != "" {
 		options["password"] = p.Password
 	}
+
+	var tfo, scv, tls13 *bool
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
+	if p.SkipCertVerify {
+		b := true
+		scv = &b
+	}
+
+	if ext != nil {
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
+		}
+	}
+
 	if p.Tls {
 		options["tls"] = true
-		if p.SkipCertVerify || (ext.SCV != nil && *ext.SCV) {
+		if scv != nil && *scv {
 			options["skip-cert-verify"] = true
 		}
 	}
+	if tfo != nil && *tfo {
+		options["tfo"] = true
+	}
+	if tls13 != nil && *tls13 {
+		options["tls13"] = true
+	}
+
 	return options, nil
 }
 
@@ -65,12 +95,39 @@ func (p *HttpProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	if p.Tls {
 		parts = append(parts, "tls=true")
 	}
-	if ext.TFO != nil && *ext.TFO {
+
+	var tfo, scv, tls13 *bool
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
+	if p.SkipCertVerify {
+		b := true
+		scv = &b
+	}
+
+	if ext != nil {
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
+		}
+	}
+
+	if tfo != nil && *tfo {
 		parts = append(parts, "tfo=true")
 	}
-	if p.Tls && (p.SkipCertVerify || (ext.SCV != nil && *ext.SCV)) {
+	if p.Tls && scv != nil && *scv {
 		parts = append(parts, "skip-cert-verify=true")
 	}
+	if tls13 != nil && *tls13 {
+		parts = append(parts, "tls13=true")
+	}
+
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
 }
 

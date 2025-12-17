@@ -51,9 +51,25 @@ func (p *WireGuardProxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 	if p.Mtu > 0 {
 		options["mtu"] = p.Mtu
 	}
+
+	var udp *bool
+	udp = p.UDP
+
 	if p.Udp {
+		b := true
+		udp = &b
+	}
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+	}
+
+	if udp != nil && *udp {
 		options["udp"] = true
 	}
+
 	return options, nil
 }
 

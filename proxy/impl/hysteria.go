@@ -116,6 +116,46 @@ func (p *HysteriaProxy) ToClashConfig(ext *config.ProxySetting) (map[string]inte
 		options["up"] = 10
 		options["down"] = 50
 	}
+
+	var udp, tfo, scv, tls13 *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
+	if p.AllowInsecure {
+		b := true
+		scv = &b
+	}
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
+		}
+	}
+
+	if scv != nil && *scv {
+		options["skip-cert-verify"] = true
+	}
+	if udp != nil && *udp {
+		options["udp"] = true
+	}
+	if tfo != nil && *tfo {
+		options["tfo"] = true
+	}
+	if tls13 != nil && *tls13 {
+		options["tls13"] = true
+	}
+
 	return options, nil
 }
 
@@ -167,14 +207,47 @@ func (p *HysteriaProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) 
 		}
 	}
 
+	var udp, tfo, scv, tls13 *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
 	if p.AllowInsecure {
+		b := true
+		scv = &b
+	}
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
+		}
+	}
+
+	if scv != nil && *scv {
 		parts = append(parts, "skip-cert-verify=true")
 	}
+	if udp != nil && *udp {
+		parts = append(parts, "udp-relay=true")
+	}
+	if tfo != nil && *tfo {
+		parts = append(parts, "tfo=true")
+	}
+	if tls13 != nil && *tls13 {
+		parts = append(parts, "tls13=true")
+	}
+
 	if p.Obfs != "" {
 		parts = append(parts, fmt.Sprintf("obfs=%s", p.Obfs))
-	}
-	if ext.TFO != nil && *ext.TFO {
-		parts = append(parts, "tfo=true")
 	}
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
 }

@@ -115,6 +115,18 @@ func (p *SnellParser) ParseSurge(content string) (core.ParsableProxy, error) {
 				if ver, err := strconv.Atoi(v); err == nil {
 					snell.Version = ver
 				}
+			case "udp-relay":
+				b := v == "true"
+				snell.UDP = &b
+			case "tfo":
+				b := v == "true"
+				snell.TFO = &b
+			case "skip-cert-verify":
+				b := v == "true"
+				snell.SCV = &b
+			case "tls13":
+				b := v == "true"
+				snell.TLS13 = &b
 			}
 		}
 	}
@@ -145,5 +157,10 @@ func (p *SnellParser) ParseClash(config map[string]interface{}) (core.ParsablePr
 		Obfs:      obfs,
 		ObfsParam: obfsHost,
 	}
+	snell.UDP = utils.GetBoolPtrField(config, "udp")
+	snell.TFO = utils.GetBoolPtrField(config, "tfo")
+	snell.SCV = utils.GetBoolPtrField(config, "skip-cert-verify")
+	snell.TLS13 = utils.GetBoolPtrField(config, "tls13")
+
 	return utils.ToMihomoProxy(snell)
 }

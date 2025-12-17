@@ -103,3 +103,38 @@ func TestHysteriaProxy_ToClashConfig(t *testing.T) {
 	assert.Equal(t, true, clashConfig["skip-cert-verify"])
 	assert.Equal(t, "example.com", clashConfig["sni"])
 }
+
+func TestHysteriaProxy_ToClashConfig_GlobalOverrides(t *testing.T) {
+	proxy := &HysteriaProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "hysteria2",
+			Remark: "test-hysteria2",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		Password: "password",
+		Params:   url.Values{},
+	}
+
+	// Test with global overrides
+	udp := true
+	tfo := true
+	scv := true
+	tls13 := true
+	opts := &config.ProxySetting{
+		UDP:   &udp,
+		TFO:   &tfo,
+		SCV:   &scv,
+		TLS13: &tls13,
+	}
+
+	clashConfig, err := proxy.ToClashConfig(opts)
+	assert.NoError(t, err)
+	assert.NotNil(t, clashConfig)
+
+	// Verify overrides
+	assert.Equal(t, true, clashConfig["udp"])
+	assert.Equal(t, true, clashConfig["tfo"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+	assert.Equal(t, true, clashConfig["tls13"])
+}

@@ -5,16 +5,21 @@ import (
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/utils"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestAnyTLSProxy_ToSingleConfig(t *testing.T) {
+	tfo := true
+	scv := true
 	proxy := &AnyTLSProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "anytls",
 			Remark: "anytls-proxy",
 			Server: "1.2.3.4",
 			Port:   443,
+			TFO:    &tfo,
+			SCV:    &scv,
 		},
 		Password:                 "password",
 		SNI:                      "example.com",
@@ -23,8 +28,6 @@ func TestAnyTLSProxy_ToSingleConfig(t *testing.T) {
 		IdleSessionCheckInterval: 30,
 		IdleSessionTimeout:       60,
 		MinIdleSession:           5,
-		TFO:                      true,
-		AllowInsecure:            true,
 	}
 
 	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
@@ -43,12 +46,16 @@ func TestAnyTLSProxy_ToSingleConfig(t *testing.T) {
 }
 
 func TestAnyTLSProxy_ToClashConfig(t *testing.T) {
+	tfo := true
+	scv := true
 	proxy := &AnyTLSProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "anytls",
 			Remark: "anytls-proxy",
 			Server: "1.2.3.4",
 			Port:   443,
+			TFO:    &tfo,
+			SCV:    &scv,
 		},
 		Password:                 "password",
 		SNI:                      "example.com",
@@ -57,8 +64,6 @@ func TestAnyTLSProxy_ToClashConfig(t *testing.T) {
 		IdleSessionCheckInterval: 30,
 		IdleSessionTimeout:       60,
 		MinIdleSession:           5,
-		TFO:                      true,
-		AllowInsecure:            true,
 	}
 
 	config, err := proxy.ToClashConfig(&config.ProxySetting{})
@@ -77,4 +82,31 @@ func TestAnyTLSProxy_ToClashConfig(t *testing.T) {
 	assert.Equal(t, 5, config["min-idle-session"])
 	assert.Equal(t, true, config["skip-cert-verify"])
 	assert.Equal(t, true, config["tfo"])
+}
+
+func TestAnyTLSProxy_ToClashConfig_GlobalOverrides(t *testing.T) {
+	proxy := &AnyTLSProxy{
+		BaseProxy: core.BaseProxy{
+			Remark: "test-anytls",
+		},
+		Password: "password",
+	}
+	proxy.Server = "1.2.3.4"
+	proxy.Port = 443
+
+	globalSettings := &config.ProxySetting{
+		UDP:   utils.BoolPtr(true), // Should be ignored
+		TFO:   utils.BoolPtr(true),
+		SCV:   utils.BoolPtr(true),
+		TLS13: utils.BoolPtr(true), // Should be ignored
+	}
+
+	clashConfig, err := proxy.ToClashConfig(globalSettings)
+	assert.NoError(t, err)
+	assert.NotNil(t, clashConfig)
+
+	assert.Nil(t, clashConfig["udp"])
+	assert.Equal(t, true, clashConfig["tfo"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+	assert.Nil(t, clashConfig["tls13"])
 }

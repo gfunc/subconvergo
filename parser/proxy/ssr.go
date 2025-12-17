@@ -140,6 +140,11 @@ func (p *ShadowsocksRParser) ParseClash(config map[string]interface{}) (core.Par
 		Obfs:          obfs,
 		ObfsParam:     obfsParam,
 	}
+	ssr.UDP = utils.GetBoolPtrField(config, "udp")
+	ssr.TFO = utils.GetBoolPtrField(config, "tfo")
+	ssr.SCV = utils.GetBoolPtrField(config, "skip-cert-verify")
+	ssr.TLS13 = utils.GetBoolPtrField(config, "tls13")
+
 	return utils.ToMihomoProxy(ssr)
 }
 

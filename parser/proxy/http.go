@@ -129,6 +129,14 @@ func (p *HttpParser) ParseSurge(content string) (core.ParsableProxy, error) {
 				http.Password = v
 			case "skip-cert-verify":
 				http.SkipCertVerify = v == "true"
+				b := v == "true"
+				http.SCV = &b
+			case "tfo":
+				b := v == "true"
+				http.TFO = &b
+			case "tls13":
+				b := v == "true"
+				http.TLS13 = &b
 			}
 		}
 	}
@@ -158,6 +166,10 @@ func (p *HttpParser) ParseClash(config map[string]interface{}) (core.ParsablePro
 		Tls:            tls,
 		SkipCertVerify: skipCertVerify,
 	}
+	http.SCV = utils.GetBoolPtrField(config, "skip-cert-verify")
+	http.TFO = utils.GetBoolPtrField(config, "tfo")
+	http.TLS13 = utils.GetBoolPtrField(config, "tls13")
+
 	return utils.ToMihomoProxy(http)
 }
 

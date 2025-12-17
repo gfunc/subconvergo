@@ -32,6 +32,7 @@ func (p *HysteriaParser) ParseSingle(line string) (core.ParsableProxy, error) {
 
 	var remark, server, port, password, obfs string
 	var insecure bool
+	var udp, tfo, scv, tls13 *bool
 
 	if idx := strings.LastIndex(line, "#"); idx != -1 {
 		remark = utils.UrlDecode(line[idx+1:])
@@ -46,8 +47,24 @@ func (p *HysteriaParser) ParseSingle(line string) (core.ParsableProxy, error) {
 
 		if params.Get("insecure") == "1" || params.Get("insecure") == "true" {
 			insecure = true
+			b := true
+			scv = &b
 		}
 		params.Del("insecure")
+
+		if v := params.Get("tfo"); v == "1" || v == "true" {
+			b := true
+			tfo = &b
+		}
+		if v := params.Get("udp"); v == "1" || v == "true" {
+			b := true
+			udp = &b
+		}
+		if v := params.Get("tls13"); v == "1" || v == "true" {
+			b := true
+			tls13 = &b
+		}
+
 		obfs = params.Get("obfs")
 		params.Del("obfs")
 	}
@@ -89,6 +106,10 @@ func (p *HysteriaParser) ParseSingle(line string) (core.ParsableProxy, error) {
 			Server: server,
 			Port:   portNum,
 			Group:  core.HYSTERIA_DEFAULT_GROUP,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
+			TLS13:  tls13,
 		},
 		Password:      password,
 		Obfs:          obfs,
@@ -113,6 +134,11 @@ func (p *HysteriaParser) ParseClash(config map[string]interface{}) (core.Parsabl
 
 	obfs := utils.GetStringField(config, "obfs")
 
+	udp := utils.GetBoolPtrField(config, "udp")
+	tfo := utils.GetBoolPtrField(config, "tfo")
+	scv := utils.GetBoolPtrField(config, "skip-cert-verify")
+	tls13 := utils.GetBoolPtrField(config, "tls13")
+
 	params := url.Values{}
 	if up := utils.GetStringField(config, "up"); up != "" {
 		params.Set("up", up)
@@ -125,6 +151,8 @@ func (p *HysteriaParser) ParseClash(config map[string]interface{}) (core.Parsabl
 	}
 	if skipCertVerify := config["skip-cert-verify"]; skipCertVerify == true {
 		params.Set("insecure", "1")
+		b := true
+		scv = &b
 	}
 
 	// Handle ALPN
@@ -146,6 +174,10 @@ func (p *HysteriaParser) ParseClash(config map[string]interface{}) (core.Parsabl
 			Server: server,
 			Port:   port,
 			Remark: name,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
+			TLS13:  tls13,
 		},
 		Password:      password,
 		Obfs:          obfs,

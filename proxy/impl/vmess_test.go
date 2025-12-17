@@ -96,6 +96,45 @@ func TestVMessProxy_ToSingleConfig(t *testing.T) {
 	assert.Equal(t, "serviceName", dataGRPC["path"])
 }
 
+func TestVMessProxy_ToClashConfig_GlobalOverrides(t *testing.T) {
+	proxy := &VMessProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vmess",
+			Remark: "test-vmess",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:    "uuid",
+		AlterID: 64,
+		Network: "ws",
+		Path:    "/path",
+		Host:    "example.com",
+		TLS:     true,
+	}
+
+	// Test with global overrides
+	udp := true
+	tfo := true
+	scv := true
+	tls13 := true
+	opts := &config.ProxySetting{
+		UDP:   &udp,
+		TFO:   &tfo,
+		SCV:   &scv,
+		TLS13: &tls13,
+	}
+
+	clashConfig, err := proxy.ToClashConfig(opts)
+	assert.NoError(t, err)
+	assert.NotNil(t, clashConfig)
+
+	// Verify overrides
+	assert.Equal(t, true, clashConfig["udp"])
+	assert.Equal(t, true, clashConfig["tfo"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+	assert.Equal(t, true, clashConfig["tls13"])
+}
+
 func TestVMessProxy_ToClashConfig(t *testing.T) {
 	proxy := &VMessProxy{
 		BaseProxy: core.BaseProxy{

@@ -8,6 +8,12 @@ type BaseProxy struct {
 	Port    int    `yaml:"port" json:"port"`
 	Group   string `yaml:"group" json:"group"` // group here is not proxy group, but subscription group
 	GroupId int    `yaml:"group_id" json:"group_id"`
+
+	// Common flags (tri-state booleans)
+	UDP   *bool `yaml:"udp,omitempty" json:"udp,omitempty"`
+	TFO   *bool `yaml:"tfo,omitempty" json:"tfo,omitempty"`
+	SCV   *bool `yaml:"skip-cert-verify,omitempty" json:"skip-cert-verify,omitempty"`
+	TLS13 *bool `yaml:"tls13,omitempty" json:"tls13,omitempty"`
 }
 
 func (p *BaseProxy) GetType() string {

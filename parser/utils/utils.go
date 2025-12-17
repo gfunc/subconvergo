@@ -150,6 +150,28 @@ func GetBoolField(m map[string]interface{}, key string) bool {
 	return false
 }
 
+func GetBoolPtrField(m map[string]interface{}, key string) *bool {
+	if v, ok := m[key]; ok {
+		var b bool
+		switch val := v.(type) {
+		case bool:
+			b = val
+		case string:
+			if val == "true" || val == "1" {
+				b = true
+			} else if val == "false" || val == "0" {
+				b = false
+			} else {
+				return nil
+			}
+		default:
+			return nil
+		}
+		return &b
+	}
+	return nil
+}
+
 func ToString(v interface{}) string {
 	if v == nil {
 		return ""

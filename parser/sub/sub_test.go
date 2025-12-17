@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/gfunc/subconvergo/config"
+	"github.com/gfunc/subconvergo/proxy/impl"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,6 +44,42 @@ proxies:
 	vmess := sub.Proxies[1]
 	assert.Equal(t, "vmess", vmess.GetType())
 	assert.Equal(t, "vmess1", vmess.GetRemark())
+}
+
+func TestClashSubscriptionParser_WithFlags(t *testing.T) {
+	content := `
+proxies:
+  - name: "ss-flags"
+    type: ss
+    server: server
+    port: 443
+    cipher: aes-256-gcm
+    password: password
+    udp: true
+    tfo: true
+    skip-cert-verify: true
+    tls13: true
+`
+	parser := &ClashSubscriptionParser{}
+	sub, err := parser.Parse(content)
+	assert.NoError(t, err)
+	assert.NotNil(t, sub)
+	assert.Equal(t, 1, len(sub.Proxies))
+
+	p := sub.Proxies[0]
+
+	// Cast to MihomoProxy to check behavior
+	mp, ok := p.(*impl.MihomoProxy)
+	assert.True(t, ok)
+
+	// Check generated config
+	conf, err := mp.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
+
+	assert.Equal(t, true, conf["udp"])
+	assert.Equal(t, true, conf["tfo"])
+	assert.Equal(t, true, conf["skip-cert-verify"])
+	assert.Equal(t, true, conf["tls13"])
 }
 
 func TestSSDSubscriptionParser(t *testing.T) {

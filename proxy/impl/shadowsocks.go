@@ -54,13 +54,30 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) (map[string]i
 		"password": p.Password,
 	}
 
-	if ext != nil && ext.UDP != nil && *ext.UDP {
+	var udp, tfo, scv *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+	}
+
+	if udp != nil && *udp {
 		options["udp"] = true
 	}
-	if ext != nil && ext.TFO != nil && *ext.TFO {
+	if tfo != nil && *tfo {
 		options["tfo"] = true
 	}
-	if ext != nil && ext.SCV != nil && *ext.SCV {
+	if scv != nil && *scv {
 		options["skip-cert-verify"] = true
 	}
 
@@ -81,7 +98,7 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) (map[string]i
 				opts["path"] = p.PluginOpts["path"]
 				opts["tls"] = p.PluginOpts["tls"]
 				opts["mux"] = p.PluginOpts["mux"]
-				if ext.SCV != nil && *ext.SCV {
+				if scv != nil && *scv {
 					opts["skip-cert-verify"] = true
 				}
 			}
@@ -99,11 +116,32 @@ func (p *ShadowsocksProxy) ToSurgeConfig(ext *config.ProxySetting) (string, erro
 	parts := []string{"ss", p.Server, fmt.Sprintf("%d", p.Port)}
 	parts = append(parts, fmt.Sprintf("encrypt-method=%s", p.EncryptMethod))
 	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
-	if ext.UDP != nil && *ext.UDP {
+
+	var udp, tfo, scv *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+	}
+
+	if udp != nil && *udp {
 		parts = append(parts, "udp-relay=true")
 	}
-	if ext.TFO != nil && *ext.TFO {
+	if tfo != nil && *tfo {
 		parts = append(parts, "tfo=true")
+	}
+	if scv != nil && *scv {
+		parts = append(parts, "skip-cert-verify=true")
 	}
 	if p.Plugin == "obfs-local" || p.Plugin == "simple-obfs" {
 		if mode, ok := p.PluginOpts["obfs"]; ok {
@@ -119,6 +157,33 @@ func (p *ShadowsocksProxy) ToSurgeConfig(ext *config.ProxySetting) (string, erro
 func (p *ShadowsocksProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 	// Format: Name = Shadowsocks,server,port,method,"password"
 	parts := []string{"Shadowsocks", p.Server, fmt.Sprintf("%d", p.Port), p.EncryptMethod, fmt.Sprintf("\"%s\"", p.Password)}
+
+	var udp, tfo, scv *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+	}
+
+	if udp != nil && *udp {
+		parts = append(parts, "udp=true")
+	}
+	if tfo != nil && *tfo {
+		parts = append(parts, "tfo=true")
+	}
+	if scv != nil && *scv {
+		parts = append(parts, "skip-cert-verify=true")
+	}
 
 	if p.Plugin == "simple-obfs" || p.Plugin == "obfs-local" || p.Plugin == "obfs" {
 		if mode, ok := p.PluginOpts["obfs"]; ok {
@@ -143,10 +208,24 @@ func (p *ShadowsocksProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string
 	parts = append(parts, "shadowsocks="+fmt.Sprintf("%s:%d", p.Server, p.Port))
 	parts = append(parts, fmt.Sprintf("method=%s", p.EncryptMethod))
 	parts = append(parts, fmt.Sprintf("password=%s", p.Password))
-	if ext.UDP != nil && *ext.UDP {
+
+	var udp, tfo *bool
+	udp = p.UDP
+	tfo = p.TFO
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+	}
+
+	if udp != nil && *udp {
 		parts = append(parts, "udp-relay=true")
 	}
-	if ext.TFO != nil && *ext.TFO {
+	if tfo != nil && *tfo {
 		parts = append(parts, "fast-open=true")
 	}
 	if p.Plugin == "obfs-local" || p.Plugin == "simple-obfs" {

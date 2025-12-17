@@ -98,6 +98,8 @@ func (p *AnyTLSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 			Server: server,
 			Port:   port,
 			Group:  core.ANYTLS_DEFAULT_GROUP,
+			TFO:    &tfo,
+			SCV:    &allowInsecure,
 		},
 		Password:                 password,
 		SNI:                      sni,
@@ -106,8 +108,6 @@ func (p *AnyTLSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 		IdleSessionCheckInterval: idleSessionCheckInterval,
 		IdleSessionTimeout:       idleSessionTimeout,
 		MinIdleSession:           minIdleSession,
-		TFO:                      tfo,
-		AllowInsecure:            allowInsecure,
 	}
 	return utils.ToMihomoProxy(pObj)
 }

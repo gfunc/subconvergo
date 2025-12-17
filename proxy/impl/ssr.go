@@ -77,22 +77,45 @@ func (p *ShadowsocksRProxy) ToClashConfig(ext *config.ProxySetting) (map[string]
 			"obfs-param":     p.ObfsParam,
 		}
 	}
+
+	if ext != nil {
+		if ext.UDP != nil && *ext.UDP {
+			options["udp"] = true
+		}
+		if ext.TFO != nil && *ext.TFO {
+			options["tfo"] = true
+		}
+		if ext.SCV != nil && *ext.SCV {
+			options["skip-cert-verify"] = true
+		}
+	}
 	return options, nil
 }
 
 func (p *ShadowsocksRProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	if p.Type == "ss" {
-		// Format: Name = ss, server, port, encrypt-method=..., password=...
-		return fmt.Sprintf("%s = ss, %s, %d, encrypt-method=%s, password=%s",
-			p.Remark, p.Server, p.Port, p.EncryptMethod, p.Password), nil
+		parts := []string{"ss", p.Server, fmt.Sprintf("%d", p.Port)}
+		parts = append(parts, fmt.Sprintf("encrypt-method=%s", p.EncryptMethod))
+		parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+		if ext != nil {
+			if ext.UDP != nil && *ext.UDP {
+				parts = append(parts, "udp-relay=true")
+			}
+			if ext.TFO != nil && *ext.TFO {
+				parts = append(parts, "tfo=true")
+			}
+		}
+		return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
 	}
 	return "", fmt.Errorf("SSR not supported in Surge")
 }
 
 func (p *ShadowsocksRProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 	if p.Type == "ss" {
-		// Format: Name = Shadowsocks,server,port,method,"password"
 		parts := []string{"Shadowsocks", p.Server, fmt.Sprintf("%d", p.Port), p.EncryptMethod, fmt.Sprintf("\"%s\"", p.Password)}
+		if ext != nil && ext.UDP != nil && *ext.UDP {
+			parts = append(parts, "udp=true")
+		}
 		return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
 	}
 

@@ -93,6 +93,14 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		return
 	}
 
+	// Handle target aliases
+	switch target {
+	case "quan":
+		target = "quanx"
+	case "clashr":
+		target = "clash"
+	}
+
 	// Use default URL if empty and not in API mode
 	if urlParam == "" {
 		if !config.Global.Common.APIMode {

@@ -289,3 +289,6 @@ CASES = [
         pref_modifier=setup_relay_migration
     ),
 ]
+
+# Extend with flag test cases
+CASES.extend(test_flags.FLAG_TEST_CASES)

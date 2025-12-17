@@ -132,6 +132,18 @@ func (p *Socks5Parser) ParseSurge(content string) (core.ParsableProxy, error) {
 				socks.Password = v
 			case "tls":
 				socks.TLS = v == "true"
+			case "udp-relay":
+				b := v == "true"
+				socks.UDP = &b
+			case "tfo":
+				b := v == "true"
+				socks.TFO = &b
+			case "skip-cert-verify":
+				b := v == "true"
+				socks.SCV = &b
+			case "tls13":
+				b := v == "true"
+				socks.TLS13 = &b
 			}
 		}
 	}
@@ -159,6 +171,11 @@ func (p *Socks5Parser) ParseClash(config map[string]interface{}) (core.ParsableP
 		Password: password,
 		TLS:      tls,
 	}
+	socks.UDP = utils.GetBoolPtrField(config, "udp")
+	socks.TFO = utils.GetBoolPtrField(config, "tfo")
+	socks.SCV = utils.GetBoolPtrField(config, "skip-cert-verify")
+	socks.TLS13 = utils.GetBoolPtrField(config, "tls13")
+
 	return utils.ToMihomoProxy(socks)
 }
 

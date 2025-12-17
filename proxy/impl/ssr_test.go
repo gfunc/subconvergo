@@ -7,6 +7,7 @@ import (
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -116,4 +117,34 @@ func TestShadowsocksRProxy_ToClashConfig(t *testing.T) {
 	assert.Equal(t, "plain", clashConfig["obfs"])
 	assert.Equal(t, "param1", clashConfig["protocol-param"])
 	assert.Equal(t, "param2", clashConfig["obfs-param"])
+}
+
+func TestShadowsocksRProxy_ToClashConfig_GlobalOverrides(t *testing.T) {
+	proxy := &ShadowsocksRProxy{
+		BaseProxy: core.BaseProxy{
+			Remark: "test-ssr",
+			Server: "1.2.3.4",
+			Port:   8388,
+		},
+		Password:      "password",
+		EncryptMethod: "aes-256-cfb",
+		Protocol:      "origin",
+		Obfs:          "plain",
+		ProtocolParam: "param1",
+		ObfsParam:     "param2",
+	}
+
+	globalSettings := &config.ProxySetting{
+		UDP: utils.BoolPtr(true),
+		TFO: utils.BoolPtr(true),
+		SCV: utils.BoolPtr(true),
+	}
+
+	clashConfig, err := proxy.ToClashConfig(globalSettings)
+	assert.NoError(t, err)
+	assert.NotNil(t, clashConfig)
+
+	assert.Equal(t, true, clashConfig["udp"])
+	assert.Equal(t, true, clashConfig["tfo"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
 }

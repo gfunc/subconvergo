@@ -39,6 +39,41 @@ func (p *Socks5Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]interf
 		"password": p.Password,
 		"tls":      p.TLS,
 	}
+
+	var udp, tfo, scv, tls13 *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
+		}
+	}
+
+	if udp != nil && *udp {
+		options["udp"] = true
+	}
+	if tfo != nil && *tfo {
+		options["tfo"] = true
+	}
+	if scv != nil && *scv {
+		options["skip-cert-verify"] = true
+	}
+	if tls13 != nil && *tls13 {
+		options["tls13"] = true
+	}
+
 	return options, nil
 }
 
@@ -54,6 +89,41 @@ func (p *Socks5Proxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	if p.Password != "" {
 		line += fmt.Sprintf(", password=%s", p.Password)
 	}
+
+	var udp, tfo, scv, tls13 *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
+		}
+	}
+
+	if udp != nil && *udp {
+		line += ", udp-relay=true"
+	}
+	if tfo != nil && *tfo {
+		line += ", tfo=true"
+	}
+	if scv != nil && *scv {
+		line += ", skip-cert-verify=true"
+	}
+	if tls13 != nil && *tls13 {
+		line += ", tls13=true"
+	}
+
 	return line, nil
 }
 

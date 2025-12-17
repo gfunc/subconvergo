@@ -31,8 +31,8 @@ func TestAnyTLSParser_Parse(t *testing.T) {
 	assert.Equal(t, 30, anytlsProxy.IdleSessionCheckInterval)
 	assert.Equal(t, 60, anytlsProxy.IdleSessionTimeout)
 	assert.Equal(t, 5, anytlsProxy.MinIdleSession)
-	assert.True(t, anytlsProxy.TFO)
-	assert.True(t, anytlsProxy.AllowInsecure)
+	assert.True(t, *anytlsProxy.TFO)
+	assert.True(t, *anytlsProxy.SCV)
 
 	// Test case 2: Minimal link
 	link = "anytls://password@1.2.3.4:443"

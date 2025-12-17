@@ -104,3 +104,69 @@ func TestShadowsocksProxy_ToClashConfig(t *testing.T) {
 	assert.Equal(t, "password", clashConfig["password"])
 	assert.Equal(t, "aes-256-gcm", clashConfig["cipher"])
 }
+
+func TestShadowsocksProxy_ToSurgeConfig(t *testing.T) {
+	proxy := &ShadowsocksProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "ss",
+			Remark: "test-ss",
+			Server: "1.2.3.4",
+			Port:   8388,
+		},
+		Password:      "password",
+		EncryptMethod: "aes-256-gcm",
+	}
+
+	// Test default
+	conf, err := proxy.ToSurgeConfig(nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "test-ss = ss, 1.2.3.4, 8388, encrypt-method=aes-256-gcm, password=password", conf)
+
+	// Test with global overrides
+	udp := true
+	tfo := true
+	scv := true
+	opts := &config.ProxySetting{
+		UDP: &udp,
+		TFO: &tfo,
+		SCV: &scv,
+	}
+	conf, err = proxy.ToSurgeConfig(opts)
+	assert.NoError(t, err)
+	assert.Contains(t, conf, "udp-relay=true")
+	assert.Contains(t, conf, "tfo=true")
+	assert.Contains(t, conf, "skip-cert-verify=true")
+}
+
+func TestShadowsocksProxy_ToLoonConfig(t *testing.T) {
+	proxy := &ShadowsocksProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "ss",
+			Remark: "test-ss",
+			Server: "1.2.3.4",
+			Port:   8388,
+		},
+		Password:      "password",
+		EncryptMethod: "aes-256-gcm",
+	}
+
+	// Test default
+	conf, err := proxy.ToLoonConfig(nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "test-ss = Shadowsocks,1.2.3.4,8388,aes-256-gcm,\"password\"", conf)
+
+	// Test with global overrides
+	udp := true
+	tfo := true
+	scv := true
+	opts := &config.ProxySetting{
+		UDP: &udp,
+		TFO: &tfo,
+		SCV: &scv,
+	}
+	conf, err = proxy.ToLoonConfig(opts)
+	assert.NoError(t, err)
+	assert.Contains(t, conf, "udp=true")
+	assert.Contains(t, conf, "tfo=true")
+	assert.Contains(t, conf, "skip-cert-verify=true")
+}

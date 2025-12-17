@@ -66,6 +66,18 @@ func (p *WireGuardParser) ParseSurge(content string) (core.ParsableProxy, error)
 					wg.Server = host
 					wg.Port, _ = strconv.Atoi(portStr)
 				}
+			case "udp-relay":
+				b := v == "true"
+				wg.UDP = &b
+			case "tfo":
+				b := v == "true"
+				wg.TFO = &b
+			case "skip-cert-verify":
+				b := v == "true"
+				wg.SCV = &b
+			case "tls13":
+				b := v == "true"
+				wg.TLS13 = &b
 			}
 		}
 	}
@@ -108,6 +120,10 @@ func (p *WireGuardParser) ParseClash(config map[string]interface{}) (core.Parsab
 		Mtu:          utils.GetIntField(config, "mtu"),
 		Udp:          utils.GetBoolField(config, "udp"),
 	}
+	wg.UDP = utils.GetBoolPtrField(config, "udp")
+	wg.TFO = utils.GetBoolPtrField(config, "tfo")
+	wg.SCV = utils.GetBoolPtrField(config, "skip-cert-verify")
+	wg.TLS13 = utils.GetBoolPtrField(config, "tls13")
 
 	if dns, ok := config["dns"].([]interface{}); ok {
 		for _, d := range dns {

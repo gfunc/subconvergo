@@ -72,6 +72,45 @@ func TestVLESSProxy_ToSingleConfig(t *testing.T) {
 	assert.NotContains(t, linkGRPC, "path=")
 }
 
+func TestVLESSProxy_ToClashConfig_GlobalOverrides(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:    "uuid",
+		Network: "ws",
+		Path:    "/path",
+		Host:    "example.com",
+		TLS:     true,
+		SNI:     "example.com",
+	}
+
+	// Test with global overrides
+	udp := true
+	tfo := true
+	scv := true
+	tls13 := true
+	opts := &config.ProxySetting{
+		UDP:   &udp,
+		TFO:   &tfo,
+		SCV:   &scv,
+		TLS13: &tls13,
+	}
+
+	clashConfig, err := proxy.ToClashConfig(opts)
+	assert.NoError(t, err)
+	assert.NotNil(t, clashConfig)
+
+	// Verify overrides
+	assert.Equal(t, true, clashConfig["udp"])
+	assert.Equal(t, true, clashConfig["tfo"])
+	assert.Equal(t, true, clashConfig["skip-cert-verify"])
+	assert.Equal(t, true, clashConfig["tls13"])
+}
+
 func TestVLESSProxy_ToClashConfig(t *testing.T) {
 	proxy := &VLESSProxy{
 		BaseProxy: core.BaseProxy{

@@ -67,19 +67,38 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		"network": p.Network,
 	}
 
+	var udp, tfo, scv, tls13 *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
 	if ext != nil {
-		if ext.UDP != nil && *ext.UDP {
-			options["udp"] = true
+		if ext.UDP != nil {
+			udp = ext.UDP
 		}
 		if ext.SCV != nil {
-			options["skip-cert-verify"] = *ext.SCV
+			scv = ext.SCV
 		}
-		if ext.TLS13 != nil && *ext.TLS13 {
-			options["tls13"] = true
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
 		}
 		if ext.TFO != nil {
-			options["tfo"] = *ext.TFO
+			tfo = ext.TFO
 		}
+	}
+
+	if udp != nil && *udp {
+		options["udp"] = true
+	}
+	if scv != nil && *scv {
+		options["skip-cert-verify"] = true
+	}
+	if tls13 != nil && *tls13 {
+		options["tls13"] = true
+	}
+	if tfo != nil && *tfo {
+		options["tfo"] = true
 	}
 
 	if p.TLS {
@@ -183,19 +202,38 @@ func (p *VMessProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 		}
 	}
 
+	var udp, tfo, scv, tls13 *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
 	if ext != nil {
-		if ext.TFO != nil && *ext.TFO {
-			parts = append(parts, "tfo=true")
+		if ext.TFO != nil {
+			tfo = ext.TFO
 		}
-		if ext.UDP != nil && *ext.UDP {
-			parts = append(parts, "udp-relay=true")
+		if ext.UDP != nil {
+			udp = ext.UDP
 		}
-		if ext.TLS13 != nil && *ext.TLS13 {
-			parts = append(parts, "tls13=true")
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
 		}
-		if ext.SCV != nil && *ext.SCV {
-			parts = append(parts, "skip-cert-verify=true")
+		if ext.SCV != nil {
+			scv = ext.SCV
 		}
+	}
+
+	if tfo != nil && *tfo {
+		parts = append(parts, "tfo=true")
+	}
+	if udp != nil && *udp {
+		parts = append(parts, "udp-relay=true")
+	}
+	if tls13 != nil && *tls13 {
+		parts = append(parts, "tls13=true")
+	}
+	if scv != nil && *scv {
+		parts = append(parts, "skip-cert-verify=true")
 	}
 
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil

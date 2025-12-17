@@ -68,6 +68,21 @@ func (m *MihomoProxy) ToClashConfig(opts *config.ProxySetting) (map[string]inter
 
 		// Ensure name matches remark
 		merged["name"] = m.GetRemark()
+
+		// Apply global overrides
+		if opts.UDP != nil {
+			merged["udp"] = *opts.UDP
+		}
+		if opts.TFO != nil {
+			merged["tfo"] = *opts.TFO
+		}
+		if opts.SCV != nil {
+			merged["skip-cert-verify"] = *opts.SCV
+		}
+		if opts.TLS13 != nil {
+			merged["tls13"] = *opts.TLS13
+		}
+
 		return merged, nil
 	}
 

@@ -73,8 +73,43 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		}
 	}
 
+	var udp, tfo, scv, tls13 *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
 	if p.AllowInsecure {
+		b := true
+		scv = &b
+	}
+
+	if ext != nil {
+		if ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if ext.SCV != nil {
+			scv = ext.SCV
+		}
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
+		}
+	}
+
+	if scv != nil && *scv {
 		options["skip-cert-verify"] = true
+	}
+	if udp != nil && *udp {
+		options["udp"] = true
+	}
+	if tfo != nil && *tfo {
+		options["tfo"] = true
+	}
+	if tls13 != nil && *tls13 {
+		options["tls13"] = true
 	}
 
 	switch p.Network {
