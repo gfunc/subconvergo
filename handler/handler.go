@@ -623,26 +623,57 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 	// Try YAML -> TOML -> INI using the Settings struct to leverage existing tags
 	var extSettings config.Settings
 	if err := yaml.Unmarshal(data, &extSettings); err == nil {
+		groups := extSettings.ProxyGroups.CustomProxyGroups
+		if len(extSettings.CustomGroups) > 0 {
+			groups = append(groups, extSettings.CustomGroups...)
+		}
+
+		rulesets := extSettings.Rulesets.Rulesets
+		if len(extSettings.CustomRulesets) > 0 {
+			rulesets = append(rulesets, extSettings.CustomRulesets...)
+		}
+
 		return &ExternalConfig{
-			ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
-			Rulesets:    extSettings.Rulesets.Rulesets,
+			ProxyGroups: groups,
+			Rulesets:    rulesets,
 			BasePath:    extSettings.Common.BasePath,
 		}, nil
 	}
 
 	if _, err := toml.Decode(string(data), &extSettings); err == nil {
+		groups := extSettings.ProxyGroups.CustomProxyGroups
+		if len(extSettings.CustomGroups) > 0 {
+			groups = append(groups, extSettings.CustomGroups...)
+		}
+
+		rulesets := extSettings.Rulesets.Rulesets
+		if len(extSettings.CustomRulesets) > 0 {
+			rulesets = append(rulesets, extSettings.CustomRulesets...)
+		}
+
 		return &ExternalConfig{
-			ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
-			Rulesets:    extSettings.Rulesets.Rulesets,
+			ProxyGroups: groups,
+			Rulesets:    rulesets,
 			BasePath:    extSettings.Common.BasePath,
 		}, nil
 	}
 
 	if cfg, err := ini.Load(data); err == nil {
 		if err := cfg.MapTo(&extSettings); err == nil {
+			// Manually parse custom_proxy_group and ruleset if MapTo didn't pick them up
+			// (e.g. due to struct tags or section name mismatches)
+
+			if len(extSettings.CustomGroups) == 0 && cfg.HasSection("custom_proxy_group") {
+				extSettings.CustomGroups = parseINICustomGroups(cfg)
+			}
+
+			if len(extSettings.CustomRulesets) == 0 && cfg.HasSection("ruleset") {
+				extSettings.CustomRulesets = parseINIRulesets(cfg)
+			}
+
 			return &ExternalConfig{
-				ProxyGroups: extSettings.ProxyGroups.CustomProxyGroups,
-				Rulesets:    extSettings.Rulesets.Rulesets,
+				ProxyGroups: extSettings.CustomGroups,
+				Rulesets:    extSettings.CustomRulesets,
 				BasePath:    extSettings.Common.BasePath,
 			}, nil
 		}
@@ -1141,3 +1172,92 @@ func fileExists(path string) bool {
 }
 
 // applyFilters applies include/exclude filters to proxies
+
+func parseINICustomGroups(cfg *ini.File) []config.ProxyGroupConfig {
+	var groups []config.ProxyGroupConfig
+	if section, err := cfg.GetSection("custom_proxy_group"); err == nil {
+		for _, key := range section.Keys() {
+			name := key.Name()
+			value := key.String()
+
+			// Format: type,content
+			parts := strings.SplitN(value, ",", 2)
+			if len(parts) >= 1 {
+				groupType := parts[0]
+				content := ""
+				if len(parts) > 1 {
+					content = parts[1]
+				}
+
+				// Parse content for special flags if needed, but for now store as is
+				// The generator might need to parse the content string later
+				// For now, we map it to the struct fields as best as we can
+
+				// Note: The current config.ProxyGroupConfig struct expects parsed fields (Proxies, Url, etc.)
+				// But here we have a raw content string.
+				// We might need to store the raw content or parse it here.
+				// Given the complexity of parsing (regex, etc.), we might need a parser helper.
+				// However, looking at config.go, ProxyGroupConfig has fields like `Proxies []string`.
+
+				// Let's do a simple split by comma for proxies for now,
+				// but keep in mind that some parts might be regex or special flags.
+
+				// Actually, subconverter's INI format for groups is:
+				// GroupName = select,Node1,Node2,!!GROUPID=0
+
+				// So we have:
+				// Name: GroupName
+				// Type: select
+				// Proxies: Node1, Node2, !!GROUPID=0
+
+				proxies := []string{}
+				if content != "" {
+					// Split by comma, but be careful about commas inside regex?
+					// Subconverter usually uses comma as delimiter.
+					proxies = strings.Split(content, ",")
+				}
+
+				groups = append(groups, config.ProxyGroupConfig{
+					Name:    name,
+					Type:    groupType,
+					Proxies: proxies,
+				})
+			}
+		}
+	}
+	return groups
+}
+
+func parseINIRulesets(cfg *ini.File) []config.RulesetConfig {
+	var rulesets []config.RulesetConfig
+	if section, err := cfg.GetSection("ruleset"); err == nil {
+		for _, key := range section.Keys() {
+			name := key.Name()
+			value := key.String()
+
+			// Skip config keys
+			if name == "enabled" || name == "overwrite_original_rules" || name == "update_ruleset_on_request" {
+				continue
+			}
+
+			// Format: name = url/path
+			// Or: name = []GEOIP,CN
+
+			rc := config.RulesetConfig{
+				Group: name,
+			}
+
+			// Simple heuristic: if it looks like a rule (starts with []) or has comma (and not a URL with comma?), treat as Rule
+			// But URLs can have commas? Unlikely in this context.
+			// Subconverter treats [] as inline rule.
+			if strings.HasPrefix(value, "[]") {
+				rc.Rule = value
+			} else {
+				rc.Ruleset = value
+			}
+
+			rulesets = append(rulesets, rc)
+		}
+	}
+	return rulesets
+}

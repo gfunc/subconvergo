@@ -8,6 +8,7 @@ import subprocess
 from . import infra
 from . import test_standalone
 from . import test_comparison
+from . import test_external_config
 
 def main():
     parser = argparse.ArgumentParser(description="Run smoke tests")
@@ -17,7 +18,18 @@ def main():
     parser.add_argument("--no-fail-fast", dest="fail_fast", action="store_false", help="Don't stop on first failure")
     args = parser.parse_args()
 
-    all_cases = test_standalone.CASES + test_comparison.CASES
+    # Convert functional tests to StandaloneTestCase
+    external_cases = [
+        infra.StandaloneTestCase(
+            name=func.__name__,
+            pref_modifier=setup,
+            query=func,
+            validate=lambda x: {"status": "passed"} # Validation is inside the test function
+        )
+        for setup, func in test_external_config.CASES
+    ]
+
+    all_cases = test_standalone.CASES + test_comparison.CASES + external_cases
 
     if args.test:
         all_cases = [c for c in all_cases if args.test in c.name]
