@@ -1,0 +1,9 @@
+common:
+  clash_rule_base: base/rules_base.tpl
+
+rulesets:
+  enabled: true
+  overwrite_original_rules: false
+  rulesets:
+    - group: DIRECT
+      ruleset: "[]DOMAIN,example.com"

@@ -676,11 +676,11 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 			// Manually parse custom_proxy_group and ruleset if MapTo didn't pick them up
 			// (e.g. due to struct tags or section name mismatches)
 
-			if len(extSettings.CustomGroups) == 0 && cfg.HasSection("custom_proxy_group") {
+			if len(extSettings.CustomGroups) == 0 {
 				extSettings.CustomGroups = parseINICustomGroups(cfg)
 			}
 
-			if len(extSettings.CustomRulesets) == 0 && cfg.HasSection("rulesets") {
+			if len(extSettings.CustomRulesets) == 0 {
 				extSettings.CustomRulesets = parseINIRulesets(cfg)
 			}
 
@@ -1207,6 +1207,58 @@ func fileExists(path string) bool {
 
 func parseINICustomGroups(cfg *ini.File) []config.ProxyGroupConfig {
 	var groups []config.ProxyGroupConfig
+
+	// Helper to parse a single line
+	var parseLine func(value string)
+	parseLine = func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || strings.HasPrefix(value, ";") || strings.HasPrefix(value, "#") {
+			return
+		}
+
+		if strings.HasPrefix(value, "!!import:") {
+			path := strings.TrimPrefix(value, "!!import:")
+			fullPath := path
+			if !filepath.IsAbs(path) {
+				candidate := filepath.Join(config.Global.Common.BasePath, path)
+				if fileExists(candidate) {
+					fullPath = candidate
+				} else {
+					fullPath = path
+				}
+			}
+
+			content, err := os.ReadFile(fullPath)
+			if err != nil {
+				log.Printf("[parseINICustomGroups] failed to import %s: %v", fullPath, err)
+				return
+			}
+
+			lines := strings.Split(string(content), "\n")
+			for _, line := range lines {
+				parseLine(line)
+			}
+			return
+		}
+
+		// Format: Name`Type`Rule...
+		if strings.Contains(value, "`") {
+			parts := strings.Split(value, "`")
+			if len(parts) >= 2 {
+				name := parts[0]
+				groupType := parts[1]
+				proxies := parts[2:]
+
+				groups = append(groups, config.ProxyGroupConfig{
+					Name:    name,
+					Type:    groupType,
+					Proxies: proxies,
+				})
+			}
+		}
+	}
+
+	// 1. Check [custom_proxy_group] section (Key is Name, Value is Type,Proxies)
 	if section, err := cfg.GetSection("custom_proxy_group"); err == nil {
 		for _, key := range section.Keys() {
 			name := key.Name()
@@ -1221,31 +1273,8 @@ func parseINICustomGroups(cfg *ini.File) []config.ProxyGroupConfig {
 					content = parts[1]
 				}
 
-				// Parse content for special flags if needed, but for now store as is
-				// The generator might need to parse the content string later
-				// For now, we map it to the struct fields as best as we can
-
-				// Note: The current config.ProxyGroupConfig struct expects parsed fields (Proxies, Url, etc.)
-				// But here we have a raw content string.
-				// We might need to store the raw content or parse it here.
-				// Given the complexity of parsing (regex, etc.), we might need a parser helper.
-				// However, looking at config.go, ProxyGroupConfig has fields like `Proxies []string`.
-
-				// Let's do a simple split by comma for proxies for now,
-				// but keep in mind that some parts might be regex or special flags.
-
-				// Actually, subconverter's INI format for groups is:
-				// GroupName = select,Node1,Node2,!!GROUPID=0
-
-				// So we have:
-				// Name: GroupName
-				// Type: select
-				// Proxies: Node1, Node2, !!GROUPID=0
-
 				proxies := []string{}
 				if content != "" {
-					// Split by comma, but be careful about commas inside regex?
-					// Subconverter usually uses comma as delimiter.
 					proxies = strings.Split(content, ",")
 				}
 
@@ -1257,68 +1286,113 @@ func parseINICustomGroups(cfg *ini.File) []config.ProxyGroupConfig {
 			}
 		}
 	}
+
+	// 2. Check custom_proxy_group keys in [proxy_groups] and [common]
+	for _, secName := range []string{"proxy_groups", "common"} {
+		if section, err := cfg.GetSection(secName); err == nil {
+			if key, err := section.GetKey("custom_proxy_group"); err == nil {
+				for _, value := range key.ValueWithShadows() {
+					parseLine(value)
+				}
+			}
+		}
+	}
+
 	return groups
 }
 
 func parseINIRulesets(cfg *ini.File) []config.RulesetConfig {
 	var rulesets []config.RulesetConfig
+
+	var parseLine func(value string)
+	parseLine = func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || strings.HasPrefix(value, ";") || strings.HasPrefix(value, "#") {
+			return
+		}
+
+		if strings.HasPrefix(value, "!!import:") {
+			path := strings.TrimPrefix(value, "!!import:")
+			fullPath := path
+			if !filepath.IsAbs(path) {
+				// Try resolving relative to BasePath
+				candidate := filepath.Join(config.Global.Common.BasePath, path)
+				if fileExists(candidate) {
+					fullPath = candidate
+				} else {
+					// Fallback to relative to CWD
+					fullPath = path
+				}
+			}
+
+			content, err := os.ReadFile(fullPath)
+			if err != nil {
+				log.Printf("[parseINIRulesets] failed to import %s: %v", fullPath, err)
+				return
+			}
+
+			lines := strings.Split(string(content), "\n")
+			for _, line := range lines {
+				parseLine(line)
+			}
+			return
+		}
+
+		parts := strings.Split(value, ",")
+		if len(parts) < 2 {
+			// Check if it's a single rule line (e.g. MATCH,DIRECT)
+			// If it is, treat it as inline rule
+			if isRuleType(strings.ToUpper(parts[0])) {
+				rulesets = append(rulesets, config.RulesetConfig{
+					Rule: "[]" + value,
+				})
+			}
+			return
+		}
+
+		// Check for implicit inline rule (starts with rule type)
+		firstPart := strings.ToUpper(strings.TrimSpace(parts[0]))
+		if isRuleType(firstPart) {
+			rulesets = append(rulesets, config.RulesetConfig{
+				Rule: "[]" + value,
+			})
+			return
+		}
+
+		rc := config.RulesetConfig{
+			Group: strings.TrimSpace(parts[0]),
+		}
+
+		// Check if last part is an integer (interval)
+		var ruleParts []string
+		if len(parts) > 2 {
+			lastPart := strings.TrimSpace(parts[len(parts)-1])
+			if interval, err := strconv.Atoi(lastPart); err == nil {
+				rc.Interval = interval
+				ruleParts = parts[1 : len(parts)-1]
+			} else {
+				ruleParts = parts[1:]
+			}
+		} else {
+			ruleParts = parts[1:]
+		}
+
+		ruleContent := strings.Join(ruleParts, ",")
+		ruleContent = strings.TrimSpace(ruleContent)
+
+		if strings.HasPrefix(ruleContent, "[]") {
+			rc.Rule = ruleContent
+		} else {
+			rc.Ruleset = ruleContent
+		}
+
+		rulesets = append(rulesets, rc)
+	}
+
 	if section, err := cfg.GetSection("rulesets"); err == nil {
-		// Use GetKey to handle shadow keys (multiple keys with same name)
 		if key, err := section.GetKey("ruleset"); err == nil {
 			for _, value := range key.ValueWithShadows() {
-				// Format: Group Name,Rule Path[,Interval]
-				// Or: Group Name,[]Rule
-				// Or: !!import:path
-
-				if strings.HasPrefix(value, "!!import:") {
-					rulesets = append(rulesets, config.RulesetConfig{
-						Import: strings.TrimPrefix(value, "!!import:"),
-					})
-					continue
-				}
-
-				parts := strings.Split(value, ",")
-				if len(parts) < 2 {
-					continue
-				}
-
-				// Check for implicit inline rule (starts with rule type)
-				firstPart := strings.ToUpper(strings.TrimSpace(parts[0]))
-				if isRuleType(firstPart) {
-					rulesets = append(rulesets, config.RulesetConfig{
-						Rule: "[]" + value,
-					})
-					continue
-				}
-
-				rc := config.RulesetConfig{
-					Group: strings.TrimSpace(parts[0]),
-				}
-
-				// Check if last part is an integer (interval)
-				var ruleParts []string
-				if len(parts) > 2 {
-					lastPart := strings.TrimSpace(parts[len(parts)-1])
-					if interval, err := strconv.Atoi(lastPart); err == nil {
-						rc.Interval = interval
-						ruleParts = parts[1 : len(parts)-1]
-					} else {
-						ruleParts = parts[1:]
-					}
-				} else {
-					ruleParts = parts[1:]
-				}
-
-				ruleContent := strings.Join(ruleParts, ",")
-				ruleContent = strings.TrimSpace(ruleContent)
-
-				if strings.HasPrefix(ruleContent, "[]") {
-					rc.Rule = ruleContent
-				} else {
-					rc.Ruleset = ruleContent
-				}
-
-				rulesets = append(rulesets, rc)
+				parseLine(value)
 			}
 		}
 	}

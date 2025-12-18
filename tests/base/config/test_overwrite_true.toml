@@ -1,0 +1,10 @@
+[common]
+clash_rule_base = "base/rules_base.tpl"
+
+[ruleset]
+enabled = true
+overwrite_original_rules = true
+
+[[rulesets]]
+group = "DIRECT"
+ruleset = "[]DOMAIN,example.com"

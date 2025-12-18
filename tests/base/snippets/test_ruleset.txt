@@ -1,0 +1,1 @@
+DOMAIN-SUFFIX,imported.example.com,DIRECT

@@ -112,12 +112,90 @@ def test_overwrite_original_rules_false():
     assert "DOMAIN-SUFFIX,google.com,Proxy" in rules, "Original rule not found but should be preserved"
     print("test_overwrite_original_rules_false passed")
 
+def test_overwrite_original_rules_true_toml():
+    """
+    Test overwrite_original_rules=true with TOML.
+    """
+    config_path = "config/test_overwrite_true.toml"
+    resp = infra.api_get_subconvergo(
+        "/sub", 
+        params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt",
+            "config": config_path
+        }
+    )
+    assert resp.status_code == 200
+    data = yaml.safe_load(resp.text)
+    rules = data.get("rules", [])
+    
+    # New rule must be present
+    assert "DOMAIN,example.com,DIRECT" in rules, f"New rule not found in {rules}"
+    
+    # Original rules must NOT be present
+    assert "DOMAIN-SUFFIX,google.com,Proxy" not in rules, "Original rule found but should be overwritten"
+    print("test_overwrite_original_rules_true_toml passed")
+
+def test_overwrite_original_rules_false_yaml():
+    """
+    Test overwrite_original_rules=false with YAML.
+    """
+    config_path = "config/test_overwrite_false.yaml"
+    resp = infra.api_get_subconvergo(
+        "/sub", 
+        params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt",
+            "config": config_path
+        }
+    )
+    assert resp.status_code == 200
+    data = yaml.safe_load(resp.text)
+    rules = data.get("rules", [])
+    
+    # New rule must be present
+    assert "DOMAIN,example.com,DIRECT" in rules, f"New rule not found in {rules}"
+    
+    # Original rules must ALSO be present
+    assert "DOMAIN-SUFFIX,google.com,Proxy" in rules, "Original rule not found but should be preserved"
+    print("test_overwrite_original_rules_false_yaml passed")
+
+def test_import_keyword():
+    """
+    Test !!import: keyword in config.
+    """
+    config_path = "config/test_import.ini"
+    resp = infra.api_get_subconvergo(
+        "/sub", 
+        params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt",
+            "config": config_path
+        }
+    )
+    assert resp.status_code == 200
+    data = yaml.safe_load(resp.text)
+    
+    # Verify imported ruleset
+    rules = data.get("rules", [])
+    assert "DOMAIN-SUFFIX,imported.example.com,DIRECT" in rules, f"Imported rule not found in {rules}"
+    
+    # Verify imported proxy group
+    proxy_groups = data.get("proxy-groups", [])
+    group_names = [g["name"] for g in proxy_groups]
+    assert "ImportedGroup" in group_names, f"Imported group not found in {group_names}"
+    
+    print("test_import_keyword passed")
+
 CASES = [
     (setup_external_config, test_external_config_override),
     (setup_external_config, test_external_config_override_yaml),
     (setup_external_config, test_external_config_override_toml),
     (setup_external_config, test_overwrite_original_rules_true),
     (setup_external_config, test_overwrite_original_rules_false),
+    (setup_external_config, test_overwrite_original_rules_true_toml),
+    (setup_external_config, test_overwrite_original_rules_false_yaml),
+    (setup_external_config, test_import_keyword),
 ]
 
 if __name__ == "__main__":

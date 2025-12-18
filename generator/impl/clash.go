@@ -338,6 +338,12 @@ func generateClashRules(rulesets []config.RulesetConfig) []string {
 	hasFinalRule := false
 
 	for _, ruleset := range rulesets {
+		// Handle inline rules passed via "ruleset" field (common in TOML/YAML/JSON)
+		if ruleset.Rule == "" && strings.HasPrefix(ruleset.Ruleset, "[]") {
+			ruleset.Rule = ruleset.Ruleset
+			ruleset.Ruleset = ""
+		}
+
 		// Check if it's a direct rule (not a ruleset)
 		if ruleset.Rule != "" {
 			// Process special rule formats

@@ -134,7 +134,7 @@ type RulesetSection struct {
 	Enabled                bool            `yaml:"enabled" toml:"enabled" ini:"enabled"`
 	OverwriteOriginalRules bool            `yaml:"overwrite_original_rules" toml:"overwrite_original_rules" ini:"overwrite_original_rules"`
 	UpdateRulesetOnRequest bool            `yaml:"update_ruleset_on_request" toml:"update_ruleset_on_request" ini:"update_ruleset_on_request"`
-	Rulesets               []RulesetConfig `yaml:"rulesets" toml:"rulesets" ini:"ruleset,,,allowshadow"`
+	Rulesets               []RulesetConfig `yaml:"rulesets" toml:"rulesets" ini:"-"`
 }
 
 // RulesetConfig represents a ruleset configuration
@@ -149,7 +149,7 @@ type RulesetConfig struct {
 
 // ProxyGroupSection represents the [proxy_groups] section
 type ProxyGroupSection struct {
-	CustomProxyGroups []ProxyGroupConfig `yaml:"custom_proxy_group" toml:"custom_groups" ini:"custom_proxy_group,,,allowshadow"`
+	CustomProxyGroups []ProxyGroupConfig `yaml:"custom_proxy_group" toml:"custom_groups" ini:"-"`
 }
 
 // ProxyGroupConfig represents a proxy group configuration
