@@ -31,6 +31,8 @@ func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	line = line[8:]
 
 	var remark, uuid, server, port, network, flow, security, sni, path, host, group string
+	var fingerprint, publicKey, shortID, grpcMode, grpcServiceName string
+	var alpn []string
 	var allowInsecure bool
 	var udp, tfo, scv, tls13 *bool
 
@@ -75,14 +77,26 @@ func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 
 		group = utils.UrlDecode(params.Get("group"))
 
+		if v := params.Get("alpn"); v != "" {
+			alpn = strings.Split(v, ",")
+		}
+
+		fingerprint = params.Get("fp")
+		publicKey = params.Get("pbk")
+		shortID = params.Get("sid")
+		grpcMode = params.Get("mode")
+		grpcServiceName = params.Get("serviceName")
+
 		switch network {
 		case "ws":
 			path = params.Get("path")
 			host = params.Get("host")
 		case "grpc":
-			path = params.Get("serviceName")
-			if path == "" {
-				path = params.Get("path")
+			if grpcServiceName == "" {
+				grpcServiceName = params.Get("serviceName")
+			}
+			if grpcServiceName == "" {
+				grpcServiceName = params.Get("path")
 			}
 		case "http", "h2":
 			path = params.Get("path")
@@ -134,14 +148,20 @@ func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 			SCV:    scv,
 			TLS13:  tls13,
 		},
-		UUID:          uuid,
-		Network:       network,
-		Path:          path,
-		Host:          host,
-		TLS:           security == "tls" || security == "reality",
-		AllowInsecure: allowInsecure,
-		Flow:          flow,
-		SNI:           sni,
+		UUID:            uuid,
+		Network:         network,
+		Path:            path,
+		Host:            host,
+		TLS:             security == "tls" || security == "xtls" || security == "reality",
+		AllowInsecure:   allowInsecure,
+		Flow:            flow,
+		SNI:             sni,
+		Alpn:            alpn,
+		Fingerprint:     fingerprint,
+		PublicKey:       publicKey,
+		ShortID:         shortID,
+		GRPCMode:        grpcMode,
+		GRPCServiceName: grpcServiceName,
 	}
 	return utils.ToMihomoProxy(pObj)
 }

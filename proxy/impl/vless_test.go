@@ -21,6 +21,7 @@ func TestVLESSProxy_ToSingleConfig(t *testing.T) {
 		Path:    "/path",
 		Host:    "example.com",
 		TLS:     true,
+		SNI:     "example.com",
 	}
 
 	link, err := proxy.ToSingleConfig(&config.ProxySetting{})
@@ -145,4 +146,83 @@ func TestVLESSProxy_ToClashConfig(t *testing.T) {
 	headers, ok := wsOpts["headers"].(map[string]string)
 	assert.True(t, ok)
 	assert.Equal(t, "example.com", headers["Host"])
+}
+
+func TestVLESSProxy_ToClashConfig_Full(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-full",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:            "uuid",
+		Network:         "grpc",
+		GRPCServiceName: "service",
+		GRPCMode:        "multi",
+		TLS:             true,
+		SNI:             "sni.com",
+		Alpn:            []string{"h2", "http/1.1"},
+		Fingerprint:     "chrome",
+		PublicKey:       "public-key",
+		ShortID:         "short-id",
+		Flow:            "xtls-rprx-vision",
+		XTLS:            2,
+	}
+
+	clashConfig, err := proxy.ToClashConfig(&config.ProxySetting{})
+	assert.NoError(t, err)
+	assert.NotNil(t, clashConfig)
+
+	assert.Equal(t, "vless", clashConfig["type"])
+	assert.Equal(t, "test-vless-full", clashConfig["name"])
+	assert.Equal(t, "1.2.3.4", clashConfig["server"])
+	assert.Equal(t, 443, clashConfig["port"])
+	assert.Equal(t, "uuid", clashConfig["uuid"])
+	assert.Equal(t, "grpc", clashConfig["network"])
+	assert.Equal(t, true, clashConfig["tls"])
+	assert.Equal(t, "sni.com", clashConfig["servername"])
+	assert.Equal(t, []string{"h2", "http/1.1"}, clashConfig["alpn"])
+	assert.Equal(t, "chrome", clashConfig["client-fingerprint"])
+	assert.Equal(t, "xtls-rprx-vision", clashConfig["flow"])
+
+	grpcOpts, ok := clashConfig["grpc-opts"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "service", grpcOpts["grpc-service-name"])
+	assert.Equal(t, "multi", grpcOpts["grpc-mode"])
+
+	realityOpts, ok := clashConfig["reality-opts"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "public-key", realityOpts["public-key"])
+	assert.Equal(t, "short-id", realityOpts["short-id"])
+}
+
+func TestVLESSProxy_ToSingleConfig_Reality(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-reality",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:        "uuid",
+		Network:     "tcp",
+		TLS:         true,
+		SNI:         "sni.com",
+		Fingerprint: "chrome",
+		PublicKey:   "public-key",
+		ShortID:     "short-id",
+		Flow:        "xtls-rprx-vision",
+	}
+
+	link, err := proxy.ToSingleConfig(nil)
+	assert.NoError(t, err)
+	assert.Contains(t, link, "vless://uuid@1.2.3.4:443")
+	assert.Contains(t, link, "security=reality")
+	assert.Contains(t, link, "pbk=public-key")
+	assert.Contains(t, link, "sid=short-id")
+	assert.Contains(t, link, "fp=chrome")
+	assert.Contains(t, link, "sni=sni.com")
+	assert.Contains(t, link, "flow=xtls-rprx-vision")
+	assert.Contains(t, link, "#test-reality")
 }

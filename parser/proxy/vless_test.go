@@ -33,23 +33,47 @@ func TestVLESSParser_Parse(t *testing.T) {
 		},
 		{
 			name:  "VLESS gRPC",
-			input: "vless://uuid@example.com:443?security=reality&type=grpc&serviceName=grpc-service&sni=example.com&pbk=publickey&sid=shortid",
+			input: "vless://uuid@example.com:443?security=reality&type=grpc&serviceName=grpc-service&mode=gun&sni=example.com&pbk=publickey&sid=shortid&fp=chrome",
 			check: func(t *testing.T, p *impl.VLESSProxy) {
 				assert.Equal(t, "vless", p.Type)
 				assert.Equal(t, true, p.TLS)
 				assert.Equal(t, "grpc", p.Network)
-				assert.Equal(t, "grpc-service", p.Path) // Path maps to serviceName for grpc
+				assert.Equal(t, "grpc-service", p.GRPCServiceName)
+				assert.Equal(t, "gun", p.GRPCMode)
 				assert.Equal(t, "example.com", p.SNI)
+				assert.Equal(t, "publickey", p.PublicKey)
+				assert.Equal(t, "shortid", p.ShortID)
+				assert.Equal(t, "chrome", p.Fingerprint)
 			},
 		},
 		{
 			name:  "VLESS XTLS-Reality",
-			input: "vless://uuid@example.com:443?security=reality&flow=xtls-rprx-vision&sni=example.com&pbk=publickey&sid=shortid",
+			input: "vless://uuid@example.com:443?security=reality&flow=xtls-rprx-vision&sni=example.com&pbk=publickey&sid=shortid&fp=random",
 			check: func(t *testing.T, p *impl.VLESSProxy) {
 				assert.Equal(t, "vless", p.Type)
 				assert.Equal(t, true, p.TLS)
 				assert.Equal(t, "xtls-rprx-vision", p.Flow)
 				assert.Equal(t, "example.com", p.SNI)
+				assert.Equal(t, "publickey", p.PublicKey)
+				assert.Equal(t, "shortid", p.ShortID)
+				assert.Equal(t, "random", p.Fingerprint)
+			},
+		},
+		{
+			name:  "VLESS Reality Repro",
+			input: "vless://8ee113c3-e5dd-4cda-bec6-14df6a12f654@8.8.8.8:443?encryption=none&security=reality&flow=xtls-rprx-vision&type=tcp&sni=aws.amazon.com&pbk=testpublickey&fp=chrome#test1234",
+			check: func(t *testing.T, p *impl.VLESSProxy) {
+				assert.Equal(t, "vless", p.Type)
+				assert.Equal(t, "8.8.8.8", p.Server)
+				assert.Equal(t, 443, p.Port)
+				assert.Equal(t, "8ee113c3-e5dd-4cda-bec6-14df6a12f654", p.UUID)
+				assert.Equal(t, true, p.TLS)
+				assert.Equal(t, "tcp", p.Network)
+				assert.Equal(t, "xtls-rprx-vision", p.Flow)
+				assert.Equal(t, "aws.amazon.com", p.SNI)
+				assert.Equal(t, "testpublickey", p.PublicKey)
+				assert.Equal(t, "chrome", p.Fingerprint)
+				assert.Equal(t, "test1234", p.Remark)
 			},
 		},
 		{

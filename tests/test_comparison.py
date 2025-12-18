@@ -227,6 +227,17 @@ def validate_cases(cases: List[Tuple[str, dict, str]], res_go: dict, res_cv: dic
         results["_failures"] = failures
     return results
 
+def generate_edge_cases() -> List[Tuple[str, dict, str]]:
+    cases = []
+    targets = ["clash", "singbox"]
+    url = f"{infra.MOCK_BASE}/edge-cases.txt"
+    
+    for target in targets:
+        case_id = f"edge_cases->{target}"
+        params = {"target": target, "url": url}
+        cases.append((case_id, params, target))
+    return cases
+
 CASES = [
     infra.ComparisonTestCase(
         name="ruleset_compare",
@@ -234,6 +245,13 @@ CASES = [
         subconverter_func=fetch_ruleset_subconverter,
         validate_func=validate_ruleset,
         pref_modifier=setup_ruleset_compare
+    ),
+    infra.ComparisonTestCase(
+        name="edge_cases",
+        subconvergo_func=lambda: fetch_cases_subconvergo(generate_edge_cases()),
+        subconverter_func=lambda: fetch_cases_subconverter(generate_edge_cases()),
+        validate_func=lambda r1, r2: validate_cases(generate_edge_cases(), r1, r2, "edge_cases"),
+        pref_modifier=None
     ),
     infra.ComparisonTestCase(
         name="settings_comparison",

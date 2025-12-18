@@ -43,10 +43,12 @@ func (p *TUICParser) ParseSingle(line string) (core.ParsableProxy, error) {
 		line = line[:idx]
 		params, _ = url.ParseQuery(queryStr)
 
-		if params.Get("allow_insecure") == "1" || params.Get("allow_insecure") == "true" {
+		if params.Get("allow_insecure") == "1" || params.Get("allow_insecure") == "true" ||
+			params.Get("insecure") == "1" || params.Get("insecure") == "true" {
 			insecure = true
 		}
 		params.Del("allow_insecure")
+		params.Del("insecure")
 	}
 
 	if strings.Contains(line, "@") {

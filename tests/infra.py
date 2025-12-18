@@ -107,6 +107,10 @@ def restore_pref() -> None:
         PREF_PATH.unlink()
 
 def compose_up(build: bool = True) -> None:
+    # Pull latest images first
+    pull_cmd = ["docker", "compose", "-f", str(COMPOSE_FILE), "pull", "subconverter"]
+    subprocess.run(pull_cmd, cwd=TESTS_DIR, check=False)
+
     cmd = ["docker", "compose", "-f", str(COMPOSE_FILE), "up"]
     if build:
         cmd.append("--build")

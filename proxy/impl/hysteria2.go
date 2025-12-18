@@ -50,6 +50,7 @@ func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 		"server":   p.Server,
 		"port":     p.Port,
 		"password": p.Password,
+		"auth":     p.Password,
 	}
 	if p.Sni != "" {
 		options["sni"] = p.Sni

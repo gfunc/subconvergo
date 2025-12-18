@@ -62,6 +62,15 @@ def generate_tuic():
 def generate_anytls():
     return "anytls://password123@example.com:443?sni=example.com&alpn=h2#AnyTLS-Basic"
 
+def generate_vless_reality():
+    return "vless://23ad6b10-8d1a-40f7-8ad0-e3e35cd38297@example.com:443?security=reality&type=tcp&flow=xtls-rprx-vision&sni=example.com&pbk=publickey&sid=shortid&fp=chrome#VLESS-Reality"
+
+def generate_hysteria2_obfs():
+    return "hysteria2://password123@example.com:443?sni=example.com&obfs=salamander&obfs-password=secret&insecure=1#Hysteria2-Obfs"
+
+def generate_tuic_insecure():
+    return "tuic://23ad6b10-8d1a-40f7-8ad0-e3e35cd38297:password123@example.com:443?congestion_control=bbr&alpn=h3&sni=example.com&insecure=1#TUIC-Insecure"
+
 def generate_ssd():
     config = {
         "airport": "SSD-Airport",
@@ -115,7 +124,10 @@ proxies = [
     generate_vless(),
     generate_hysteria2(),
     generate_tuic(),
-    generate_anytls()
+    generate_anytls(),
+    generate_vless_reality(),
+    generate_hysteria2_obfs(),
+    generate_tuic_insecure()
 ]
 
 content = "\n".join(proxies)
@@ -135,8 +147,12 @@ with open("ssr-subscription.txt", "w") as f:
 
 with open("v2ray-subscription.txt", "w") as f:
     # V2Ray subscription usually contains vmess/vless/trojan/ss
-    v2ray_proxies = [generate_vmess(), generate_vless(), generate_trojan(), generate_ss()]
+    v2ray_proxies = [generate_vmess(), generate_vless(), generate_trojan(), generate_ss(), generate_vless_reality()]
     f.write(base64.b64encode("\n".join(v2ray_proxies).encode()).decode())
+
+with open("edge-cases.txt", "w") as f:
+    edge_proxies = [generate_vless_reality(), generate_hysteria2_obfs(), generate_tuic_insecure()]
+    f.write(base64.b64encode("\n".join(edge_proxies).encode()).decode())
 
 with open("ssd-subscription.txt", "w") as f:
     f.write(generate_ssd())
