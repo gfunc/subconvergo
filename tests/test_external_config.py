@@ -60,8 +60,73 @@ def _run_external_config_test(config_path, group_name):
     
     print(f"External config test passed for {config_path}: Proxy group and ruleset overrides verified.")
 
+def test_overwrite_original_rules_true():
+    """
+    Test overwrite_original_rules=true.
+    Original rules from base/rules_base.tpl should be GONE.
+    Only new rules should be present.
+    """
+    config_path = "config/test_overwrite_true.ini"
+    resp = infra.api_get_subconvergo(
+        "/sub", 
+        params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt",
+            "config": config_path
+        }
+    )
+    assert resp.status_code == 200
+    data = yaml.safe_load(resp.text)
+    rules = data.get("rules", [])
+    
+    # New rule must be present
+    assert "DOMAIN,example.com,DIRECT" in rules, f"New rule not found in {rules}"
+    
+    # Original rules must NOT be present
+    assert "DOMAIN-SUFFIX,google.com,Proxy" not in rules, "Original rule found but should be overwritten"
+    print("test_overwrite_original_rules_true passed")
+
+def test_overwrite_original_rules_false():
+    """
+    Test overwrite_original_rules=false.
+    Original rules from base/rules_base.tpl should be PRESENT.
+    New rules should be appended/prepended.
+    """
+    config_path = "config/test_overwrite_false.ini"
+    resp = infra.api_get_subconvergo(
+        "/sub", 
+        params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt",
+            "config": config_path
+        }
+    )
+    assert resp.status_code == 200
+    data = yaml.safe_load(resp.text)
+    rules = data.get("rules", [])
+    
+    # New rule must be present
+    assert "DOMAIN,example.com,DIRECT" in rules, f"New rule not found in {rules}"
+    
+    # Original rules must ALSO be present
+    assert "DOMAIN-SUFFIX,google.com,Proxy" in rules, "Original rule not found but should be preserved"
+    print("test_overwrite_original_rules_false passed")
+
 CASES = [
     (setup_external_config, test_external_config_override),
     (setup_external_config, test_external_config_override_yaml),
     (setup_external_config, test_external_config_override_toml),
+    (setup_external_config, test_overwrite_original_rules_true),
+    (setup_external_config, test_overwrite_original_rules_false),
 ]
+
+if __name__ == "__main__":
+    try:
+        infra.start_subconvergo()
+        test_external_config_override()
+        test_external_config_override_yaml()
+        test_external_config_override_toml()
+        test_overwrite_original_rules_true()
+        test_overwrite_original_rules_false()
+    finally:
+        infra.stop_subconvergo()

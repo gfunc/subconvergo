@@ -238,6 +238,32 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 		if len(opts.Rulesets) > 0 {
 			allRules = append(allRules, generateClashRules(opts.Rulesets)...)
 		}
+
+		// Append original rules if overwrite is disabled
+		if !opts.OverwriteOriginalRules {
+			var originalRules []string
+			// Try to find existing rules in base map
+			// Keys could be "rules" or "Rule"
+			keys := []string{"rules", "Rule"}
+			for _, key := range keys {
+				if val, ok := base[key]; ok {
+					if rulesList, ok := val.([]interface{}); ok {
+						for _, r := range rulesList {
+							if s, ok := r.(string); ok {
+								originalRules = append(originalRules, s)
+							}
+						}
+					} else if rulesList, ok := val.([]string); ok {
+						originalRules = append(originalRules, rulesList...)
+					}
+					break // Found rules
+				}
+			}
+			if len(originalRules) > 0 {
+				allRules = append(allRules, originalRules...)
+			}
+		}
+
 		clash.Rule = allRules
 		base[utils.GetFieldTag("yaml", "Rule", clash, "rules")] = allRules
 	}

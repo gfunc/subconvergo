@@ -20,28 +20,28 @@ def setup_ruleset_remote(pref):
     pref["rulesets"]["update_ruleset_on_request"] = True
 
 def setup_filters_regex(pref):
-    pref["common"]["include_remarks"] = ["/^HK/"]
+    pref["common"]["include_remarks"] = ["/^SS/"]
     pref["common"]["exclude_remarks"] = []
 
 def setup_exclude_remarks(pref):
-    pref["common"]["exclude_remarks"] = ["HK"]
+    pref["common"]["exclude_remarks"] = ["SS"]
 
 def setup_include_remarks(pref):
-    pref["common"]["include_remarks"] = ["HK"]
+    pref["common"]["include_remarks"] = ["SS"]
 
 def setup_emoji_rule(pref):
     pref["emojis"] = {
         "add_emoji": True,
         "remove_old_emoji": True,
         "rules": [
-            {"match": "(HK|Hong Kong)", "emoji": "🇭🇰"},
+            {"match": "(SS|Shadowsocks)", "emoji": "🇸🇸"},
             {"match": "(US|United States)", "emoji": "🇺🇸"},
         ]
     }
 
 def setup_rename_node(pref):
     pref["node_pref"]["rename_node"] = [
-        {"match": "HK", "replace": "Hong Kong"},
+        {"match": "SS", "replace": "Shadowsocks"},
         {"match": "US", "replace": "United States"},
     ]
 
@@ -53,12 +53,12 @@ def setup_relay_migration(pref):
         {
             "name": "SelectGroup",
             "type": "select",
-            "rule": ["HK-Server-01"]
+            "rule": ["SS-Basic"]
         },
         {
             "name": "RelayGroup",
             "type": "relay",
-            "rule": ["[]SelectGroup", "^US.*", "JP-Server-01"]
+            "rule": ["[]SelectGroup", "^SS.*"]
         }
     ]
 
@@ -68,17 +68,21 @@ def validate_relay_migration(resp):
         return {"_failures": ["Missing proxy-providers"]}
     
     providers = data["proxy-providers"]
-    if "RelayGroup-US-Server-01-provider" not in providers:
-        return {"_failures": ["Missing RelayGroup-US-Server-01-provider"]}
+    if "RelayGroup-SS-Basic-provider" not in providers:
+        return {"_failures": ["Missing RelayGroup-SS-Basic-provider"]}
     
-    provider = providers["RelayGroup-US-Server-01-provider"]
+    provider = providers["RelayGroup-SS-Basic-provider"]
     # Expect dialer-proxy to be SelectGroup because of []SelectGroup rule
     if provider.get("override", {}).get("dialer-proxy") != "SelectGroup":
         return {"_failures": [f"Incorrect dialer-proxy: {provider.get('override', {}).get('dialer-proxy')}"]}
         
     groups = data.get("proxy-groups", [])
-    if not any(g["name"] == "RelayGroup-US-Server-01" for g in groups):
-        return {"_failures": ["Missing intermediate group RelayGroup-US-Server-01"]}
+    relay_group = next((g for g in groups if g["name"] == "RelayGroup"), None)
+    if not relay_group:
+        return {"_failures": ["Missing RelayGroup"]}
+        
+    if "RelayGroup-SS-Basic-provider" not in relay_group.get("use", []):
+        return {"_failures": [f"RelayGroup does not use provider. Uses: {relay_group.get('use')}"]}
         
     return {"providers": len(providers)}
 
@@ -115,8 +119,8 @@ CASES = [
         }),
         validate=lambda resp: (
             lambda data=yaml.safe_load(resp.text): (
-                utils.assert_proxies(data, ["HK-Server-01"]),
-                utils.assert_group_contains(data, "Auto", "HK-Server-01"),
+                utils.assert_proxies(data, ["SS-Basic"]),
+                utils.assert_group_contains(data, "Auto", "SS-Basic"),
                 utils.assert_rules(data),
                 {"proxy_count": len(data.get("proxies", [])), "rule_count": len(data.get("rules", []))}
             )[-1]
@@ -183,7 +187,7 @@ CASES = [
         validate=lambda resp: (
             lambda data=yaml.safe_load(resp.text): (
                 lambda names=[p.get("name") for p in data.get("proxies", [])]: (
-                    AssertionError(f"regex filter did not restrict to HK*: {names}") if len(names) == 0 or len(names) != len([n for n in names if n and n.startswith("HK")]) else {"proxy_count": len(names)}
+                    AssertionError(f"regex filter did not restrict to SS*: {names}") if len(names) == 0 or len(names) != len([n for n in names if n and n.startswith("SS")]) else {"proxy_count": len(names)}
                 )
             )()
         )(),
@@ -198,8 +202,8 @@ CASES = [
         }),
         validate=lambda resp: (
             lambda data=yaml.safe_load(resp.text): (
-                utils.assert_proxies(data, ["HK-Server-01"]),
-                utils.assert_group_contains(data, "Auto", "HK-Server-01"),
+                utils.assert_proxies(data, ["SS-Basic"]),
+                utils.assert_group_contains(data, "Auto", "SS-Basic"),
                 utils.assert_rules(data),
                 {"proxy_count": len(data.get("proxies", [])), "rule_count": len(data.get("rules", []))}
             )[-1]
@@ -227,11 +231,11 @@ CASES = [
     ),
     infra.StandaloneTestCase(
         name="exclude_remarks",
-        query=lambda: infra.api_get_subconvergo("/sub", params={"target": "clash", "url": f"{infra.MOCK_BASE}/ss-subscription.txt"}),
+        query=lambda: infra.api_get_subconvergo("/sub", params={"target": "clash", "url": f"{infra.MOCK_BASE}/surge-subscription.ini"}),
         validate=lambda resp: (
             lambda data=yaml.safe_load(resp.text): (
                 lambda names=[p.get("name") for p in data.get("proxies", [])]: (
-                    AssertionError(f"exclude failed: found HK in {names}") if any("HK" in n for n in names) else {"proxy_count": len(names)}
+                    AssertionError(f"exclude failed: found SS in {names}") if any("SS" in n for n in names) else {"proxy_count": len(names)}
                 )
             )()
         )(),
@@ -243,7 +247,7 @@ CASES = [
         validate=lambda resp: (
             lambda data=yaml.safe_load(resp.text): (
                 lambda names=[p.get("name") for p in data.get("proxies", [])]: (
-                    AssertionError(f"include failed: found non-HK in {names}") if not all("HK" in n for n in names) else {"proxy_count": len(names)}
+                    AssertionError(f"include failed: found non-SS in {names}") if not all("SS" in n for n in names) else {"proxy_count": len(names)}
                 )
             )()
         )(),
@@ -255,7 +259,7 @@ CASES = [
         validate=lambda resp: (
             lambda data=yaml.safe_load(resp.text): (
                 lambda names=[p.get("name") for p in data.get("proxies", [])]: (
-                    AssertionError(f"emoji failed: no flag in {names}") if not any("🇭🇰" in n for n in names) else {"proxy_count": len(names)}
+                    AssertionError(f"emoji failed: no flag in {names}") if not any("🇸🇸" in n for n in names) else {"proxy_count": len(names)}
                 )
             )()
         )(),
@@ -267,7 +271,7 @@ CASES = [
         validate=lambda resp: (
             lambda data=yaml.safe_load(resp.text): (
                 lambda names=[p.get("name") for p in data.get("proxies", [])]: (
-                    AssertionError(f"rename failed: no Hong Kong in {names}") if not any("Hong Kong" in n for n in names) else {"proxy_count": len(names)}
+                    AssertionError(f"rename failed: no Shadowsocks in {names}") if not any("Shadowsocks" in n for n in names) else {"proxy_count": len(names)}
                 )
             )()
         )(),

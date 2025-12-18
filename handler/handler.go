@@ -164,6 +164,12 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 			if len(extConfig.Rulesets) > 0 {
 				rulesets = extConfig.Rulesets
 			}
+			if extConfig.OverwriteOriginalRules != nil {
+				config.Global.Rulesets.OverwriteOriginalRules = *extConfig.OverwriteOriginalRules
+			}
+			if extConfig.ClashRuleBase != "" {
+				config.Global.Common.ClashRuleBase = extConfig.ClashRuleBase
+			}
 		}
 	}
 
@@ -246,13 +252,14 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 
 	// Prepare generator options
 	opts := core.GeneratorOptions{
-		Target:          target,
-		ProxyGroups:     proxyGroups,
-		Rulesets:        rulesets,
-		RawRules:        rawRules,
-		AppendProxyType: config.Global.Common.AppendProxyType,
-		EnableRuleGen:   config.Global.Rulesets.Enabled,
-		Pipelines:       pipeline,
+		Target:                 target,
+		ProxyGroups:            proxyGroups,
+		Rulesets:               rulesets,
+		RawRules:               rawRules,
+		AppendProxyType:        config.Global.Common.AppendProxyType,
+		EnableRuleGen:          config.Global.Rulesets.Enabled,
+		OverwriteOriginalRules: config.Global.Rulesets.OverwriteOriginalRules,
+		Pipelines:              pipeline,
 
 		ProxySetting: config.ProxySetting{
 			ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
@@ -530,9 +537,11 @@ func setNestedValue(data map[string]interface{}, key string, value string) {
 
 // ExternalConfig represents external configuration
 type ExternalConfig struct {
-	ProxyGroups []config.ProxyGroupConfig
-	Rulesets    []config.RulesetConfig
-	BasePath    string
+	ProxyGroups            []config.ProxyGroupConfig
+	Rulesets               []config.RulesetConfig
+	BasePath               string
+	OverwriteOriginalRules *bool // Use pointer to distinguish between unset and false
+	ClashRuleBase          string
 }
 
 // loadExternalConfig loads external configuration from URL or file
@@ -634,9 +643,11 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 		}
 
 		return &ExternalConfig{
-			ProxyGroups: groups,
-			Rulesets:    rulesets,
-			BasePath:    extSettings.Common.BasePath,
+			ProxyGroups:            groups,
+			Rulesets:               rulesets,
+			BasePath:               extSettings.Common.BasePath,
+			OverwriteOriginalRules: &extSettings.Rulesets.OverwriteOriginalRules,
+			ClashRuleBase:          extSettings.Common.ClashRuleBase,
 		}, nil
 	}
 
@@ -652,13 +663,15 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 		}
 
 		return &ExternalConfig{
-			ProxyGroups: groups,
-			Rulesets:    rulesets,
-			BasePath:    extSettings.Common.BasePath,
+			ProxyGroups:            groups,
+			Rulesets:               rulesets,
+			BasePath:               extSettings.Common.BasePath,
+			OverwriteOriginalRules: &extSettings.Rulesets.OverwriteOriginalRules,
+			ClashRuleBase:          extSettings.Common.ClashRuleBase,
 		}, nil
 	}
 
-	if cfg, err := ini.Load(data); err == nil {
+	if cfg, err := ini.LoadSources(ini.LoadOptions{AllowShadows: true}, data); err == nil {
 		if err := cfg.MapTo(&extSettings); err == nil {
 			// Manually parse custom_proxy_group and ruleset if MapTo didn't pick them up
 			// (e.g. due to struct tags or section name mismatches)
@@ -667,14 +680,33 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 				extSettings.CustomGroups = parseINICustomGroups(cfg)
 			}
 
-			if len(extSettings.CustomRulesets) == 0 && cfg.HasSection("ruleset") {
+			if len(extSettings.CustomRulesets) == 0 && cfg.HasSection("rulesets") {
 				extSettings.CustomRulesets = parseINIRulesets(cfg)
 			}
 
+			// Check for overwrite_original_rules in rulesets section manually
+			var overwrite *bool
+			if section, err := cfg.GetSection("rulesets"); err == nil {
+				if section.HasKey("overwrite_original_rules") {
+					val := section.Key("overwrite_original_rules").MustBool(false)
+					overwrite = &val
+				}
+			}
+
+			// If not found in [ruleset], check [common] or root?
+			// Subconverter usually puts it in [ruleset] or root?
+			// pref.example.toml has it in [ruleset].
+
+			if overwrite == nil {
+				overwrite = &extSettings.Rulesets.OverwriteOriginalRules
+			}
+
 			return &ExternalConfig{
-				ProxyGroups: extSettings.CustomGroups,
-				Rulesets:    extSettings.CustomRulesets,
-				BasePath:    extSettings.Common.BasePath,
+				ProxyGroups:            extSettings.CustomGroups,
+				Rulesets:               extSettings.CustomRulesets,
+				BasePath:               extSettings.Common.BasePath,
+				OverwriteOriginalRules: overwrite,
+				ClashRuleBase:          extSettings.Common.ClashRuleBase,
 			}, nil
 		}
 	}
@@ -1230,34 +1262,75 @@ func parseINICustomGroups(cfg *ini.File) []config.ProxyGroupConfig {
 
 func parseINIRulesets(cfg *ini.File) []config.RulesetConfig {
 	var rulesets []config.RulesetConfig
-	if section, err := cfg.GetSection("ruleset"); err == nil {
-		for _, key := range section.Keys() {
-			name := key.Name()
-			value := key.String()
+	if section, err := cfg.GetSection("rulesets"); err == nil {
+		// Use GetKey to handle shadow keys (multiple keys with same name)
+		if key, err := section.GetKey("ruleset"); err == nil {
+			for _, value := range key.ValueWithShadows() {
+				// Format: Group Name,Rule Path[,Interval]
+				// Or: Group Name,[]Rule
+				// Or: !!import:path
 
-			// Skip config keys
-			if name == "enabled" || name == "overwrite_original_rules" || name == "update_ruleset_on_request" {
-				continue
+				if strings.HasPrefix(value, "!!import:") {
+					rulesets = append(rulesets, config.RulesetConfig{
+						Import: strings.TrimPrefix(value, "!!import:"),
+					})
+					continue
+				}
+
+				parts := strings.Split(value, ",")
+				if len(parts) < 2 {
+					continue
+				}
+
+				// Check for implicit inline rule (starts with rule type)
+				firstPart := strings.ToUpper(strings.TrimSpace(parts[0]))
+				if isRuleType(firstPart) {
+					rulesets = append(rulesets, config.RulesetConfig{
+						Rule: "[]" + value,
+					})
+					continue
+				}
+
+				rc := config.RulesetConfig{
+					Group: strings.TrimSpace(parts[0]),
+				}
+
+				// Check if last part is an integer (interval)
+				var ruleParts []string
+				if len(parts) > 2 {
+					lastPart := strings.TrimSpace(parts[len(parts)-1])
+					if interval, err := strconv.Atoi(lastPart); err == nil {
+						rc.Interval = interval
+						ruleParts = parts[1 : len(parts)-1]
+					} else {
+						ruleParts = parts[1:]
+					}
+				} else {
+					ruleParts = parts[1:]
+				}
+
+				ruleContent := strings.Join(ruleParts, ",")
+				ruleContent = strings.TrimSpace(ruleContent)
+
+				if strings.HasPrefix(ruleContent, "[]") {
+					rc.Rule = ruleContent
+				} else {
+					rc.Ruleset = ruleContent
+				}
+
+				rulesets = append(rulesets, rc)
 			}
-
-			// Format: name = url/path
-			// Or: name = []GEOIP,CN
-
-			rc := config.RulesetConfig{
-				Group: name,
-			}
-
-			// Simple heuristic: if it looks like a rule (starts with []) or has comma (and not a URL with comma?), treat as Rule
-			// But URLs can have commas? Unlikely in this context.
-			// Subconverter treats [] as inline rule.
-			if strings.HasPrefix(value, "[]") {
-				rc.Rule = value
-			} else {
-				rc.Ruleset = value
-			}
-
-			rulesets = append(rulesets, rc)
 		}
 	}
 	return rulesets
+}
+
+func isRuleType(t string) bool {
+	switch t {
+	case "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-SET",
+		"IP-CIDR", "IP-CIDR6", "GEOIP", "MATCH", "PROCESS-NAME",
+		"DST-PORT", "SRC-PORT", "IN-PORT", "SRC-IP-CIDR", "SCRIPT":
+		return true
+	}
+	return false
 }

@@ -10,6 +10,7 @@ GOBUILD=$(GO) build
 GOCLEAN=$(GO) clean
 DOCKER=docker
 DOCKER_COMPOSE=docker-compose
+DOCKER_HUB_REPO=georgefu12/subconvergo
 
 # Build variables
 VERSION?=dev
@@ -120,6 +121,11 @@ docker-run: docker-build ## Run Docker container
 		-v $(PWD)/base:/app/base \
 		-v $(PWD)/pref.toml:/app/pref.toml:ro \
 		$(BINARY_NAME):latest
+
+docker-push: docker-build ## Push Docker image to Docker Hub
+	@echo "Pushing Docker image to Docker Hub..."
+	$(DOCKER) tag $(BINARY_NAME):latest $(DOCKER_HUB_REPO):latest
+	$(DOCKER) push $(DOCKER_HUB_REPO):latest
 
 # Benchmark
 bench: ## Run benchmarks

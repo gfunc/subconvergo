@@ -10,13 +10,14 @@ type GeneratorOptions struct {
 	config.ProxySetting
 
 	// Core options
-	Target          string
-	ProxyGroups     []config.ProxyGroupConfig
-	Rulesets        []config.RulesetConfig
-	RawRules        []string
-	AppendProxyType bool
-	EnableRuleGen   bool
-	Pipelines       []transformers.Transformer
+	Target                 string
+	ProxyGroups            []config.ProxyGroupConfig
+	Rulesets               []config.RulesetConfig
+	RawRules               []string
+	AppendProxyType        bool
+	EnableRuleGen          bool
+	OverwriteOriginalRules bool
+	Pipelines              []transformers.Transformer
 
 	// Additional options from legacy core
 	Type     string

@@ -4,6 +4,11 @@ type = "select"
 rule = ["[]♻️ 自动选择", "[]🎯 全球直连", ".*"]
 
 [[custom_groups]]
+name = "RelayGroup"
+type = "relay"
+rule = ["[]🔰 节点选择", "^relay.*"]
+
+[[custom_groups]]
 name = "♻️ 自动选择"
 type = "url-test"
 rule = [".*"]

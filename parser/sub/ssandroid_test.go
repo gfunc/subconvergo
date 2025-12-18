@@ -57,3 +57,35 @@ func TestSSAndroidSubscriptionParser_Parse(t *testing.T) {
 		t.Errorf("Expected obfs-host=example.com, got %v", p.PluginOpts["obfs-host"])
 	}
 }
+
+func TestSSAndroidParser_DummyObject(t *testing.T) {
+	// This test verifies that the parser handles the "dummy object" trick used to satisfy subconverter detection
+	content := `[
+		{
+			"proxy_apps": "dummy_for_detection"
+		},
+		{
+			"server": "example.com",
+			"server_port": 443,
+			"password": "password",
+			"method": "chacha20-ietf-poly1305",
+			"remarks": "SS-Android"
+		}
+	]`
+
+	parser := &SSAndroidSubscriptionParser{}
+
+	sub, err := parser.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(sub.Proxies) != 1 {
+		t.Fatalf("Expected 1 proxy, got %d", len(sub.Proxies))
+	}
+
+	p := sub.Proxies[0]
+	if p.GetRemark() != "SS-Android" {
+		t.Errorf("Expected remark SS-Android, got %s", p.GetRemark())
+	}
+}

@@ -389,6 +389,11 @@ func (p *ShadowsocksParser) ParseSSD(config map[string]interface{}) (core.Parsab
 func (p *ShadowsocksParser) ParseSSAndroid(config map[string]interface{}) (core.ParsableProxy, error) {
 	server := utils.GetStringField(config, "server")
 	port := utils.GetIntField(config, "server_port")
+
+	if server == "" || port == 0 {
+		return nil, fmt.Errorf("invalid ss-android config: missing server or port")
+	}
+
 	remarks := utils.GetStringField(config, "remarks")
 	password := utils.GetStringField(config, "password")
 	method := utils.GetStringField(config, "method")

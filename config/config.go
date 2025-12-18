@@ -21,7 +21,7 @@ type Settings struct {
 	ManagedConfig  ManagedConfigSection `yaml:"managed_config" toml:"managed_config" ini:"managed_config"`
 	SurgeExternal  SurgeExternalConfig  `yaml:"surge_external_proxy" toml:"surge_external_proxy" ini:"surge_external_proxy"`
 	Emojis         EmojiConfig          `yaml:"emojis" toml:"emojis" ini:"emojis"`
-	Rulesets       RulesetSection       `yaml:"rulesets" toml:"ruleset" ini:"rulesets"`
+	Rulesets       RulesetSection       `yaml:"rulesets" toml:"ruleset" ini:"-"`
 	ProxyGroups    ProxyGroupSection    `yaml:"proxy_groups" toml:"proxy_groups" ini:"proxy_groups"`
 	CustomGroups   []ProxyGroupConfig   `yaml:"custom_proxy_group" toml:"custom_groups" ini:"-"`
 	CustomRulesets []RulesetConfig      `yaml:"ruleset" toml:"rulesets" ini:"-"`

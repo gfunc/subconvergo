@@ -1,0 +1,10 @@
+custom_proxy_group:
+  - name: "conf_test_group_yaml"
+    type: select
+    content: "!!GROUPID=0"
+
+ruleset:
+  - group: "conf_test_group_yaml"
+    ruleset: "[]MATCH"
+  - group: "DIRECT"
+    ruleset: "[]GEOIP,CN"

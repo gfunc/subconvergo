@@ -1,0 +1,12 @@
+[[custom_groups]]
+name = "conf_test_group_toml"
+type = "select"
+content = "!!GROUPID=0"
+
+[[rulesets]]
+group = "conf_test_group_toml"
+ruleset = "[]MATCH"
+
+[[rulesets]]
+group = "DIRECT"
+ruleset = "[]GEOIP,CN"

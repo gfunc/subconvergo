@@ -35,23 +35,24 @@ def extract_proxies(content: str, target: str) -> List[Dict[str, Any]]:
                         "original": p
                     })
         elif target in ["surge", "loon"]:
-            match = re.search(r'\[Proxy\]\s*(.*?)\s*(\[|$)', content, re.DOTALL | re.IGNORECASE)
-            if match:
-                lines = [l.strip() for l in match.group(1).splitlines() if l.strip() and not l.strip().startswith(('#', ';'))]
-                for line in lines:
-                    if "=" in line:
-                        name, rest = line.split("=", 1)
-                        parts = [p.strip() for p in rest.split(",")]
-                        if len(parts) >= 3:
-                            proxies.append({
-                                "name": name.strip(),
-                                "type": parts[0],
-                                "server": parts[1],
-                                "port": parts[2],
-                                "original": line
-                            })
-                        else:
-                             proxies.append({"name": name.strip(), "original": line})
+            for section in ["Proxy", "Proxy Group"]:
+                match = re.search(rf'\[{section}\]\s*(.*?)\s*(\[|$)', content, re.DOTALL | re.IGNORECASE)
+                if match:
+                    lines = [l.strip() for l in match.group(1).splitlines() if l.strip() and not l.strip().startswith(('#', ';'))]
+                    for line in lines:
+                        if "=" in line:
+                            name, rest = line.split("=", 1)
+                            parts = [p.strip() for p in rest.split(",")]
+                            if len(parts) >= 3:
+                                proxies.append({
+                                    "name": name.strip(),
+                                    "type": parts[0],
+                                    "server": parts[1],
+                                    "port": parts[2],
+                                    "original": line
+                                })
+                            else:
+                                proxies.append({"name": name.strip(), "original": line})
         elif target == "quanx":
              for section in ["server_remote", "server_local"]:
                  match = re.search(rf'\[{section}\]\s*(.*?)\s*(\[|$)', content, re.DOTALL | re.IGNORECASE)
