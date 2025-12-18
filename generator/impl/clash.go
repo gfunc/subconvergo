@@ -375,7 +375,7 @@ func generateClashRules(rulesets []config.RulesetConfig) []string {
 			}
 
 			// Convert ruleset content to rules
-			rulesetRules := convertRulesetToClash(content)
+			rulesetRules := convertRulesetToClash(content, ruleset.Type)
 			for _, r := range rulesetRules {
 				// Append group if not already present
 				if !strings.Contains(r, ","+ruleset.Group) && ruleset.Group != "" {
@@ -418,7 +418,7 @@ func validateClashRule(rule string) bool {
 
 // convertRulesetToClash converts ruleset content to Clash format
 // Handles Clash payload format, QuanX format, and Surge format
-func convertRulesetToClash(content string) []string {
+func convertRulesetToClash(content string, ruleType string) []string {
 	var rules []string
 	lines := strings.Split(content, "\n")
 
@@ -448,8 +448,8 @@ func convertRulesetToClash(content string) []string {
 			line = strings.TrimSpace(line)
 			line = strings.Trim(line, "'\"")
 
-			// Check if line already has rule type
-			if strings.Contains(line, ",") {
+			// Check if line already has rule type or if it's clash-classic
+			if strings.Contains(line, ",") || ruleType == "clash-classic" {
 				rules = append(rules, line)
 				continue
 			}
@@ -478,7 +478,12 @@ func convertRulesetToClash(content string) []string {
 				rules = append(rules, "DOMAIN,"+line)
 			}
 		} else {
-			// Surge/QuanX format - already has rule type
+			// Surge/QuanX format
+			if ruleType == "surge" {
+				rules = append(rules, line)
+				continue
+			}
+
 			// Convert QuanX HOST to DOMAIN
 			line = regexp.MustCompile(`^(?i:host)`).ReplaceAllString(line, "DOMAIN")
 			line = regexp.MustCompile(`^(?i:host-suffix)`).ReplaceAllString(line, "DOMAIN-SUFFIX")
