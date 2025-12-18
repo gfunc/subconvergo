@@ -632,6 +632,9 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 	// Try YAML -> TOML -> INI using the Settings struct to leverage existing tags
 	var extSettings config.Settings
 	if err := yaml.Unmarshal(data, &extSettings); err == nil {
+		if err := extSettings.ProcessImports(); err != nil {
+			log.Printf("[handler.loadExternalConfig] failed to process imports in YAML: %v", err)
+		}
 		groups := extSettings.ProxyGroups.CustomProxyGroups
 		if len(extSettings.CustomGroups) > 0 {
 			groups = append(groups, extSettings.CustomGroups...)
@@ -652,6 +655,9 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 	}
 
 	if _, err := toml.Decode(string(data), &extSettings); err == nil {
+		if err := extSettings.ProcessImports(); err != nil {
+			log.Printf("[handler.loadExternalConfig] failed to process imports in TOML: %v", err)
+		}
 		groups := extSettings.ProxyGroups.CustomProxyGroups
 		if len(extSettings.CustomGroups) > 0 {
 			groups = append(groups, extSettings.CustomGroups...)

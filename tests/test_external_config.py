@@ -160,11 +160,7 @@ def test_overwrite_original_rules_false_yaml():
     assert "DOMAIN-SUFFIX,google.com,Proxy" in rules, "Original rule not found but should be preserved"
     print("test_overwrite_original_rules_false_yaml passed")
 
-def test_import_keyword():
-    """
-    Test !!import: keyword in config.
-    """
-    config_path = "config/test_import.ini"
+def _run_import_test(config_path):
     resp = infra.api_get_subconvergo(
         "/sub", 
         params={
@@ -184,8 +180,27 @@ def test_import_keyword():
     proxy_groups = data.get("proxy-groups", [])
     group_names = [g["name"] for g in proxy_groups]
     assert "ImportedGroup" in group_names, f"Imported group not found in {group_names}"
-    
-    print("test_import_keyword passed")
+
+def test_import_keyword_ini():
+    """
+    Test !!import: keyword in INI config.
+    """
+    _run_import_test("config/test_import.ini")
+    print("test_import_keyword_ini passed")
+
+def test_import_keyword_toml():
+    """
+    Test !!import: keyword in TOML config.
+    """
+    _run_import_test("config/test_import.toml")
+    print("test_import_keyword_toml passed")
+
+def test_import_keyword_yaml():
+    """
+    Test !!import: keyword in YAML config.
+    """
+    _run_import_test("config/test_import.yml")
+    print("test_import_keyword_yaml passed")
 
 CASES = [
     (setup_external_config, test_external_config_override),
@@ -195,7 +210,9 @@ CASES = [
     (setup_external_config, test_overwrite_original_rules_false),
     (setup_external_config, test_overwrite_original_rules_true_toml),
     (setup_external_config, test_overwrite_original_rules_false_yaml),
-    (setup_external_config, test_import_keyword),
+    (setup_external_config, test_import_keyword_ini),
+    (setup_external_config, test_import_keyword_toml),
+    (setup_external_config, test_import_keyword_yaml),
 ]
 
 if __name__ == "__main__":

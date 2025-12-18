@@ -407,7 +407,7 @@ func (setting *Settings) loadYAMLConfig(path string) error {
 		setting.CustomRulesets = nil // Clear to avoid confusion
 	}
 
-	if err := setting.processImports(); err != nil {
+	if err := setting.ProcessImports(); err != nil {
 		return fmt.Errorf("failed to process imports: %w", err)
 	}
 
@@ -431,7 +431,7 @@ func (setting *Settings) loadTOMLConfig(path string) error {
 		setting.CustomRulesets = nil // Clear to avoid confusion
 	}
 
-	if err := setting.processImports(); err != nil {
+	if err := setting.ProcessImports(); err != nil {
 		return fmt.Errorf("failed to process imports: %w", err)
 	}
 
@@ -573,7 +573,7 @@ func (setting *Settings) loadINIConfig(path string) error {
 		return fmt.Errorf("failed to map advanced section: %w", err)
 	}
 
-	if err := setting.processImports(); err != nil {
+	if err := setting.ProcessImports(); err != nil {
 		return fmt.Errorf("failed to process imports: %w", err)
 	}
 
@@ -814,8 +814,20 @@ func parseINITasks(sec *ini.Section, keyName string) []TaskConfig {
 	return tasks
 }
 
-// processImports processes import directives in config sections
-func (setting *Settings) processImports() error {
+// ProcessImports processes import directives in config sections
+func (setting *Settings) ProcessImports() error {
+	// Merge CustomGroups into ProxyGroups.CustomProxyGroups
+	if len(setting.CustomGroups) > 0 {
+		setting.ProxyGroups.CustomProxyGroups = append(setting.ProxyGroups.CustomProxyGroups, setting.CustomGroups...)
+		setting.CustomGroups = nil
+	}
+
+	// Merge CustomRulesets into Rulesets.Rulesets
+	if len(setting.CustomRulesets) > 0 {
+		setting.Rulesets.Rulesets = append(setting.Rulesets.Rulesets, setting.CustomRulesets...)
+		setting.CustomRulesets = nil
+	}
+
 	// Process proxy group imports - iterate backwards to safely remove items
 	var indicesToRemove []int
 	for i := range setting.ProxyGroups.CustomProxyGroups {
@@ -843,6 +855,10 @@ func (setting *Settings) processImports() error {
 	indicesToRemove = nil
 	for i := range setting.Rulesets.Rulesets {
 		ruleset := &setting.Rulesets.Rulesets[i]
+		if ruleset.Import == "" && strings.HasPrefix(ruleset.Ruleset, "!!import:") {
+			ruleset.Import = strings.TrimPrefix(ruleset.Ruleset, "!!import:")
+		}
+
 		if ruleset.Import != "" {
 			importPath := resolveImportPath(ruleset.Import)
 			if err := setting.loadRulesetImport(importPath); err != nil {
@@ -1144,6 +1160,15 @@ func (setting *Settings) loadRulesetImportTXT(path string) error {
 			continue
 		}
 
+		// Check if it starts with a rule type
+		firstPart := strings.ToUpper(strings.TrimSpace(parts[0]))
+		if isRuleType(firstPart) {
+			setting.Rulesets.Rulesets = append(setting.Rulesets.Rulesets, RulesetConfig{
+				Rule: "[]" + line,
+			})
+			continue
+		}
+
 		ruleset := RulesetConfig{
 			Group: parts[0],
 		}
@@ -1309,4 +1334,14 @@ func GetBasePath() string {
 	}
 	cwd, _ := os.Getwd()
 	return filepath.Join(cwd, Global.Common.BasePath)
+}
+
+func isRuleType(t string) bool {
+	switch t {
+	case "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-SET",
+		"IP-CIDR", "IP-CIDR6", "GEOIP", "MATCH", "PROCESS-NAME",
+		"DST-PORT", "SRC-PORT", "IN-PORT", "SRC-IP-CIDR", "SCRIPT":
+		return true
+	}
+	return false
 }
