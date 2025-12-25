@@ -70,6 +70,10 @@ func (p *WireGuardProxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 		options["udp"] = true
 	}
 
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	return options, nil
 }
 

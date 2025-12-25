@@ -65,6 +65,10 @@ func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 		}
 	}
 
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	if ext != nil {
 		if ext.UDP != nil && *ext.UDP {
 			options["udp"] = true

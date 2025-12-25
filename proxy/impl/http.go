@@ -84,6 +84,10 @@ func (p *HttpProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 		options["tls13"] = true
 	}
 
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	return options, nil
 }
 

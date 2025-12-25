@@ -124,6 +124,11 @@ func (p *TrojanProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interf
 			options["grpc-opts"] = grpcOpts
 		}
 	}
+
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	return options, nil
 }
 

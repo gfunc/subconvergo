@@ -78,6 +78,8 @@ func (p *WireGuardParser) ParseSurge(content string) (core.ParsableProxy, error)
 			case "tls13":
 				b := v == "true"
 				wg.TLS13 = &b
+			case "underlying-proxy":
+				wg.UnderlyingProxy = v
 			}
 		}
 	}

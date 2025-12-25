@@ -137,6 +137,8 @@ func (p *HttpParser) ParseSurge(content string) (core.ParsableProxy, error) {
 			case "tls13":
 				b := v == "true"
 				http.TLS13 = &b
+			case "underlying-proxy":
+				http.UnderlyingProxy = v
 			}
 		}
 	}

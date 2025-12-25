@@ -74,6 +74,10 @@ func (p *Socks5Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]interf
 		options["tls13"] = true
 	}
 
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	return options, nil
 }
 

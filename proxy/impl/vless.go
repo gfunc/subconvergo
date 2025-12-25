@@ -114,6 +114,10 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		"network": p.Network,
 	}
 
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	if p.TLS {
 		options["tls"] = true
 		if p.SNI != "" {

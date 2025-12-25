@@ -144,6 +144,8 @@ func (p *Socks5Parser) ParseSurge(content string) (core.ParsableProxy, error) {
 			case "tls13":
 				b := v == "true"
 				socks.TLS13 = &b
+			case "underlying-proxy":
+				socks.UnderlyingProxy = v
 			}
 		}
 	}

@@ -206,6 +206,8 @@ func (p *TrojanParser) ParseSurge(content string) (core.ParsableProxy, error) {
 			case "tls13":
 				b := v == "true"
 				trojan.TLS13 = &b
+			case "underlying-proxy":
+				trojan.UnderlyingProxy = v
 			}
 		}
 	}

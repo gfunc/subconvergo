@@ -100,6 +100,13 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 			continue
 		}
 
+		// Extract underlying proxy
+		if val, ok := proxyMap["dialer-proxy"].(string); ok && val != "" {
+			p.SetUnderlyingProxy(val)
+		} else if val, ok := proxyMap["underlying-proxy"].(string); ok && val != "" {
+			p.SetUnderlyingProxy(val)
+		}
+
 		// Wrap in MihomoProxy to preserve original config
 		p, err = utils.ToMihomoProxyFromClash(p, proxyMap)
 		if err != nil {

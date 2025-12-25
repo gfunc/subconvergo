@@ -81,6 +81,10 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) (map[string]i
 		options["skip-cert-verify"] = true
 	}
 
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	if p.Plugin != "" {
 		opts := make(map[string]interface{})
 		if len(p.PluginOpts) != 0 {

@@ -14,6 +14,8 @@ type BaseProxy struct {
 	TFO   *bool `yaml:"tfo,omitempty" json:"tfo,omitempty"`
 	SCV   *bool `yaml:"skip-cert-verify,omitempty" json:"skip-cert-verify,omitempty"`
 	TLS13 *bool `yaml:"tls13,omitempty" json:"tls13,omitempty"`
+
+	UnderlyingProxy string `yaml:"underlying-proxy,omitempty" json:"underlying-proxy,omitempty"`
 }
 
 func (p *BaseProxy) GetType() string {
@@ -50,4 +52,12 @@ func (p *BaseProxy) GetGroupId() int {
 
 func (p *BaseProxy) SetGroupId(groupId int) {
 	p.GroupId = groupId
+}
+
+func (p *BaseProxy) GetUnderlyingProxy() string {
+	return p.UnderlyingProxy
+}
+
+func (p *BaseProxy) SetUnderlyingProxy(proxy string) {
+	p.UnderlyingProxy = proxy
 }

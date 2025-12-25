@@ -14,6 +14,8 @@ type ProxyInterface interface {
 	SetGroup(group string)
 	GetGroupId() int
 	SetGroupId(groupId int)
+	GetUnderlyingProxy() string
+	SetUnderlyingProxy(proxy string)
 }
 
 type ParsableProxy interface {

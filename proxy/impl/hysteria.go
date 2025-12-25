@@ -66,6 +66,10 @@ func (p *HysteriaProxy) ToClashConfig(ext *config.ProxySetting) (map[string]inte
 		options["obfs"] = p.Obfs
 	}
 
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	if p.Params != nil {
 		if sni := p.Params.Get("sni"); sni != "" {
 			options["sni"] = sni

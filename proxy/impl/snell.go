@@ -71,6 +71,11 @@ func (p *SnellProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 			options["skip-cert-verify"] = true
 		}
 	}
+
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	return options, nil
 }
 

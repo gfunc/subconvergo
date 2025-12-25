@@ -232,6 +232,8 @@ func (p *ShadowsocksParser) ParseSurge(content string) (core.ParsableProxy, erro
 			case "tfo":
 				b := v == "true"
 				ss.TFO = &b
+			case "underlying-proxy":
+				ss.UnderlyingProxy = v
 			}
 		}
 	}

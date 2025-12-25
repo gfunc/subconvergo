@@ -274,6 +274,8 @@ func (p *VMessParser) ParseSurge(content string) (core.ParsableProxy, error) {
 			case "skip-cert-verify":
 				b := v == "true"
 				vmess.SCV = &b
+			case "underlying-proxy":
+				vmess.UnderlyingProxy = v
 			}
 		}
 	}

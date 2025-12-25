@@ -127,6 +127,8 @@ func (p *SnellParser) ParseSurge(content string) (core.ParsableProxy, error) {
 			case "tls13":
 				b := v == "true"
 				snell.TLS13 = &b
+			case "underlying-proxy":
+				snell.UnderlyingProxy = v
 			}
 		}
 	}

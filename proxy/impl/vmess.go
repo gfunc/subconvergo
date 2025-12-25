@@ -171,6 +171,11 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		}
 		options["quic-opts"] = quicOpts
 	}
+
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
+
 	return options, nil
 }
 

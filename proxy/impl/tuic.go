@@ -57,6 +57,10 @@ func (p *TUICProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 	if p.AllowInsecure {
 		options["skip-cert-verify"] = true
 	}
+
+	if p.UnderlyingProxy != "" {
+		options["dialer-proxy"] = p.UnderlyingProxy
+	}
 	if p.Params != nil {
 		if sni := p.Params.Get("sni"); sni != "" {
 			options["sni"] = sni
