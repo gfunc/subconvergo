@@ -43,8 +43,8 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 		return nil, fmt.Errorf("failed to parse clash format: %w", err)
 	}
 
-	if len(clashConfig.Proxy) == 0 {
-		return nil, fmt.Errorf("no proxies found in clash format")
+	if len(clashConfig.Proxy) == 0 && len(clashConfig.ProxyGroup) == 0 && len(clashConfig.Rule) == 0 {
+		return nil, fmt.Errorf("no proxies or proxy groups or rules found in clash config")
 	}
 	custom := &core.SubContent{Proxies: make([]proxyCore.ProxyInterface, 0)}
 
