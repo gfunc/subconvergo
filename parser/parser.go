@@ -238,9 +238,11 @@ func (sp *SubParser) fetchSubscription() (string, error) {
 		return "", err
 	}
 
-	if sp.UserAgent != "" {
-		req.Header.Set("User-Agent", sp.UserAgent)
+	ua := sp.UserAgent
+	if ua == "" {
+		ua = "subconverter/0.7.2 subconvergo/0.1.0"
 	}
+	req.Header.Set("User-Agent", ua)
 
 	resp, err := client.Do(req)
 	if err != nil {
