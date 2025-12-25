@@ -202,6 +202,58 @@ def test_import_keyword_yaml():
     _run_import_test("config/test_import.yml")
     print("test_import_keyword_yaml passed")
 
+def test_external_config_template_override():
+    """
+    Test that external config can override the base template.
+    We use custom_profile.ini which sets clash_rule_base=base/custom_clash.tpl
+    """
+    config_path = "config/custom_profile.ini"
+    
+    resp = infra.api_get_subconvergo(
+        "/sub", 
+        params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt",
+            "config": config_path
+        }
+    )
+    
+    assert resp.status_code == 200, f"Request failed: {resp.text}"
+    
+    data = yaml.safe_load(resp.text)
+    
+    # Verify that the custom key from the template is present
+    assert data.get("custom-key") == "custom-value-from-template", "Custom template was not used"
+
+def test_config_isolation():
+    """
+    Verify that external configuration overrides do not persist to subsequent requests.
+    """
+    # 1. Request with external config that sets custom base
+    resp = infra.api_get_subconvergo(
+        "/sub",
+        params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt",
+            "config": "config/test_isolation.ini"
+        }
+    )
+    assert resp.status_code == 200
+    data = yaml.safe_load(resp.text)
+    assert data.get("custom-key") == "ISOLATION_TEST_MARKER", "First request should use overridden base"
+
+    # 2. Request WITHOUT external config
+    resp_default = infra.api_get_subconvergo(
+        "/sub",
+        params={
+            "target": "clash",
+            "url": f"{infra.MOCK_BASE}/ss-subscription.txt"
+        }
+    )
+    assert resp_default.status_code == 200
+    data_default = yaml.safe_load(resp_default.text)
+    assert data_default.get("custom-key") != "ISOLATION_TEST_MARKER", "Second request should NOT use overridden base"
+
 CASES = [
     (setup_external_config, test_external_config_override),
     (setup_external_config, test_external_config_override_yaml),
@@ -213,6 +265,8 @@ CASES = [
     (setup_external_config, test_import_keyword_ini),
     (setup_external_config, test_import_keyword_toml),
     (setup_external_config, test_import_keyword_yaml),
+    (setup_external_config, test_external_config_template_override),
+    (setup_external_config, test_config_isolation),
 ]
 
 if __name__ == "__main__":

@@ -1,0 +1,12 @@
+[common]
+clash_rule_base = "base/rules_base.tpl"
+
+[ruleset]
+enabled = true
+overwrite_original_rules = true
+
+[[rulesets]]
+ruleset = "!!import:snippets/test_ruleset.txt"
+
+[[custom_groups]]
+import = "snippets/test_group.txt"

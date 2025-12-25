@@ -132,7 +132,7 @@ type EmojiRuleConfig struct {
 // RulesetSection represents the [rulesets] section
 type RulesetSection struct {
 	Enabled                bool            `yaml:"enabled" toml:"enabled" ini:"enabled"`
-	OverwriteOriginalRules bool            `yaml:"overwrite_original_rules" toml:"overwrite_original_rules" ini:"overwrite_original_rules"`
+	OverwriteOriginalRules *bool           `yaml:"overwrite_original_rules" toml:"overwrite_original_rules" ini:"overwrite_original_rules"`
 	UpdateRulesetOnRequest bool            `yaml:"update_ruleset_on_request" toml:"update_ruleset_on_request" ini:"update_ruleset_on_request"`
 	Rulesets               []RulesetConfig `yaml:"rulesets" toml:"rulesets" ini:"-"`
 }
@@ -532,7 +532,8 @@ func (setting *Settings) loadINIConfig(path string) error {
 			setting.Rulesets.Enabled = key.MustBool(true)
 		}
 		if key := sec.Key("overwrite_original_rules"); key != nil {
-			setting.Rulesets.OverwriteOriginalRules = key.MustBool(false)
+			val := key.MustBool(false)
+			setting.Rulesets.OverwriteOriginalRules = &val
 		}
 		if key := sec.Key("update_ruleset_on_request"); key != nil {
 			setting.Rulesets.UpdateRulesetOnRequest = key.MustBool(false)
@@ -1344,4 +1345,84 @@ func isRuleType(t string) bool {
 		return true
 	}
 	return false
+}
+
+// Merge merges another settings into this one
+func (s *Settings) Merge(other *Settings) {
+	if other == nil {
+		return
+	}
+
+	// Merge Common
+	if other.Common.ClashRuleBase != "" {
+		s.Common.ClashRuleBase = other.Common.ClashRuleBase
+	}
+	if other.Common.SurgeRuleBase != "" {
+		s.Common.SurgeRuleBase = other.Common.SurgeRuleBase
+	}
+	if other.Common.SurfboardRuleBase != "" {
+		s.Common.SurfboardRuleBase = other.Common.SurfboardRuleBase
+	}
+	if other.Common.MellowRuleBase != "" {
+		s.Common.MellowRuleBase = other.Common.MellowRuleBase
+	}
+	if other.Common.QuanRuleBase != "" {
+		s.Common.QuanRuleBase = other.Common.QuanRuleBase
+	}
+	if other.Common.QuanXRuleBase != "" {
+		s.Common.QuanXRuleBase = other.Common.QuanXRuleBase
+	}
+	if other.Common.LoonRuleBase != "" {
+		s.Common.LoonRuleBase = other.Common.LoonRuleBase
+	}
+	if other.Common.SSSubRuleBase != "" {
+		s.Common.SSSubRuleBase = other.Common.SSSubRuleBase
+	}
+	if other.Common.SingBoxRuleBase != "" {
+		s.Common.SingBoxRuleBase = other.Common.SingBoxRuleBase
+	}
+	if other.Common.BasePath != "" {
+		s.Common.BasePath = other.Common.BasePath
+	}
+
+	// Merge Proxy Groups (replace if not empty)
+	if len(other.ProxyGroups.CustomProxyGroups) > 0 {
+		s.ProxyGroups.CustomProxyGroups = other.ProxyGroups.CustomProxyGroups
+	}
+	if len(other.CustomGroups) > 0 {
+		s.ProxyGroups.CustomProxyGroups = append(s.ProxyGroups.CustomProxyGroups, other.CustomGroups...)
+	}
+
+	// Merge Rulesets
+	if len(other.Rulesets.Rulesets) > 0 {
+		s.Rulesets.Rulesets = other.Rulesets.Rulesets
+	}
+	if len(other.CustomRulesets) > 0 {
+		s.Rulesets.Rulesets = append(s.Rulesets.Rulesets, other.CustomRulesets...)
+	}
+	if other.Rulesets.OverwriteOriginalRules != nil {
+		s.Rulesets.OverwriteOriginalRules = other.Rulesets.OverwriteOriginalRules
+	}
+
+	// Merge NodePref
+	if len(other.NodePref.RenameNodes) > 0 {
+		s.NodePref.RenameNodes = other.NodePref.RenameNodes
+	}
+	if other.NodePref.UDPFlag != nil {
+		s.NodePref.UDPFlag = other.NodePref.UDPFlag
+	}
+	if other.NodePref.TCPFastOpenFlag != nil {
+		s.NodePref.TCPFastOpenFlag = other.NodePref.TCPFastOpenFlag
+	}
+	if other.NodePref.SkipCertVerifyFlag != nil {
+		s.NodePref.SkipCertVerifyFlag = other.NodePref.SkipCertVerifyFlag
+	}
+	if other.NodePref.TLS13Flag != nil {
+		s.NodePref.TLS13Flag = other.NodePref.TLS13Flag
+	}
+
+	// Merge Emojis
+	if len(other.Emojis.Rules) > 0 {
+		s.Emojis.Rules = other.Emojis.Rules
+	}
 }

@@ -226,7 +226,13 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 	}
 
 	if len(providers) > 0 {
-		base["proxy-providers"] = providers
+		if existing, ok := base["proxy-providers"].(map[string]interface{}); ok {
+			for k, v := range providers {
+				existing[k] = v
+			}
+		} else {
+			base["proxy-providers"] = providers
+		}
 	}
 
 	// Generate rules if enabled

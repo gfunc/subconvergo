@@ -390,7 +390,7 @@ skip_failed_links=false
 	if !setting.Rulesets.Enabled {
 		t.Error("Expected Rulesets.Enabled=true")
 	}
-	if !setting.Rulesets.OverwriteOriginalRules {
+	if setting.Rulesets.OverwriteOriginalRules == nil || !*setting.Rulesets.OverwriteOriginalRules {
 		t.Error("Expected OverwriteOriginalRules=true")
 	}
 	if len(setting.Rulesets.Rulesets) < 3 {

@@ -42,7 +42,7 @@ func TestLoadBaseConfig(t *testing.T) {
 	config.Global.Common.ClashRuleBase = baseFile
 	config.Global.Template.TemplatePath = dir
 
-	rendered, err := h.loadBaseConfig("clash", map[string]string{"target": "clash"})
+	rendered, err := h.loadBaseConfig("clash", map[string]string{"target": "clash"}, config.Global)
 	if err != nil {
 		t.Fatalf("loadBaseConfig error: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestLoadBaseConfigFunc(t *testing.T) {
 	h := NewSubHandler()
 	config.Global.Common.ClashRuleBase = "test.yaml"
 
-	_, err := h.loadBaseConfig("clash", nil)
+	_, err := h.loadBaseConfig("clash", nil, config.Global)
 	if err == nil {
 		t.Log("Base config loaded (or expected error)")
 	}
@@ -178,11 +178,11 @@ func TestLoadExternalConfig_YAMLRemote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(ecfg.ProxyGroups) == 0 || ecfg.ProxyGroups[0].Name != "Auto" {
-		t.Fatalf("external groups not parsed: %#v", ecfg.ProxyGroups)
+	if len(ecfg.ProxyGroups.CustomProxyGroups) == 0 || ecfg.ProxyGroups.CustomProxyGroups[0].Name != "Auto" {
+		t.Fatalf("external groups not parsed: %#v", ecfg.ProxyGroups.CustomProxyGroups)
 	}
-	if len(ecfg.Rulesets) == 0 || ecfg.Rulesets[0].Group != "Auto" {
-		t.Fatalf("external rulesets not parsed: %#v", ecfg.Rulesets)
+	if len(ecfg.Rulesets.Rulesets) == 0 || ecfg.Rulesets.Rulesets[0].Group != "Auto" {
+		t.Fatalf("external rulesets not parsed: %#v", ecfg.Rulesets.Rulesets)
 	}
 }
 
@@ -212,8 +212,8 @@ func TestLoadExternalConfig_LocalTOML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(ecfg.ProxyGroups) == 0 || ecfg.ProxyGroups[0].Name != "Auto" {
-		t.Fatalf("toml groups not parsed: %#v", ecfg.ProxyGroups)
+	if len(ecfg.ProxyGroups.CustomProxyGroups) == 0 || ecfg.ProxyGroups.CustomProxyGroups[0].Name != "Auto" {
+		t.Fatalf("toml groups not parsed: %#v", ecfg.ProxyGroups.CustomProxyGroups)
 	}
 }
 
@@ -275,7 +275,7 @@ func TestLoadBaseConfigDifferentTargets(t *testing.T) {
 	targets := []string{"clash", "surge", "loon", "quantumultx", "singbox", "ss", "v2ray", "trojan"}
 
 	for _, target := range targets {
-		_, err := h.loadBaseConfig(target, nil)
+		_, err := h.loadBaseConfig(target, nil, config.Global)
 		if err != nil {
 			t.Logf("%s base config load error (acceptable): %v", target, err)
 		}

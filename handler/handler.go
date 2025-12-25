@@ -146,30 +146,19 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	}
 	log.Printf("[handler.HandleSub] target=%s urls=%d urlLen=%d config=%s client=%s", target, len(urlsToProcess), len(urlParam), configParam, c.ClientIP())
 
-	// Load external config if specified
-	proxyGroups := config.Global.ProxyGroups.CustomProxyGroups
-	rulesets := config.Global.Rulesets.Rulesets
+	// Create request-scoped config initialized with global settings
+	reqConfig := *config.Global
 
+	// Load external config if specified
 	if configParam != "" {
 		// Load external config (can be URL or file path)
 		extConfig, err := h.loadExternalConfig(configParam)
 		if err != nil {
 			log.Printf("[handler.HandleSub] failed to load external config %s: %v", configParam, err)
 		} else if extConfig != nil {
-			log.Printf("[handler.HandleSub] loaded external config %s proxyGroups=%d rulesets=%d", configParam, len(extConfig.ProxyGroups), len(extConfig.Rulesets))
-			// Merge external config
-			if len(extConfig.ProxyGroups) > 0 {
-				proxyGroups = extConfig.ProxyGroups
-			}
-			if len(extConfig.Rulesets) > 0 {
-				rulesets = extConfig.Rulesets
-			}
-			if extConfig.OverwriteOriginalRules != nil {
-				config.Global.Rulesets.OverwriteOriginalRules = *extConfig.OverwriteOriginalRules
-			}
-			if extConfig.ClashRuleBase != "" {
-				config.Global.Common.ClashRuleBase = extConfig.ClashRuleBase
-			}
+			log.Printf("[handler.HandleSub] loaded external config %s", configParam)
+			// Merge external config into request config
+			reqConfig.Merge(extConfig)
 		}
 	}
 
@@ -185,7 +174,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		sp := &parser.SubParser{
 			Index:     index,
 			URL:       url,
-			Proxy:     config.Global.Common.ProxySubscription,
+			Proxy:     reqConfig.Common.ProxySubscription,
 			UserAgent: uaParam,
 		}
 		custom, err := sp.Parse()
@@ -195,7 +184,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 			otherProxyGroups = append(otherProxyGroups, custom.Groups...)
 			rawRules = append(rawRules, custom.RawRules...)
 			continue
-		} else if !config.Global.Advanced.SkipFailedLinks {
+		} else if !reqConfig.Advanced.SkipFailedLinks {
 			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription (%s): %v", url, err))
 			return
 		} else {
@@ -203,7 +192,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		}
 	}
 
-	log.Printf("[handler.HandleSub] Parsed %d proxies, %d groups from %d URLs", len(allProxies), len(proxyGroups), len(urlsToProcess))
+	log.Printf("[handler.HandleSub] Parsed %d proxies, %d groups from %d URLs", len(allProxies), len(reqConfig.ProxyGroups.CustomProxyGroups), len(urlsToProcess))
 
 	if len(allProxies) == 0 {
 		log.Printf("[handler.HandleSub] no valid proxies parsed from %d url(s)", len(urlsToProcess))
@@ -223,16 +212,16 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	exclude := params.Exclude
 
 	var includePatterns []string
-	if len(config.Global.Common.IncludeRemarks) > 0 {
-		includePatterns = append(includePatterns, config.Global.Common.IncludeRemarks...)
+	if len(reqConfig.Common.IncludeRemarks) > 0 {
+		includePatterns = append(includePatterns, reqConfig.Common.IncludeRemarks...)
 	}
 	if include != "" {
 		includePatterns = append(includePatterns, include)
 	}
 
 	var excludePatterns []string
-	if len(config.Global.Common.ExcludeRemarks) > 0 {
-		excludePatterns = append(excludePatterns, config.Global.Common.ExcludeRemarks...)
+	if len(reqConfig.Common.ExcludeRemarks) > 0 {
+		excludePatterns = append(excludePatterns, reqConfig.Common.ExcludeRemarks...)
 	}
 	if exclude != "" {
 		excludePatterns = append(excludePatterns, exclude)
@@ -241,11 +230,12 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	// Construct transformation pipeline
 	pipeline := []transformers.Transformer{
 		transformers.NewFilterTransformer(includePatterns, excludePatterns),
-		transformers.NewRenameTransformer(config.Global.NodePref.RenameNodes),
-		transformers.NewEmojiTransformer(config.Global.Emojis),
-		transformers.NewSortTransformer(config.Global.NodePref.SortFlag),
+		transformers.NewRenameTransformer(reqConfig.NodePref.RenameNodes),
+		transformers.NewEmojiTransformer(reqConfig.Emojis),
+		transformers.NewSortTransformer(reqConfig.NodePref.SortFlag),
 	}
 
+	proxyGroups := reqConfig.ProxyGroups.CustomProxyGroups
 	if len(otherProxyGroups) > 0 {
 		proxyGroups = append(proxyGroups, otherProxyGroups...)
 	}
@@ -254,19 +244,23 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	opts := core.GeneratorOptions{
 		Target:                 target,
 		ProxyGroups:            proxyGroups,
-		Rulesets:               rulesets,
+		Rulesets:               reqConfig.Rulesets.Rulesets,
 		RawRules:               rawRules,
-		AppendProxyType:        config.Global.Common.AppendProxyType,
-		EnableRuleGen:          config.Global.Rulesets.Enabled,
-		OverwriteOriginalRules: config.Global.Rulesets.OverwriteOriginalRules,
+		AppendProxyType:        reqConfig.Common.AppendProxyType,
+		EnableRuleGen:          reqConfig.Rulesets.Enabled,
+		OverwriteOriginalRules: false, // Default to false, will be updated below
 		Pipelines:              pipeline,
 
 		ProxySetting: config.ProxySetting{
-			ClashProxiesStyle:   config.Global.NodePref.ClashProxiesStyle,
-			ClashGroupsStyle:    config.Global.NodePref.ClashProxyGroupsStyle,
-			SingBoxAddClashMode: config.Global.NodePref.SingBoxAddClashModes,
-			ClashUseNewField:    config.Global.NodePref.ClashUseNewField,
+			ClashProxiesStyle:   reqConfig.NodePref.ClashProxiesStyle,
+			ClashGroupsStyle:    reqConfig.NodePref.ClashProxyGroupsStyle,
+			SingBoxAddClashMode: reqConfig.NodePref.SingBoxAddClashModes,
+			ClashUseNewField:    reqConfig.NodePref.ClashUseNewField,
 		},
+	}
+
+	if reqConfig.Rulesets.OverwriteOriginalRules != nil {
+		opts.OverwriteOriginalRules = *reqConfig.Rulesets.OverwriteOriginalRules
 	}
 
 	// Apply auto-detected settings
@@ -278,10 +272,10 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	}
 
 	// Apply node preferences to generator options
-	opts.UDP = config.Global.NodePref.UDPFlag
-	opts.TFO = config.Global.NodePref.TCPFastOpenFlag
-	opts.SCV = config.Global.NodePref.SkipCertVerifyFlag
-	opts.TLS13 = config.Global.NodePref.TLS13Flag
+	opts.UDP = reqConfig.NodePref.UDPFlag
+	opts.TFO = reqConfig.NodePref.TCPFastOpenFlag
+	opts.SCV = reqConfig.NodePref.SkipCertVerifyFlag
+	opts.TLS13 = reqConfig.NodePref.TLS13Flag
 
 	// Parse boolean options
 	if params.UDP != nil {
@@ -317,7 +311,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	}
 
 	// Load base configuration
-	baseConfig, err := h.loadBaseConfig(target, requestParams)
+	baseConfig, err := h.loadBaseConfig(target, requestParams, &reqConfig)
 	if err != nil {
 		log.Printf("[handler.HandleSub] loadBaseConfig target=%s err=%v", target, err)
 		c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to load base config: %v", err))
@@ -374,28 +368,29 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	c.Data(http.StatusOK, contentType, []byte(output))
 }
 
-func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]string) (string, error) {
+func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]string, reqConfig *config.Settings) (string, error) {
 	var basePath string
 
+	// Use request config which might have been overridden
 	switch target {
 	case "clash", "clashr":
-		basePath = config.Global.Common.ClashRuleBase
+		basePath = reqConfig.Common.ClashRuleBase
 	case "surge":
-		basePath = config.Global.Common.SurgeRuleBase
+		basePath = reqConfig.Common.SurgeRuleBase
 	case "surfboard":
-		basePath = config.Global.Common.SurfboardRuleBase
+		basePath = reqConfig.Common.SurfboardRuleBase
 	case "mellow":
-		basePath = config.Global.Common.MellowRuleBase
+		basePath = reqConfig.Common.MellowRuleBase
 	case "quan":
-		basePath = config.Global.Common.QuanRuleBase
+		basePath = reqConfig.Common.QuanRuleBase
 	case "quanx":
-		basePath = config.Global.Common.QuanXRuleBase
+		basePath = reqConfig.Common.QuanXRuleBase
 	case "loon":
-		basePath = config.Global.Common.LoonRuleBase
+		basePath = reqConfig.Common.LoonRuleBase
 	case "sssub":
-		basePath = config.Global.Common.SSSubRuleBase
+		basePath = reqConfig.Common.SSSubRuleBase
 	case "singbox":
-		basePath = config.Global.Common.SingBoxRuleBase
+		basePath = reqConfig.Common.SingBoxRuleBase
 	default:
 		return "", nil
 	}
@@ -440,6 +435,8 @@ func (h *SubHandler) renderTemplateWithContext(content string, requestParams map
 	// Add global template settings directly to root (for compatibility)
 	for _, g := range config.Global.Template.Globals {
 		setNestedValue(data, g.Key, g.Value)
+		// Also add to "global" namespace
+		setNestedValue(data, "global."+g.Key, g.Value)
 	}
 
 	// Add request parameters under "request" namespace (nil-safe range)
@@ -535,17 +532,8 @@ func setNestedValue(data map[string]interface{}, key string, value string) {
 	current[keys[len(keys)-1]] = value
 }
 
-// ExternalConfig represents external configuration
-type ExternalConfig struct {
-	ProxyGroups            []config.ProxyGroupConfig
-	Rulesets               []config.RulesetConfig
-	BasePath               string
-	OverwriteOriginalRules *bool // Use pointer to distinguish between unset and false
-	ClashRuleBase          string
-}
-
 // loadExternalConfig loads external configuration from URL or file
-func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
+func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 	var data []byte
 
 	// Determine source: http(s) or local file
@@ -635,46 +623,14 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 		if err := extSettings.ProcessImports(); err != nil {
 			log.Printf("[handler.loadExternalConfig] failed to process imports in YAML: %v", err)
 		}
-		groups := extSettings.ProxyGroups.CustomProxyGroups
-		if len(extSettings.CustomGroups) > 0 {
-			groups = append(groups, extSettings.CustomGroups...)
-		}
-
-		rulesets := extSettings.Rulesets.Rulesets
-		if len(extSettings.CustomRulesets) > 0 {
-			rulesets = append(rulesets, extSettings.CustomRulesets...)
-		}
-
-		return &ExternalConfig{
-			ProxyGroups:            groups,
-			Rulesets:               rulesets,
-			BasePath:               extSettings.Common.BasePath,
-			OverwriteOriginalRules: &extSettings.Rulesets.OverwriteOriginalRules,
-			ClashRuleBase:          extSettings.Common.ClashRuleBase,
-		}, nil
+		return &extSettings, nil
 	}
 
 	if _, err := toml.Decode(string(data), &extSettings); err == nil {
 		if err := extSettings.ProcessImports(); err != nil {
 			log.Printf("[handler.loadExternalConfig] failed to process imports in TOML: %v", err)
 		}
-		groups := extSettings.ProxyGroups.CustomProxyGroups
-		if len(extSettings.CustomGroups) > 0 {
-			groups = append(groups, extSettings.CustomGroups...)
-		}
-
-		rulesets := extSettings.Rulesets.Rulesets
-		if len(extSettings.CustomRulesets) > 0 {
-			rulesets = append(rulesets, extSettings.CustomRulesets...)
-		}
-
-		return &ExternalConfig{
-			ProxyGroups:            groups,
-			Rulesets:               rulesets,
-			BasePath:               extSettings.Common.BasePath,
-			OverwriteOriginalRules: &extSettings.Rulesets.OverwriteOriginalRules,
-			ClashRuleBase:          extSettings.Common.ClashRuleBase,
-		}, nil
+		return &extSettings, nil
 	}
 
 	if cfg, err := ini.LoadSources(ini.LoadOptions{AllowShadows: true}, data); err == nil {
@@ -691,34 +647,19 @@ func (h *SubHandler) loadExternalConfig(path string) (*ExternalConfig, error) {
 			}
 
 			// Check for overwrite_original_rules in rulesets section manually
-			var overwrite *bool
 			if section, err := cfg.GetSection("rulesets"); err == nil {
 				if section.HasKey("overwrite_original_rules") {
 					val := section.Key("overwrite_original_rules").MustBool(false)
-					overwrite = &val
+					extSettings.Rulesets.OverwriteOriginalRules = &val
 				}
 			}
 
-			// If not found in [ruleset], check [common] or root?
-			// Subconverter usually puts it in [ruleset] or root?
-			// pref.example.toml has it in [ruleset].
-
-			if overwrite == nil {
-				overwrite = &extSettings.Rulesets.OverwriteOriginalRules
-			}
-
-			return &ExternalConfig{
-				ProxyGroups:            extSettings.CustomGroups,
-				Rulesets:               extSettings.CustomRulesets,
-				BasePath:               extSettings.Common.BasePath,
-				OverwriteOriginalRules: overwrite,
-				ClashRuleBase:          extSettings.Common.ClashRuleBase,
-			}, nil
+			return &extSettings, nil
 		}
 	}
 
 	// If all failed, return empty (non-nil) config to avoid breaking caller
-	return &ExternalConfig{}, nil
+	return &config.Settings{}, nil
 }
 
 // HandleVersion processes /version endpoint
