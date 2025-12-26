@@ -789,7 +789,7 @@ func TestIgnoreSourceDefault(t *testing.T) {
 	s := Settings{}
 	s.init() // This sets defaults
 
-	if !s.Common.IgnoreSource {
+	if s.Common.IgnoreSource == nil || !*s.Common.IgnoreSource {
 		t.Error("Expected IgnoreSource to default to true")
 	}
 }

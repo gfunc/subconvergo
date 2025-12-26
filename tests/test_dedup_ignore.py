@@ -60,6 +60,12 @@ CASES = [
         pref_modifier=setup_dedup_ignore
     ),
     infra.StandaloneTestCase(
+        name="ignore_source_external_config",
+        query=lambda: infra.api_get_subconvergo("/sub?target=clash&url=http://mock-subscription/dedup-ignore.yaml&config=http://mock-subscription/ignore_source_false.yml"),
+        validate=validate_ignore_source_false,
+        pref_modifier=setup_dedup_ignore
+    ),
+    infra.StandaloneTestCase(
         name="dedup_proxies",
         query=lambda: infra.api_get_subconvergo("/sub?target=clash&url=http://mock-subscription/dedup-ignore.yaml"),
         validate=validate_dedup_proxies,

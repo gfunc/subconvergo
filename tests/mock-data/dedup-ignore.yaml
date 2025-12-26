@@ -1,0 +1,23 @@
+proxies:
+  - name: DuplicateProxy
+    type: ss
+    server: 1.1.1.1
+    port: 8388
+    cipher: aes-256-gcm
+    password: password
+  - name: DuplicateProxy
+    type: ss
+    server: 2.2.2.2
+    port: 8388
+    cipher: aes-256-gcm
+    password: password
+
+proxy-groups:
+  - name: SourceGroup
+    type: select
+    proxies:
+      - DuplicateProxy
+  - name: DuplicateGroup
+    type: select
+    proxies:
+      - DuplicateProxy

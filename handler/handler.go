@@ -150,11 +150,6 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	// Create request-scoped config initialized with global settings
 	reqConfig := *config.Global
 
-	ignoreSource := reqConfig.Common.IgnoreSource
-	if params.IgnoreSource != nil {
-		ignoreSource = *params.IgnoreSource
-	}
-
 	// Load external config if specified
 	if configParam != "" {
 		// Load external config (can be URL or file path)
@@ -166,6 +161,14 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 			// Merge external config into request config
 			reqConfig.Merge(extConfig)
 		}
+	}
+
+	ignoreSource := true
+	if reqConfig.Common.IgnoreSource != nil {
+		ignoreSource = *reqConfig.Common.IgnoreSource
+	}
+	if params.IgnoreSource != nil {
+		ignoreSource = *params.IgnoreSource
 	}
 
 	// Parse subscription URLs (support multiple URLs separated by |)
