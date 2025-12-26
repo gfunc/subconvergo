@@ -34,11 +34,19 @@ func (p *SingleSubscriptionParser) Parse(content string) (*core.SubContent, erro
 	// subconverter: while(getline(strstream, strLink, delimiter))
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 
+	seenLines := make(map[string]bool)
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
+		// Deduplicate lines
+		if seenLines[line] {
+			continue
+		}
+		seenLines[line] = true
 
 		p, err := proxy.ParseProxy(line)
 		if err != nil {

@@ -38,11 +38,11 @@ def validate_dedup_proxies(resp):
     data = yaml.safe_load(resp.text)
     proxies = [p["name"] for p in data.get("proxies", [])]
     
-    # Should have DuplicateProxy and DuplicateProxy_1
+    # Should have DuplicateProxy and DuplicateProxy 2
     if "DuplicateProxy" not in proxies:
         return {"_failures": ["DuplicateProxy missing"]}
-    if "DuplicateProxy_1" not in proxies:
-        return {"_failures": ["DuplicateProxy_1 missing (deduplication failed)"]}
+    if "DuplicateProxy 2" not in proxies:
+        return {"_failures": ["DuplicateProxy 2 missing (deduplication failed)"]}
         
     return {"proxies": proxies}
 

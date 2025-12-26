@@ -2,6 +2,7 @@ package transformers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gfunc/subconvergo/config"
 	"github.com/gfunc/subconvergo/proxy/core"
@@ -22,15 +23,29 @@ func (t *DeduplicateTransformer) Transform(proxies []core.ProxyInterface, global
 
 	for _, p := range proxies {
 		originalName := p.GetRemark()
-		name := originalName
-		count := 0
-		for usedNames[name] {
-			count++
-			name = fmt.Sprintf("%s_%d", originalName, count)
+
+		// Replace '=' with '-' to avoid parse errors in some clients (e.g. Surge)
+		originalName = strings.ReplaceAll(originalName, "=", "-")
+
+		// Quote if contains comma
+		if strings.Contains(originalName, ",") {
+			if !strings.HasPrefix(originalName, "\"") {
+				originalName = "\"" + originalName + "\""
+			}
 		}
-		if name != originalName {
+
+		name := originalName
+		count := 2
+		for usedNames[name] {
+			name = fmt.Sprintf("%s %d", originalName, count)
+			count++
+		}
+
+		// Always update remark if it changed (either by sanitization or deduplication)
+		if name != p.GetRemark() {
 			p.SetRemark(name)
 		}
+
 		usedNames[name] = true
 		finalProxies = append(finalProxies, p)
 	}
