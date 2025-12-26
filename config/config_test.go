@@ -784,3 +784,12 @@ func TestReloadConfig_PersistsEnvOverrides(t *testing.T) {
 		t.Errorf("Expected APIMode=true (from env) after reload, got false")
 	}
 }
+
+func TestIgnoreSourceDefault(t *testing.T) {
+	s := Settings{}
+	s.init() // This sets defaults
+
+	if !s.Common.IgnoreSource {
+		t.Error("Expected IgnoreSource to default to true")
+	}
+}

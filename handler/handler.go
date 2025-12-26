@@ -39,18 +39,19 @@ func NewSubHandler() *SubHandler {
 
 // RequestParams holds the parameters for subscription conversion
 type RequestParams struct {
-	Target    string `form:"target"`
-	URL       string `form:"url"`
-	Config    string `form:"config"`
-	UserAgent string `form:"ua"`
-	Group     string `form:"group"`
-	Include   string `form:"include"`
-	Exclude   string `form:"exclude"`
-	UDP       *bool  `form:"udp"`
-	TFO       *bool  `form:"tfo"`
-	SCV       *bool  `form:"scv"`
-	NewName   *bool  `form:"new_name"`
-	SurgeVer  *int   `form:"ver"`
+	Target       string `form:"target"`
+	URL          string `form:"url"`
+	Config       string `form:"config"`
+	UserAgent    string `form:"ua"`
+	Group        string `form:"group"`
+	Include      string `form:"include"`
+	Exclude      string `form:"exclude"`
+	UDP          *bool  `form:"udp"`
+	TFO          *bool  `form:"tfo"`
+	SCV          *bool  `form:"scv"`
+	NewName      *bool  `form:"new_name"`
+	SurgeVer     *int   `form:"ver"`
+	IgnoreSource *bool  `form:"ignore_source"`
 }
 
 // HandleSub processes /sub endpoint
@@ -149,6 +150,11 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	// Create request-scoped config initialized with global settings
 	reqConfig := *config.Global
 
+	ignoreSource := reqConfig.Common.IgnoreSource
+	if params.IgnoreSource != nil {
+		ignoreSource = *params.IgnoreSource
+	}
+
 	// Load external config if specified
 	if configParam != "" {
 		// Load external config (can be URL or file path)
@@ -181,8 +187,10 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		if err == nil {
 			log.Printf("[handler.HandleSub] Parsed URL %s: %d proxies, %d groups, %d rules", url, len(custom.Proxies), len(custom.Groups), len(custom.RawRules))
 			allProxies = append(allProxies, custom.Proxies...)
-			otherProxyGroups = append(otherProxyGroups, custom.Groups...)
-			rawRules = append(rawRules, custom.RawRules...)
+			if !ignoreSource {
+				otherProxyGroups = append(otherProxyGroups, custom.Groups...)
+				rawRules = append(rawRules, custom.RawRules...)
+			}
 			continue
 		} else if !reqConfig.Advanced.SkipFailedLinks {
 			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription (%s): %v", url, err))
@@ -233,12 +241,24 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		transformers.NewRenameTransformer(reqConfig.NodePref.RenameNodes),
 		transformers.NewEmojiTransformer(reqConfig.Emojis),
 		transformers.NewSortTransformer(reqConfig.NodePref.SortFlag),
+		transformers.NewDeduplicateTransformer(),
 	}
 
 	proxyGroups := reqConfig.ProxyGroups.CustomProxyGroups
 	if len(otherProxyGroups) > 0 {
 		proxyGroups = append(proxyGroups, otherProxyGroups...)
 	}
+
+	// Deduplicate proxy groups
+	uniqueGroups := make([]config.ProxyGroupConfig, 0, len(proxyGroups))
+	seenGroups := make(map[string]bool)
+	for _, g := range proxyGroups {
+		if !seenGroups[g.Name] {
+			uniqueGroups = append(uniqueGroups, g)
+			seenGroups[g.Name] = true
+		}
+	}
+	proxyGroups = uniqueGroups
 
 	// Prepare generator options
 	opts := core.GeneratorOptions{
@@ -1105,6 +1125,10 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 		if i, err := strconv.Atoi(v); err == nil {
 			params.SurgeVer = &i
 		}
+	}
+	if v, ok := paramsMap["ignore_source"]; ok {
+		b := v == "true"
+		params.IgnoreSource = &b
 	}
 
 	// Forward to /sub handler

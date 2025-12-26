@@ -57,8 +57,9 @@ curl http://localhost:25500/version
 
 While Subconvergo aims for full compatibility with the C++ version, there are some intentional differences:
 
-1.  **Clash Source Format**: When parsing a Clash configuration as a subscription source, Subconvergo **preserves** the `proxy-groups` and `rules` defined in the source file and adds them to the target output. This allows for easier migration of complex Clash configs.
-2.  **Protocol Parsing**: Subconvergo uses `mihomo` adapters for parsing, which may have stricter or slightly different validation logic compared to the custom parsers in the C++ version.
+1.  **Clash Source Format**: By default, Subconvergo **ignores** the `proxy-groups` and `rules` defined in the source subscription (including Clash configs) to provide a clean slate for the target configuration. This aligns with the C++ version's behavior. You can override this by setting `ignore_source=false` in the request parameters.
+2.  **Deduplication**: Subconvergo automatically deduplicates proxies and proxy groups to ensure valid configuration output. Duplicate names are suffixed (e.g., `Proxy_1`).
+3.  **Protocol Parsing**: Subconvergo uses `mihomo` adapters for parsing, which may have stricter or slightly different validation logic compared to the custom parsers in the C++ version.
 3.  **Local File URI**: Subconvergo supports `file://` URIs for subscription sources
 4.  **Clash Relay Groups**: Subconvergo automatically converts deprecated `relay` proxy groups into a chain of `dialer-proxy` configurations using `proxy-providers` when generating Clash configs. This ensures compatibility with modern Clash/Mihomo versions that have removed `relay` support.
 

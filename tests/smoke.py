@@ -9,6 +9,7 @@ from . import infra
 from . import test_standalone
 from . import test_comparison
 from . import test_external_config
+from . import test_dedup_ignore
 
 def main():
     parser = argparse.ArgumentParser(description="Run smoke tests")
@@ -29,7 +30,7 @@ def main():
         for setup, func in test_external_config.CASES
     ]
 
-    all_cases = test_standalone.CASES + test_comparison.CASES + external_cases
+    all_cases = test_standalone.CASES + test_comparison.CASES + external_cases + test_dedup_ignore.CASES
 
     if args.test:
         all_cases = [c for c in all_cases if args.test in c.name]

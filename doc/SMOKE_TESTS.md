@@ -48,6 +48,8 @@ The suite covers a wide range of functionality:
 4.  **`profile`**: Tests loading preset profiles via `/getprofile`.
 5.  **`ruleset_remote`**: Checks fetching and formatting of remote rulesets.
 6.  **`ruleset_compare`**: Compares ruleset output directly against the C++ subconverter.
+7.  **`ignore_source`**: Verifies the `ignore_source` parameter behavior (default true).
+8.  **`dedup_proxies`**: Checks that duplicate proxy names are automatically handled.
 7.  **`filters_regex`**: Verifies `include`/`exclude` filters using regex.
 8.  **`emoji_rule`**: Tests emoji addition based on regex rules.
 9.  **`rename_node`**: Tests node renaming functionality.

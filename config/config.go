@@ -40,6 +40,7 @@ type CommonConfig struct {
 	EnableInsert          bool     `yaml:"enable_insert" toml:"enable_insert" ini:"enable_insert"`
 	InsertURL             []string `yaml:"insert_url" toml:"insert_url" ini:"insert_url,omitempty,allowshadow"`
 	PrependInsertURL      bool     `yaml:"prepend_insert_url" toml:"prepend_insert_url" ini:"prepend_insert_url"`
+	IgnoreSource          bool     `yaml:"ignore_source" toml:"ignore_source" ini:"ignore_source"`
 	ExcludeRemarks        []string `yaml:"exclude_remarks" toml:"exclude_remarks" ini:"exclude_remarks,omitempty,allowshadow"`
 	IncludeRemarks        []string `yaml:"include_remarks" toml:"include_remarks" ini:"include_remarks,omitempty,allowshadow"`
 	EnableFilter          bool     `yaml:"enable_filter" toml:"enable_filter" ini:"enable_filter"`
@@ -251,6 +252,7 @@ func (s *Settings) init() {
 	s.Common.ProxyConfig = "SYSTEM"
 	s.Common.ProxyRuleset = "SYSTEM"
 	s.Common.ProxySubscription = "NONE"
+	s.Common.IgnoreSource = true
 
 	s.NodePref.ClashProxiesStyle = "flow"
 	s.NodePref.ClashProxyGroupsStyle = "block"

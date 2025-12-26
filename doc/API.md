@@ -27,6 +27,7 @@ Convert subscription(s) to target format.
 | `rename` | string | Custom rename rules (URL-encoded) | - |
 | `insert` | bool | Insert additional URLs from config | `true` |
 | `prepend` | bool | Insert additional URLs before subscription URLs | `false` |
+| `ignore_source` | bool | Ignore proxy groups and rules from source subscription (Clash/Surge) | `true` |
 | `group` | string | Set group name for SSD/SSR | - |
 
 **Example:**

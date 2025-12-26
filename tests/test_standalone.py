@@ -215,6 +215,7 @@ CASES = [
         query=lambda: infra.api_get_subconvergo("/sub", params={
             "target": "clash",
             "url": f"{infra.MOCK_BASE}/clash_only.yaml",
+            "ignore_source": "false",
         }),
         validate=lambda resp: (
             lambda data=yaml.safe_load(resp.text): (

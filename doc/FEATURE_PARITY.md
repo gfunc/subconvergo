@@ -50,6 +50,7 @@
 | `insert` | ✅ | Full | Enable/disable insert_url |
 | `prepend` | ✅ | Full | Insert before (true) or after (false) |
 | `group` | ✅ | Full | Set group name (for SSD/SSR) |
+| `ignore_source` | ✅ | Full | Ignore proxy groups/rules from source |
 
 ### Configuration File Sections
 
