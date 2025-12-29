@@ -88,17 +88,17 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		}
 	}
 
-	if udp != nil && *udp {
-		options["udp"] = true
+	if udp != nil {
+		options["udp"] = *udp
 	}
-	if scv != nil && *scv {
-		options["skip-cert-verify"] = true
+	if scv != nil {
+		options["skip-cert-verify"] = *scv
 	}
-	if tls13 != nil && *tls13 {
-		options["tls13"] = true
+	if tls13 != nil {
+		options["tls13"] = *tls13
 	}
-	if tfo != nil && *tfo {
-		options["tfo"] = true
+	if tfo != nil {
+		options["tfo"] = *tfo
 	}
 
 	if p.TLS {

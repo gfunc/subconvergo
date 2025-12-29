@@ -179,18 +179,20 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		}
 	}
 
-	if scv != nil && *scv {
-		options["skip-cert-verify"] = true
+	if scv != nil {
+		options["skip-cert-verify"] = *scv
 	}
-	if udp != nil && *udp {
-		options["udp"] = true
-		options["packet-encoding"] = "xudp"
+	if udp != nil {
+		options["udp"] = *udp
+		if *udp {
+			options["packet-encoding"] = "xudp"
+		}
 	}
-	if tfo != nil && *tfo {
-		options["tfo"] = true
+	if tfo != nil {
+		options["tfo"] = *tfo
 	}
-	if tls13 != nil && *tls13 {
-		options["tls13"] = true
+	if tls13 != nil {
+		options["tls13"] = *tls13
 	}
 
 	switch p.Network {

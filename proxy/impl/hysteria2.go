@@ -69,19 +69,38 @@ func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 		options["dialer-proxy"] = p.UnderlyingProxy
 	}
 
+	var udp, tfo, scv, tls13 *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+	tls13 = p.TLS13
+
 	if ext != nil {
-		if ext.UDP != nil && *ext.UDP {
-			options["udp"] = true
+		if ext.UDP != nil {
+			udp = ext.UDP
 		}
-		if ext.TFO != nil && *ext.TFO {
-			options["tfo"] = true
+		if ext.TFO != nil {
+			tfo = ext.TFO
 		}
-		if ext.SCV != nil && *ext.SCV {
-			options["skip-cert-verify"] = true
+		if ext.SCV != nil {
+			scv = ext.SCV
 		}
-		if ext.TLS13 != nil && *ext.TLS13 {
-			options["tls13"] = true
+		if ext.TLS13 != nil {
+			tls13 = ext.TLS13
 		}
+	}
+
+	if udp != nil {
+		options["udp"] = *udp
+	}
+	if tfo != nil {
+		options["tfo"] = *tfo
+	}
+	if scv != nil {
+		options["skip-cert-verify"] = *scv
+	}
+	if tls13 != nil {
+		options["tls13"] = *tls13
 	}
 	return options, nil
 }

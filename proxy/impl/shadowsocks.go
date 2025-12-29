@@ -71,14 +71,14 @@ func (p *ShadowsocksProxy) ToClashConfig(ext *config.ProxySetting) (map[string]i
 		}
 	}
 
-	if udp != nil && *udp {
-		options["udp"] = true
+	if udp != nil {
+		options["udp"] = *udp
 	}
-	if tfo != nil && *tfo {
-		options["tfo"] = true
+	if tfo != nil {
+		options["tfo"] = *tfo
 	}
-	if scv != nil && *scv {
-		options["skip-cert-verify"] = true
+	if scv != nil {
+		options["skip-cert-verify"] = *scv
 	}
 
 	if p.UnderlyingProxy != "" {

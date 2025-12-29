@@ -60,16 +60,31 @@ func (p *SnellProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		}
 	}
 
+	var udp, tfo, scv *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+
 	if ext != nil {
-		if ext.UDP != nil && *ext.UDP {
-			options["udp"] = true
+		if ext.UDP != nil {
+			udp = ext.UDP
 		}
-		if ext.TFO != nil && *ext.TFO {
-			options["tfo"] = true
+		if ext.TFO != nil {
+			tfo = ext.TFO
 		}
-		if ext.SCV != nil && *ext.SCV {
-			options["skip-cert-verify"] = true
+		if ext.SCV != nil {
+			scv = ext.SCV
 		}
+	}
+
+	if udp != nil {
+		options["udp"] = *udp
+	}
+	if tfo != nil {
+		options["tfo"] = *tfo
+	}
+	if scv != nil {
+		options["skip-cert-verify"] = *scv
 	}
 
 	if p.UnderlyingProxy != "" {
