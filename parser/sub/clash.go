@@ -82,8 +82,11 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 		case "wireguard":
 			parser := &proxy.WireGuardParser{}
 			p, err = parser.ParseClash(proxyMap)
-		case "hysteria", "hysteria2":
+		case "hysteria":
 			parser := &proxy.HysteriaParser{}
+			p, err = parser.ParseClash(proxyMap)
+		case "hysteria2":
+			parser := &proxy.Hysteria2Parser{}
 			p, err = parser.ParseClash(proxyMap)
 		case "vless":
 			parser := &proxy.VLESSParser{}

@@ -24,6 +24,18 @@ type VMessProxy struct {
 	SNI                 string `yaml:"sni" json:"sni"`
 	HttpUpgrade         bool   `yaml:"http_upgrade" json:"http_upgrade"`
 	HttpUpgradeFastOpen bool   `yaml:"http_upgrade_fast_open" json:"http_upgrade_fast_open"`
+
+	// New mihomo parameters
+	IpVersion                string `yaml:"ip_version" json:"ip_version"`
+	ClientFingerprint        string `yaml:"client_fingerprint" json:"client_fingerprint"`
+	EchEnable                *bool  `yaml:"ech_enable" json:"ech_enable"`
+	EchConfig                string `yaml:"ech_config" json:"ech_config"`
+	Certificate              string `yaml:"certificate" json:"certificate"`
+	PrivateKeyPem            string `yaml:"private_key_pem" json:"private_key_pem"`
+	WsMaxEarlyData           int    `yaml:"ws_max_early_data" json:"ws_max_early_data"`
+	WsEarlyDataHeaderName    string `yaml:"ws_early_data_header_name" json:"ws_early_data_header_name"`
+	V2rayHttpUpgrade         *bool  `yaml:"v2ray_http_upgrade" json:"v2ray_http_upgrade"`
+	V2rayHttpUpgradeFastOpen *bool  `yaml:"v2ray_http_upgrade_fast_open" json:"v2ray_http_upgrade_fast_open"`
 }
 
 func (p *VMessProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
@@ -67,6 +79,29 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		"network": p.Network,
 	}
 
+	if p.IpVersion != "" {
+		options["ip-version"] = p.IpVersion
+	}
+	if p.ClientFingerprint != "" {
+		options["client-fingerprint"] = p.ClientFingerprint
+	}
+	if p.EchEnable != nil || p.EchConfig != "" {
+		echOpts := make(map[string]interface{})
+		if p.EchEnable != nil {
+			echOpts["enable"] = *p.EchEnable
+		}
+		if p.EchConfig != "" {
+			echOpts["config"] = p.EchConfig
+		}
+		options["ech-opts"] = echOpts
+	}
+	if p.Certificate != "" {
+		options["certificate"] = p.Certificate
+	}
+	if p.PrivateKeyPem != "" {
+		options["private-key"] = p.PrivateKeyPem
+	}
+
 	var udp, tfo, scv, tls13 *bool
 	udp = p.UDP
 	tfo = p.TFO
@@ -74,16 +109,16 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 	tls13 = p.TLS13
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
 	}
@@ -125,6 +160,20 @@ func (p *VMessProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		if p.HttpUpgradeFastOpen {
 			wsOpts["v2ray-http-upgrade-fast-open"] = true
 		}
+
+		if p.WsMaxEarlyData > 0 {
+			wsOpts["max-early-data"] = p.WsMaxEarlyData
+		}
+		if p.WsEarlyDataHeaderName != "" {
+			wsOpts["early-data-header-name"] = p.WsEarlyDataHeaderName
+		}
+		if p.V2rayHttpUpgrade != nil {
+			wsOpts["v2ray-http-upgrade"] = *p.V2rayHttpUpgrade
+		}
+		if p.V2rayHttpUpgradeFastOpen != nil {
+			wsOpts["v2ray-http-upgrade-fast-open"] = *p.V2rayHttpUpgradeFastOpen
+		}
+
 		options["ws-opts"] = wsOpts
 	case "httpupgrade":
 		options["network"] = "ws"
@@ -214,16 +263,16 @@ func (p *VMessProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	tls13 = p.TLS13
 
 	if ext != nil {
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
 	}
@@ -267,13 +316,24 @@ func (p *VMessProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 		}
 	}
 
+	var udp, tfo *bool
+	udp = p.UDP
+	tfo = p.TFO
+
 	if ext != nil {
-		if ext.TFO != nil && *ext.TFO {
-			parts = append(parts, "tfo=true")
+		if udp == nil && ext.UDP != nil {
+			udp = ext.UDP
 		}
-		if ext.UDP != nil && *ext.UDP {
-			parts = append(parts, "udp-relay=true")
+		if tfo == nil && ext.TFO != nil {
+			tfo = ext.TFO
 		}
+	}
+
+	if tfo != nil && *tfo {
+		parts = append(parts, "tfo=true")
+	}
+	if udp != nil && *udp {
+		parts = append(parts, "udp-relay=true")
 	}
 
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
@@ -297,13 +357,24 @@ func (p *VMessProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, erro
 		}
 	}
 
+	var udp, tfo *bool
+	udp = p.UDP
+	tfo = p.TFO
+
 	if ext != nil {
-		if ext.TFO != nil && *ext.TFO {
-			parts = append(parts, "fast-open=true")
+		if udp == nil && ext.UDP != nil {
+			udp = ext.UDP
 		}
-		if ext.UDP != nil && *ext.UDP {
-			parts = append(parts, "udp-relay=true")
+		if tfo == nil && ext.TFO != nil {
+			tfo = ext.TFO
 		}
+	}
+
+	if tfo != nil && *tfo {
+		parts = append(parts, "fast-open=true")
+	}
+	if udp != nil && *udp {
+		parts = append(parts, "udp-relay=true")
 	}
 
 	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))

@@ -88,16 +88,16 @@ func (p *TUICProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 	}
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
 	}
@@ -159,16 +159,16 @@ func (p *TUICProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	}
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
 	}

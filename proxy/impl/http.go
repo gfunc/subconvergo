@@ -60,13 +60,13 @@ func (p *HttpProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfac
 	}
 
 	if ext != nil {
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
 	}

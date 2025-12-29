@@ -38,3 +38,48 @@ func TestHysteria2Proxy_ToClashConfig(t *testing.T) {
 	assert.Equal(t, "salamander", clashConfig["obfs"])
 	assert.Equal(t, "secret", clashConfig["obfs-password"])
 }
+
+func TestHysteria2Proxy_ToClashConfig_MihomoParams(t *testing.T) {
+	echEnable := true
+	proxy := &Hysteria2Proxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "hysteria2",
+			Remark: "test-hysteria2-mihomo",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		Password:                       "password",
+		Mport:                          "443,8443",
+		InitialStreamReceiveWindow:     1024,
+		MaxStreamReceiveWindow:         2048,
+		InitialConnectionReceiveWindow: 4096,
+		MaxConnectionReceiveWindow:     8192,
+		UdpMTU:                         1350,
+		IpVersion:                      "ipv6",
+		ClientFingerprint:              "ios",
+		EchEnable:                      &echEnable,
+		EchConfig:                      "ech-config",
+		Certificate:                    "cert",
+		PrivateKeyPem:                  "key",
+	}
+
+	config, err := proxy.ToClashConfig(nil)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "443,8443", config["mport"])
+	assert.Equal(t, uint64(1024), config["initial-stream-receive-window"])
+	assert.Equal(t, uint64(2048), config["max-stream-receive-window"])
+	assert.Equal(t, uint64(4096), config["initial-connection-receive-window"])
+	assert.Equal(t, uint64(8192), config["max-connection-receive-window"])
+	assert.Equal(t, 1350, config["udp-mtu"])
+	assert.Equal(t, "ipv6", config["ip-version"])
+	assert.Equal(t, "ios", config["client-fingerprint"])
+
+	echOpts, ok := config["ech-opts"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, true, echOpts["enable"])
+	assert.Equal(t, "ech-config", echOpts["config"])
+
+	assert.Equal(t, "cert", config["certificate"])
+	assert.Equal(t, "key", config["private-key"])
+}

@@ -84,13 +84,13 @@ func (p *ShadowsocksRProxy) ToClashConfig(ext *config.ProxySetting) (map[string]
 	scv = p.SCV
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
 	}
@@ -117,13 +117,24 @@ func (p *ShadowsocksRProxy) ToSurgeConfig(ext *config.ProxySetting) (string, err
 		parts := []string{"ss", p.Server, fmt.Sprintf("%d", p.Port)}
 		parts = append(parts, fmt.Sprintf("encrypt-method=%s", p.EncryptMethod))
 		parts = append(parts, fmt.Sprintf("password=%s", p.Password))
+		var udp, tfo *bool
+		udp = p.UDP
+		tfo = p.TFO
+
 		if ext != nil {
-			if ext.UDP != nil && *ext.UDP {
-				parts = append(parts, "udp-relay=true")
+			if udp == nil && ext.UDP != nil {
+				udp = ext.UDP
 			}
-			if ext.TFO != nil && *ext.TFO {
-				parts = append(parts, "tfo=true")
+			if tfo == nil && ext.TFO != nil {
+				tfo = ext.TFO
 			}
+		}
+
+		if udp != nil && *udp {
+			parts = append(parts, "udp-relay=true")
+		}
+		if tfo != nil && *tfo {
+			parts = append(parts, "tfo=true")
 		}
 		return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
 	}
@@ -133,7 +144,14 @@ func (p *ShadowsocksRProxy) ToSurgeConfig(ext *config.ProxySetting) (string, err
 func (p *ShadowsocksRProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 	if p.Type == "ss" {
 		parts := []string{"Shadowsocks", p.Server, fmt.Sprintf("%d", p.Port), p.EncryptMethod, fmt.Sprintf("\"%s\"", p.Password)}
-		if ext != nil && ext.UDP != nil && *ext.UDP {
+		var udp *bool
+		udp = p.UDP
+		if ext != nil {
+			if udp == nil && ext.UDP != nil {
+				udp = ext.UDP
+			}
+		}
+		if udp != nil && *udp {
 			parts = append(parts, "udp=true")
 		}
 		return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ",")), nil
@@ -168,10 +186,23 @@ func (p *ShadowsocksRProxy) ToQuantumultXConfig(ext *config.ProxySetting) (strin
 		parts = append(parts, fmt.Sprintf("obfs-host=%s", p.ObfsParam))
 	}
 
-	if ext.TFO != nil && *ext.TFO {
+	var udp, tfo *bool
+	udp = p.UDP
+	tfo = p.TFO
+
+	if ext != nil {
+		if udp == nil && ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if tfo == nil && ext.TFO != nil {
+			tfo = ext.TFO
+		}
+	}
+
+	if tfo != nil && *tfo {
 		parts = append(parts, "fast-open=true")
 	}
-	if ext.UDP != nil && *ext.UDP {
+	if udp != nil && *udp {
 		parts = append(parts, "udp-relay=true")
 	}
 	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))

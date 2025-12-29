@@ -29,6 +29,23 @@ type VLESSProxy struct {
 	GRPCServiceName string   `yaml:"grpc-service-name" json:"grpc-service-name"`
 	Edge            string   `yaml:"edge" json:"edge"`
 	XTLS            int      `yaml:"xtls" json:"xtls"`
+
+	// New mihomo parameters
+	PacketEncoding           string `yaml:"packet_encoding" json:"packet_encoding"`
+	XUDP                     *bool  `yaml:"xudp" json:"xudp"`
+	PacketAddr               *bool  `yaml:"packet_addr" json:"packet_addr"`
+	ClientFingerprint        string `yaml:"client_fingerprint" json:"client_fingerprint"`
+	FlowSet                  bool   `yaml:"flow_set" json:"flow_set"`
+	IpVersion                string `yaml:"ip_version" json:"ip_version"`
+	EchEnable                *bool  `yaml:"ech_enable" json:"ech_enable"`
+	EchConfig                string `yaml:"ech_config" json:"ech_config"`
+	Certificate              string `yaml:"certificate" json:"certificate"`
+	PrivateKeyPem            string `yaml:"private_key_pem" json:"private_key_pem"`
+	VlessEncryption          string `yaml:"vless_encryption" json:"vless_encryption"`
+	WsMaxEarlyData           int    `yaml:"ws_max_early_data" json:"ws_max_early_data"`
+	WsEarlyDataHeaderName    string `yaml:"ws_early_data_header_name" json:"ws_early_data_header_name"`
+	V2rayHttpUpgrade         *bool  `yaml:"v2ray_http_upgrade" json:"v2ray_http_upgrade"`
+	V2rayHttpUpgradeFastOpen *bool  `yaml:"v2ray_http_upgrade_fast_open" json:"v2ray_http_upgrade_fast_open"`
 }
 
 func (p *VLESSProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
@@ -128,12 +145,52 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		}
 	}
 
-	if p.Fingerprint != "" {
+	if p.PacketEncoding != "" {
+		options["packet-encoding"] = p.PacketEncoding
+	}
+	if p.XUDP != nil {
+		options["xudp"] = *p.XUDP
+	}
+	if p.PacketAddr != nil {
+		options["packet-addr"] = *p.PacketAddr
+	}
+
+	if p.IpVersion != "" {
+		options["ip-version"] = p.IpVersion
+	}
+
+	if p.ClientFingerprint != "" {
+		options["client-fingerprint"] = p.ClientFingerprint
+	} else if p.Fingerprint != "" {
 		options["client-fingerprint"] = p.Fingerprint
+	}
+
+	if p.EchEnable != nil || p.EchConfig != "" {
+		echOpts := make(map[string]interface{})
+		if p.EchEnable != nil {
+			echOpts["enable"] = *p.EchEnable
+		}
+		if p.EchConfig != "" {
+			echOpts["config"] = p.EchConfig
+		}
+		options["ech-opts"] = echOpts
+	}
+
+	if p.Certificate != "" {
+		options["certificate"] = p.Certificate
+	}
+	if p.PrivateKeyPem != "" {
+		options["private-key"] = p.PrivateKeyPem
+	}
+
+	if p.VlessEncryption != "" {
+		options["encryption"] = p.VlessEncryption
 	}
 
 	if p.XTLS == 2 {
 		options["flow"] = "xtls-rprx-vision"
+	} else if p.FlowSet {
+		options["flow"] = p.Flow
 	} else if p.Flow != "" {
 		options["flow"] = p.Flow
 	}
@@ -165,16 +222,16 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 	}
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
 	}
@@ -184,7 +241,7 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 	}
 	if udp != nil {
 		options["udp"] = *udp
-		if *udp {
+		if *udp && p.PacketEncoding == "" {
 			options["packet-encoding"] = "xudp"
 		}
 	}
@@ -219,7 +276,20 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		if len(headers) > 0 {
 			wsOpts["headers"] = headers
 		}
+		if p.WsMaxEarlyData > 0 {
+			wsOpts["max-early-data"] = p.WsMaxEarlyData
+		}
+		if p.WsEarlyDataHeaderName != "" {
+			wsOpts["early-data-header-name"] = p.WsEarlyDataHeaderName
+		}
 		options["ws-opts"] = wsOpts
+
+		if p.V2rayHttpUpgrade != nil {
+			options["v2ray-http-upgrade"] = *p.V2rayHttpUpgrade
+		}
+		if p.V2rayHttpUpgradeFastOpen != nil {
+			options["v2ray-http-upgrade-fast-open"] = *p.V2rayHttpUpgradeFastOpen
+		}
 
 	case "grpc":
 		grpcOpts := make(map[string]interface{})

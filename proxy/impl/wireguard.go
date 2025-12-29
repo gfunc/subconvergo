@@ -61,7 +61,7 @@ func (p *WireGuardProxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 	}
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
 	}

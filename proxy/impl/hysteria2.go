@@ -17,6 +17,20 @@ type Hysteria2Proxy struct {
 	SkipCertVerify bool   `yaml:"skip-cert-verify" json:"skip-cert-verify"`
 	Obfs           string `yaml:"obfs" json:"obfs"`
 	ObfsPassword   string `yaml:"obfs-password" json:"obfs-password"`
+
+	// New mihomo parameters
+	Mport                          string `yaml:"mport" json:"mport"`
+	InitialStreamReceiveWindow     uint64 `yaml:"initial_stream_receive_window" json:"initial_stream_receive_window"`
+	MaxStreamReceiveWindow         uint64 `yaml:"max_stream_receive_window" json:"max_stream_receive_window"`
+	InitialConnectionReceiveWindow uint64 `yaml:"initial_connection_receive_window" json:"initial_connection_receive_window"`
+	MaxConnectionReceiveWindow     uint64 `yaml:"max_connection_receive_window" json:"max_connection_receive_window"`
+	UdpMTU                         int    `yaml:"udp_mtu" json:"udp_mtu"`
+	IpVersion                      string `yaml:"ip_version" json:"ip_version"`
+	ClientFingerprint              string `yaml:"client_fingerprint" json:"client_fingerprint"`
+	EchEnable                      *bool  `yaml:"ech_enable" json:"ech_enable"`
+	EchConfig                      string `yaml:"ech_config" json:"ech_config"`
+	Certificate                    string `yaml:"certificate" json:"certificate"`
+	PrivateKeyPem                  string `yaml:"private_key_pem" json:"private_key_pem"`
 }
 
 func (p *Hysteria2Proxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
@@ -65,6 +79,47 @@ func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 		}
 	}
 
+	if p.Mport != "" {
+		options["mport"] = p.Mport
+	}
+	if p.InitialStreamReceiveWindow > 0 {
+		options["initial-stream-receive-window"] = p.InitialStreamReceiveWindow
+	}
+	if p.MaxStreamReceiveWindow > 0 {
+		options["max-stream-receive-window"] = p.MaxStreamReceiveWindow
+	}
+	if p.InitialConnectionReceiveWindow > 0 {
+		options["initial-connection-receive-window"] = p.InitialConnectionReceiveWindow
+	}
+	if p.MaxConnectionReceiveWindow > 0 {
+		options["max-connection-receive-window"] = p.MaxConnectionReceiveWindow
+	}
+	if p.UdpMTU > 0 {
+		options["udp-mtu"] = p.UdpMTU
+	}
+	if p.IpVersion != "" {
+		options["ip-version"] = p.IpVersion
+	}
+	if p.ClientFingerprint != "" {
+		options["client-fingerprint"] = p.ClientFingerprint
+	}
+	if p.EchEnable != nil || p.EchConfig != "" {
+		echOpts := make(map[string]interface{})
+		if p.EchEnable != nil {
+			echOpts["enable"] = *p.EchEnable
+		}
+		if p.EchConfig != "" {
+			echOpts["config"] = p.EchConfig
+		}
+		options["ech-opts"] = echOpts
+	}
+	if p.Certificate != "" {
+		options["certificate"] = p.Certificate
+	}
+	if p.PrivateKeyPem != "" {
+		options["private-key"] = p.PrivateKeyPem
+	}
+
 	if p.UnderlyingProxy != "" {
 		options["dialer-proxy"] = p.UnderlyingProxy
 	}
@@ -76,16 +131,16 @@ func (p *Hysteria2Proxy) ToClashConfig(ext *config.ProxySetting) (map[string]int
 	tls13 = p.TLS13
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
 	}

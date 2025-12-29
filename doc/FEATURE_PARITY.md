@@ -14,6 +14,12 @@
 
 ---
 
+## ⚠️ Intentional Deviations
+
+### Flag Precedence (UDP, TFO, SCV, TLS13)
+- **Subconverter (C++)**: Global flags (from URL params or `pref.ini`) **override** source flags. If `udp=true` is set globally, all nodes get `udp: true`, even if the source explicitly had `udp: false`.
+- **Subconvergo (Go)**: Source flags **take precedence**. Global flags are only applied as a fallback if the source flag is missing (nil/undefined). This preserves explicit `false` settings from the subscription source.
+
 ## ✅ Implemented Features
 
 ### HTTP Endpoints

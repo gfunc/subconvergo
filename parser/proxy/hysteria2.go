@@ -63,3 +63,60 @@ func (p *Hysteria2Parser) ParseSingle(line string) (core.ParsableProxy, error) {
 
 	return proxy, nil
 }
+
+// ParseClash parses a Clash config map
+func (p *Hysteria2Parser) ParseClash(config map[string]interface{}) (core.ParsableProxy, error) {
+	server := utils.GetStringField(config, "server")
+	port := utils.GetIntField(config, "port")
+	name := utils.GetStringField(config, "name")
+	password := utils.GetStringField(config, "password")
+	if password == "" {
+		password = utils.GetStringField(config, "auth")
+	}
+	sni := utils.GetStringField(config, "sni")
+	obfs := utils.GetStringField(config, "obfs")
+	obfsPassword := utils.GetStringField(config, "obfs-password")
+	skipCertVerify := config["skip-cert-verify"] == true
+
+	udp := utils.GetBoolPtrField(config, "udp")
+	tfo := utils.GetBoolPtrField(config, "tfo")
+	scv := utils.GetBoolPtrField(config, "skip-cert-verify")
+	tls13 := utils.GetBoolPtrField(config, "tls13")
+
+	h := &impl.Hysteria2Proxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "hysteria2",
+			Server: server,
+			Port:   port,
+			Remark: name,
+			UDP:    udp,
+			TFO:    tfo,
+			SCV:    scv,
+			TLS13:  tls13,
+		},
+		Password:       password,
+		Sni:            sni,
+		SkipCertVerify: skipCertVerify,
+		Obfs:           obfs,
+		ObfsPassword:   obfsPassword,
+	}
+
+	h.Mport = utils.GetStringField(config, "mport")
+	h.InitialStreamReceiveWindow = uint64(utils.GetIntField(config, "initial-stream-receive-window"))
+	h.MaxStreamReceiveWindow = uint64(utils.GetIntField(config, "max-stream-receive-window"))
+	h.InitialConnectionReceiveWindow = uint64(utils.GetIntField(config, "initial-connection-receive-window"))
+	h.MaxConnectionReceiveWindow = uint64(utils.GetIntField(config, "max-connection-receive-window"))
+	h.UdpMTU = utils.GetIntField(config, "udp-mtu")
+	h.IpVersion = utils.GetStringField(config, "ip-version")
+	h.ClientFingerprint = utils.GetStringField(config, "client-fingerprint")
+
+	if echOpts, ok := config["ech-opts"].(map[string]interface{}); ok {
+		h.EchEnable = utils.GetBoolPtrField(echOpts, "enable")
+		h.EchConfig = utils.GetStringField(echOpts, "config")
+	}
+
+	h.Certificate = utils.GetStringField(config, "certificate")
+	h.PrivateKeyPem = utils.GetStringField(config, "private-key")
+
+	return utils.ToMihomoProxy(h)
+}

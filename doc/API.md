@@ -18,10 +18,10 @@ Convert subscription(s) to target format.
 | `exclude` | string | Exclude filter (regex with `/pattern/` or substring) | - |
 | `emoji` | bool | Add emojis to node names | `false` |
 | `list` | bool | Return base64 encoded list of nodes (not implemented) | `false` |
-| `udp` | bool | Enable UDP for nodes | `false` |
-| `tfo` | bool | Enable TCP Fast Open | `false` |
-| `scv` | bool | Skip Certificate Verification | `false` |
-| `tls13` | bool | Enable TLS 1.3 | `false` |
+| `udp` | bool | Enable UDP for nodes (fallback only, source takes precedence) | `false` |
+| `tfo` | bool | Enable TCP Fast Open (fallback only, source takes precedence) | `false` |
+| `scv` | bool | Skip Certificate Verification (fallback only, source takes precedence) | `false` |
+| `tls13` | bool | Enable TLS 1.3 (fallback only, source takes precedence) | `false` |
 | `append_type` | bool | Append protocol type to node names | `false` |
 | `sort` | bool | Sort nodes alphabetically | `false` |
 | `rename` | string | Custom rename rules (URL-encoded) | - |

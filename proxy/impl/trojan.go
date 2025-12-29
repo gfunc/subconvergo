@@ -78,16 +78,16 @@ func (p *TrojanProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interf
 	}
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
 	}
@@ -169,16 +169,16 @@ func (p *TrojanProxy) ToSurgeConfig(ext *config.ProxySetting) (string, error) {
 	}
 
 	if ext != nil {
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
-		if ext.TLS13 != nil {
+		if tls13 == nil && ext.TLS13 != nil {
 			tls13 = ext.TLS13
 		}
 	}
@@ -219,16 +219,31 @@ func (p *TrojanProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 		parts = append(parts, "skip-cert-verify=true")
 	}
 
+	var udp, tfo, scv *bool
+	udp = p.UDP
+	tfo = p.TFO
+	scv = p.SCV
+
 	if ext != nil {
-		if ext.TFO != nil && *ext.TFO {
-			parts = append(parts, "tfo=true")
+		if udp == nil && ext.UDP != nil {
+			udp = ext.UDP
 		}
-		if ext.UDP != nil && *ext.UDP {
-			parts = append(parts, "udp-relay=true")
+		if tfo == nil && ext.TFO != nil {
+			tfo = ext.TFO
 		}
-		if ext.SCV != nil && *ext.SCV {
-			parts = append(parts, "skip-cert-verify=true")
+		if scv == nil && ext.SCV != nil {
+			scv = ext.SCV
 		}
+	}
+
+	if tfo != nil && *tfo {
+		parts = append(parts, "tfo=true")
+	}
+	if udp != nil && *udp {
+		parts = append(parts, "udp-relay=true")
+	}
+	if scv != nil && *scv {
+		parts = append(parts, "skip-cert-verify=true")
 	}
 
 	return fmt.Sprintf("%s = %s", p.Remark, strings.Join(parts, ", ")), nil
@@ -248,13 +263,24 @@ func (p *TrojanProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, err
 	// Note: obfs parameters for WS are not standard in Quantumult X Trojan URI format
 	// and are typically handled via specific fields if supported.
 	// We omit them here to match standard generator behavior.
+	var udp, tfo *bool
+	udp = p.UDP
+	tfo = p.TFO
+
 	if ext != nil {
-		if ext.TFO != nil && *ext.TFO {
-			parts = append(parts, "fast-open=true")
+		if udp == nil && ext.UDP != nil {
+			udp = ext.UDP
 		}
-		if ext.UDP != nil && *ext.UDP {
-			parts = append(parts, "udp-relay=true")
+		if tfo == nil && ext.TFO != nil {
+			tfo = ext.TFO
 		}
+	}
+
+	if tfo != nil && *tfo {
+		parts = append(parts, "fast-open=true")
+	}
+	if udp != nil && *udp {
+		parts = append(parts, "udp-relay=true")
 	}
 	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))
 	return strings.Join(parts, ", "), nil

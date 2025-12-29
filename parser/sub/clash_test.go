@@ -104,14 +104,21 @@ proxies:
     cipher: aes-256-gcm
     password: password
     udp: false
+  - name: "ss-udp-missing"
+    type: ss
+    server: server
+    port: 443
+    cipher: aes-256-gcm
+    password: password
 `
 
 	// Parse
 	subContent, err := ParseMihomoConfig(content)
 	assert.NoError(t, err)
-	assert.Len(t, subContent.Proxies, 1)
+	assert.Len(t, subContent.Proxies, 2)
 
 	pFalse := subContent.Proxies[0]
+	pMissing := subContent.Proxies[1]
 
 	// Global override: udp = true
 	udpTrue := true
@@ -119,21 +126,19 @@ proxies:
 		UDP: &udpTrue,
 	}
 
+	// Case 1: Source has udp: false. Global has udp: true.
+	// Expectation: Source wins (false).
 	mixinFalse, ok := pFalse.(core.ClashConvertableMixin)
 	assert.True(t, ok)
 	confFalse, err := mixinFalse.ToClashConfig(&opts)
 	assert.NoError(t, err)
+	assert.Equal(t, false, confFalse["udp"], "udp should be false (source) even with global override")
 
-	// Should be true because of global override
-	assert.Equal(t, true, confFalse["udp"], "udp should be true due to global override")
-
-	// Global override: udp = false
-	udpFalse := false
-	optsFalse := config.ProxySetting{
-		UDP: &udpFalse,
-	}
-
-	confFalse2, err := mixinFalse.ToClashConfig(&optsFalse)
+	// Case 2: Source missing udp. Global has udp: true.
+	// Expectation: Global wins (true).
+	mixinMissing, ok := pMissing.(core.ClashConvertableMixin)
+	assert.True(t, ok)
+	confMissing, err := mixinMissing.ToClashConfig(&opts)
 	assert.NoError(t, err)
-	assert.Equal(t, false, confFalse2["udp"], "udp should be false due to global override")
+	assert.Equal(t, true, confMissing["udp"], "udp should be true (global) when source is missing")
 }

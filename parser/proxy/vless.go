@@ -200,20 +200,78 @@ func (p *VLESSParser) ParseClash(config map[string]interface{}) (core.ParsablePr
 		SNI:     servername,
 	}
 
+	v.PacketEncoding = utils.GetStringField(config, "packet-encoding")
+	v.XUDP = utils.GetBoolPtrField(config, "xudp")
+	v.PacketAddr = utils.GetBoolPtrField(config, "packet-addr")
+	v.IpVersion = utils.GetStringField(config, "ip-version")
+	v.ClientFingerprint = utils.GetStringField(config, "client-fingerprint")
+	v.Fingerprint = utils.GetStringField(config, "fingerprint")
+
+	if _, ok := config["flow"]; ok {
+		v.FlowSet = true
+	}
+
+	if echOpts, ok := config["ech-opts"].(map[string]interface{}); ok {
+		v.EchEnable = utils.GetBoolPtrField(echOpts, "enable")
+		v.EchConfig = utils.GetStringField(echOpts, "config")
+	}
+
+	v.Certificate = utils.GetStringField(config, "certificate")
+	v.PrivateKeyPem = utils.GetStringField(config, "private-key")
+	v.VlessEncryption = utils.GetStringField(config, "encryption")
+
 	if config["skip-cert-verify"] == true {
 		v.AllowInsecure = true
 		b := true
 		v.SCV = &b
 	}
 
+	if realityOpts, ok := config["reality-opts"].(map[string]interface{}); ok {
+		v.PublicKey = utils.GetStringField(realityOpts, "public-key")
+		v.ShortID = utils.GetStringField(realityOpts, "short-id")
+	}
+
 	if wsOpts, ok := config["ws-opts"].(map[string]interface{}); ok {
 		v.Path = utils.GetStringField(wsOpts, "path")
 		if headers, ok := wsOpts["headers"].(map[string]interface{}); ok {
 			v.Host = utils.GetStringField(headers, "Host")
+			v.Edge = utils.GetStringField(headers, "Edge")
 		}
+		v.WsMaxEarlyData = utils.GetIntField(wsOpts, "max-early-data")
+		v.WsEarlyDataHeaderName = utils.GetStringField(wsOpts, "early-data-header-name")
 	}
+
+	v.V2rayHttpUpgrade = utils.GetBoolPtrField(config, "v2ray-http-upgrade")
+	v.V2rayHttpUpgradeFastOpen = utils.GetBoolPtrField(config, "v2ray-http-upgrade-fast-open")
+
 	if grpcOpts, ok := config["grpc-opts"].(map[string]interface{}); ok {
 		v.Path = utils.GetStringField(grpcOpts, "grpc-service-name")
+		v.GRPCServiceName = utils.GetStringField(grpcOpts, "grpc-service-name")
+		v.GRPCMode = utils.GetStringField(grpcOpts, "grpc-mode")
+	}
+
+	if httpOpts, ok := config["http-opts"].(map[string]interface{}); ok {
+		if paths, ok := httpOpts["path"].([]interface{}); ok && len(paths) > 0 {
+			if p, ok := paths[0].(string); ok {
+				v.Path = p
+			}
+		}
+		if headers, ok := httpOpts["headers"].(map[string]interface{}); ok {
+			if hosts, ok := headers["Host"].([]interface{}); ok && len(hosts) > 0 {
+				if h, ok := hosts[0].(string); ok {
+					v.Host = h
+				}
+			}
+		}
+	}
+
+	if h2Opts, ok := config["h2-opts"].(map[string]interface{}); ok {
+		v.Path = utils.GetStringField(h2Opts, "path")
+		if hosts, ok := h2Opts["host"].([]interface{}); ok && len(hosts) > 0 {
+			if h, ok := hosts[0].(string); ok {
+				v.Host = h
+			}
+		}
 	}
 
 	return utils.ToMihomoProxy(v)

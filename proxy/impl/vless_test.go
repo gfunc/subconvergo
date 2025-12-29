@@ -226,3 +226,69 @@ func TestVLESSProxy_ToSingleConfig_Reality(t *testing.T) {
 	assert.Contains(t, link, "flow=xtls-rprx-vision")
 	assert.Contains(t, link, "#test-reality")
 }
+
+func TestVLESSProxy_ToClashConfig_MihomoParams(t *testing.T) {
+	xudp := true
+	packetAddr := true
+	echEnable := true
+	v2rayHttpUpgrade := true
+	v2rayHttpUpgradeFastOpen := true
+
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-mihomo",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:                     "uuid",
+		Network:                  "ws",
+		Path:                     "/path",
+		Host:                     "example.com",
+		TLS:                      true,
+		SNI:                      "example.com",
+		PacketEncoding:           "xudp",
+		XUDP:                     &xudp,
+		PacketAddr:               &packetAddr,
+		IpVersion:                "ipv4",
+		ClientFingerprint:        "chrome",
+		EchEnable:                &echEnable,
+		EchConfig:                "ech-config",
+		Certificate:              "cert",
+		PrivateKeyPem:            "key",
+		VlessEncryption:          "none",
+		WsMaxEarlyData:           2048,
+		WsEarlyDataHeaderName:    "Sec-WebSocket-Protocol",
+		V2rayHttpUpgrade:         &v2rayHttpUpgrade,
+		V2rayHttpUpgradeFastOpen: &v2rayHttpUpgradeFastOpen,
+		Flow:                     "xtls-rprx-vision",
+		FlowSet:                  true,
+	}
+
+	config, err := proxy.ToClashConfig(nil)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "xudp", config["packet-encoding"])
+	assert.Equal(t, true, config["xudp"])
+	assert.Equal(t, true, config["packet-addr"])
+	assert.Equal(t, "ipv4", config["ip-version"])
+	assert.Equal(t, "chrome", config["client-fingerprint"])
+
+	echOpts, ok := config["ech-opts"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, true, echOpts["enable"])
+	assert.Equal(t, "ech-config", echOpts["config"])
+
+	assert.Equal(t, "cert", config["certificate"])
+	assert.Equal(t, "key", config["private-key"])
+	assert.Equal(t, "none", config["encryption"])
+	assert.Equal(t, "xtls-rprx-vision", config["flow"])
+
+	wsOpts, ok := config["ws-opts"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 2048, wsOpts["max-early-data"])
+	assert.Equal(t, "Sec-WebSocket-Protocol", wsOpts["early-data-header-name"])
+
+	assert.Equal(t, true, config["v2ray-http-upgrade"])
+	assert.Equal(t, true, config["v2ray-http-upgrade-fast-open"])
+}

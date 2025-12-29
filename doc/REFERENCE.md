@@ -38,6 +38,9 @@
 
 All parsers validate using [mihomo](https://github.com/metacubex/mihomo) adapters for correctness. New protocols are automatically supported when mihomo is upgraded.
 
+**Flag Precedence (UDP, TFO, SCV, TLS13):**
+Unlike the C++ version, **source flags take precedence over global flags**. Global flags (e.g., `udp=true` in URL or `udp_flag` in config) are only applied if the source flag is missing (nil/undefined). This ensures that explicit `false` settings from the subscription source are preserved.
+
 **Upgrade mihomo:**
 ```bash
 go get github.com/metacubex/mihomo@latest

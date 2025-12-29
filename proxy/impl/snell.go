@@ -66,13 +66,13 @@ func (p *SnellProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 	scv = p.SCV
 
 	if ext != nil {
-		if ext.UDP != nil {
+		if udp == nil && ext.UDP != nil {
 			udp = ext.UDP
 		}
-		if ext.TFO != nil {
+		if tfo == nil && ext.TFO != nil {
 			tfo = ext.TFO
 		}
-		if ext.SCV != nil {
+		if scv == nil && ext.SCV != nil {
 			scv = ext.SCV
 		}
 	}
