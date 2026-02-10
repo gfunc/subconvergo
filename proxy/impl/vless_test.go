@@ -272,7 +272,8 @@ func TestVLESSProxy_ToClashConfig_MihomoParams(t *testing.T) {
 	assert.Equal(t, true, config["xudp"])
 	assert.Equal(t, true, config["packet-addr"])
 	assert.Equal(t, "ipv4", config["ip-version"])
-	assert.Equal(t, "chrome", config["client-fingerprint"])
+	// client-fingerprint is only set when REALITY opts (PublicKey/ShortID) are present
+	assert.Nil(t, config["client-fingerprint"])
 
 	echOpts, ok := config["ech-opts"].(map[string]interface{})
 	assert.True(t, ok)
@@ -291,4 +292,200 @@ func TestVLESSProxy_ToClashConfig_MihomoParams(t *testing.T) {
 
 	assert.Equal(t, true, config["v2ray-http-upgrade"])
 	assert.Equal(t, true, config["v2ray-http-upgrade-fast-open"])
+}
+
+func TestVLESSProxy_ToClashConfig_RealityClientFingerprint(t *testing.T) {
+	// When REALITY is used and no fingerprint is set, default to "random"
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-reality-default-fp",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:      "uuid",
+		Network:   "tcp",
+		TLS:       true,
+		PublicKey: "pub-key",
+		ShortID:   "short-id",
+	}
+
+	config, err := proxy.ToClashConfig(nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "random", config["client-fingerprint"])
+
+	// When REALITY is used with ClientFingerprint set
+	proxy.ClientFingerprint = "chrome"
+	config, err = proxy.ToClashConfig(nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "chrome", config["client-fingerprint"])
+
+	// When REALITY is used with Fingerprint set (fallback)
+	proxy.ClientFingerprint = ""
+	proxy.Fingerprint = "firefox"
+	config, err = proxy.ToClashConfig(nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "firefox", config["client-fingerprint"])
+
+	// When no REALITY, client-fingerprint should NOT be set
+	proxyNoReality := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-no-reality",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:              "uuid",
+		Network:           "tcp",
+		TLS:               true,
+		ClientFingerprint: "chrome",
+	}
+	config, err = proxyNoReality.ToClashConfig(nil)
+	assert.NoError(t, err)
+	assert.Nil(t, config["client-fingerprint"])
+}
+
+func TestVLESSProxy_ToQuantumultXConfig_WS(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-quanx-ws",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:    "uuid",
+		Network: "ws",
+		Path:    "/path",
+		Host:    "example.com",
+		TLS:     true,
+	}
+
+	result, err := proxy.ToQuantumultXConfig(nil)
+	assert.NoError(t, err)
+	assert.Contains(t, result, "vless=1.2.3.4:443")
+	assert.Contains(t, result, "method=none")
+	assert.Contains(t, result, "password=uuid")
+	assert.Contains(t, result, "obfs=wss")
+	assert.Contains(t, result, "obfs-host=example.com")
+	assert.Contains(t, result, "obfs-uri=/path")
+	assert.Contains(t, result, "tag=test-vless-quanx-ws")
+}
+
+func TestVLESSProxy_ToQuantumultXConfig_WS_NoTLS(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-quanx-ws-notls",
+			Server: "1.2.3.4",
+			Port:   80,
+		},
+		UUID:    "uuid",
+		Network: "ws",
+		Path:    "/path",
+		Host:    "example.com",
+		TLS:     false,
+	}
+
+	result, err := proxy.ToQuantumultXConfig(nil)
+	assert.NoError(t, err)
+	assert.Contains(t, result, "obfs=ws")
+	assert.NotContains(t, result, "obfs=wss")
+}
+
+func TestVLESSProxy_ToQuantumultXConfig_TCP_Reality(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-quanx-reality",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:      "uuid",
+		Network:   "tcp",
+		TLS:       true,
+		SNI:       "sni.example.com",
+		PublicKey: "public-key-base64",
+		ShortID:   "abcd1234",
+		Flow:      "xtls-rprx-vision",
+	}
+
+	result, err := proxy.ToQuantumultXConfig(nil)
+	assert.NoError(t, err)
+	assert.Contains(t, result, "obfs=over-tls")
+	assert.Contains(t, result, "obfs-host=sni.example.com")
+	assert.Contains(t, result, "reality-base64-pubkey=public-key-base64")
+	assert.Contains(t, result, "reality-hex-shortid=abcd1234")
+	assert.Contains(t, result, "vless-flow=xtls-rprx-vision")
+	assert.Contains(t, result, "tag=test-vless-quanx-reality")
+}
+
+func TestVLESSProxy_ToQuantumultXConfig_WS_Reality(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-quanx-ws-reality",
+			Server: "1.2.3.4",
+			Port:   443,
+		},
+		UUID:      "uuid",
+		Network:   "ws",
+		Path:      "/path",
+		Host:      "fallback-host.com",
+		TLS:       true,
+		SNI:       "reality-sni.com",
+		PublicKey: "pub-key",
+		ShortID:   "sid",
+	}
+
+	result, err := proxy.ToQuantumultXConfig(nil)
+	assert.NoError(t, err)
+	assert.Contains(t, result, "obfs=wss")
+	assert.Contains(t, result, "obfs-host=reality-sni.com")
+	assert.Contains(t, result, "obfs-uri=/path")
+	assert.Contains(t, result, "reality-base64-pubkey=pub-key")
+	assert.Contains(t, result, "reality-hex-shortid=sid")
+}
+
+func TestVLESSProxy_ToQuantumultXConfig_HTTP(t *testing.T) {
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-quanx-http",
+			Server: "1.2.3.4",
+			Port:   80,
+		},
+		UUID:    "uuid",
+		Network: "http",
+		Path:    "/api",
+		Host:    "example.com",
+	}
+
+	result, err := proxy.ToQuantumultXConfig(nil)
+	assert.NoError(t, err)
+	assert.Contains(t, result, "obfs=http")
+	assert.Contains(t, result, "obfs-host=example.com")
+	assert.Contains(t, result, "obfs-uri=/api")
+}
+
+func TestVLESSProxy_ToQuantumultXConfig_Flags(t *testing.T) {
+	udp := true
+	tfo := true
+	proxy := &VLESSProxy{
+		BaseProxy: core.BaseProxy{
+			Type:   "vless",
+			Remark: "test-vless-quanx-flags",
+			Server: "1.2.3.4",
+			Port:   443,
+			UDP:    &udp,
+			TFO:    &tfo,
+		},
+		UUID:    "uuid",
+		Network: "tcp",
+		TLS:     true,
+	}
+
+	result, err := proxy.ToQuantumultXConfig(nil)
+	assert.NoError(t, err)
+	assert.Contains(t, result, "fast-open=true")
+	assert.Contains(t, result, "udp-relay=true")
 }

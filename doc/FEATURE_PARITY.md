@@ -1,16 +1,16 @@
 # Feature Parity with C++ Subconverter
 
-> Status as of November 16, 2025 | C++ Reference: [subconverter README-cn.md](https://github.com/tindy2013/subconverter/blob/master/README-cn.md)
+> Status as of February 2026 | C++ Reference: [subconverter README-cn.md](https://github.com/tindy2013/subconverter/blob/master/README-cn.md)
 
 ## Summary
 
 | Category | Implemented | Not Implemented | Total | Coverage |
 |----------|-------------|-----------------|-------|----------|
 | **Endpoints** | 7 | 0 | 7 | 100% |
-| **Query Parameters** | 18 | 8 | 26 | 69% |
+| **Query Parameters** | 13 | 5 | 18 | 72% |
 | **Config Sections** | 8 | 1 | 9 | 89% |
-| **Protocol Support** | 9 | 0 | 9 | 100% |
-| **Overall** | **41** | **10** | **51** | **80%** |
+| **Protocol Support** | 13 | 0 | 13 | 100% |
+| **Overall** | **41** | **6** | **47** | **87%** |
 
 ---
 
@@ -38,25 +38,19 @@
 
 | Parameter | Status | Implementation | Notes |
 |-----------|--------|----------------|-------|
-| `target` | ✅ | Full | clash, surge, quanx, loon, singbox, ss, ssr, v2ray, trojan |
+| `target` | ✅ | Full | clash, clashr, surge, quanx, loon, singbox, ss, ssr, v2ray, trojan, mixed, auto |
 | `url` | ✅ | Full | Pipe-separated, URL-encoded, supports `tag:xxx,url` |
 | `config` | ✅ | Full | External config (HTTP/file, YAML/TOML/INI) |
 | `include` | ✅ | Full | Regex with `/pattern/` or substring |
 | `exclude` | ✅ | Full | Regex with `/pattern/` or substring |
-| `emoji` | ✅ | Full | Add emojis based on regex rules |
-| `add_emoji` | ✅ | Full | Control emoji addition |
-| `remove_emoji` | ✅ | Full | Remove old emojis first |
-| `append_type` | ✅ | Full | Add [ss], [vmess] to node names |
-| `udp` | ✅ | Full | Enable UDP flag |
-| `tfo` | ✅ | Full | Enable TCP Fast Open |
-| `scv` | ✅ | Full | Skip certificate verification |
-| `tls13` | ✅ | Full | Enable TLS 1.3 |
-| `sort` | ✅ | Full | Alphabetical sorting |
-| `rename` | ✅ | Full | Custom rename rules (query override) |
-| `insert` | ✅ | Full | Enable/disable insert_url |
-| `prepend` | ✅ | Full | Insert before (true) or after (false) |
+| `udp` | ✅ | Full | Enable UDP flag (source takes precedence) |
+| `tfo` | ✅ | Full | Enable TCP Fast Open (source takes precedence) |
+| `scv` | ✅ | Full | Skip certificate verification (source takes precedence) |
 | `group` | ✅ | Full | Set group name (for SSD/SSR) |
 | `ignore_source` | ✅ | Full | Ignore proxy groups/rules from source |
+| `ua` | ✅ | Full | Override User-Agent for target auto-detection |
+| `new_name` | ✅ | Full | Use new Clash field names |
+| `ver` | ✅ | Full | Surge version number |
 
 ### Configuration File Sections
 
@@ -84,6 +78,11 @@
 | Hysteria | ✅ | v1, bandwidth config, obfuscation |
 | Hysteria2 | ✅ | v2, Salamander obfuscation |
 | TUIC | ✅ | QUIC, BBR/Cubic congestion control |
+| AnyTLS | ✅ | Full TLS-based proxy support |
+| Snell | ✅ | Link, Surge, and Clash format parsing |
+| WireGuard | ✅ | Surge and Clash format parsing (no standalone link) |
+| SOCKS5 | ✅ | Link, Surge, and Telegram format parsing |
+| HTTP/HTTPS | ✅ | Link, Surge, and Telegram format parsing |
 | Clash YAML | ✅ | Native parser via mihomo |
 
 ### Output Formats (Generation)
@@ -136,9 +135,6 @@
 | `expand` | Low | Rule inlining control | Rules are expanded by default |
 | `classic` | Low | Classical rule-provider format | Domain/IP rules work as-is |
 | `script` | Low | Clash Script generation | Use Clash Premium features directly |
-| `fdn` | Low | Filter unsupported nodes | Nodes are validated via mihomo |
-| `target=auto` | Low | User-Agent detection | Specify target explicitly |
-| `target=mixed` | Low | Mixed format (all node types as links) | Use specific target (ss/ssr/v2ray) |
 
 ### Configuration
 
@@ -155,8 +151,8 @@
 ## 🔄 Migration Considerations
 
 ### ✅ Safe to Migrate If:
-- You primarily use **Clash**, **Surge**, or **sing-box**
-- You use standard proxy protocols (SS, VMess, Trojan, Hysteria, TUIC)
+- You primarily use **Clash**, **Surge**, **sing-box**, **Quantumult X**, or **Loon**
+- You use standard proxy protocols (SS, SSR, VMess, Trojan, VLESS, Hysteria, Hysteria2, TUIC, AnyTLS, Snell, WireGuard, SOCKS5, HTTP)
 - You rely on:
   - Basic or regex filtering
   - Node renaming and emojis
@@ -164,19 +160,19 @@
   - Rulesets (local or remote)
   - Template rendering
   - Profile system
+  - `target=auto` (User-Agent detection)
+  - `target=mixed` (all proxy links combined)
 
 ### ⚠️ Migration Requires Adjustment If:
 - You use `list=true` parameter → Extract proxies section from full config
 - You use `filename` parameter → Set filename in client
 - You use QuickJS filter/sort scripts → Pre-process subscriptions or accept default behavior
 - You use Gist auto-upload → Set up alternative upload mechanism
-- You use `target=auto` → Explicitly specify target format
 
 ### ❌ Cannot Migrate If:
 - You **require** QuickJS script execution (filter_script/sort_script with JS code)
 - You **must** have Gist integration
 - You depend on Data URI subscriptions
-- You need `target=mixed` output format
 
 ---
 
@@ -185,14 +181,16 @@
 ### Core Functionality: **100%**
 All essential subscription conversion features are implemented.
 
-### Query Parameters: **69%**
-Missing parameters are mostly convenience features (list, filename, expand, classic) or rarely-used (auto, mixed).
+### Query Parameters: **72%**
+Missing parameters are mostly convenience features (list, filename, expand, classic) or rarely-used (script).
+
+Note: Several parameters from the C++ version (`emoji`, `add_emoji`, `remove_emoji`, `append_type`, `sort`, `rename`, `insert`, `prepend`, `tls13`) are not available as URL query parameters but are fully functional via configuration file settings.
 
 ### Configuration: **100%**
 All configuration settings from C++ subconverter are implemented, including aliases, templates, insert URLs, emoji/rename rules, and more.
 
 ### Protocol Support: **100%**
-All major proxy protocols fully supported via mihomo.
+All 13 proxy protocols fully supported — SS, SSR, VMess, VLESS, Trojan, Hysteria, Hysteria2, TUIC, AnyTLS, Snell, WireGuard, SOCKS5, HTTP.
 
 ### Output Formats: **100%**
 All common client formats supported (Clash, Surge, QuanX, Loon, sing-box, single links).
@@ -217,10 +215,9 @@ See [API Reference](./API.md) for detailed format support and limitations.
 2. **Medium Priority** (nice to have):
    - [ ] `expand` parameter control (2 hours)
    - [ ] `classic` parameter for rule-provider (3 hours)
-   - [ ] `target=auto` User-Agent detection (4 hours)
+   - [ ] Promote config-only settings to query params: `emoji`, `sort`, `rename`, `append_type`, `tls13` (4 hours)
 
 3. **Low Priority** (edge cases):
-   - [ ] `target=mixed` output (3 hours)
    - [ ] Userinfo extraction rules (4 hours)
    - [ ] Gist auto-upload (6 hours)
    - [ ] QuickJS script execution (10+ hours, security review needed)
@@ -229,7 +226,9 @@ See [API Reference](./API.md) for detailed format support and limitations.
 
 ## 🔍 Testing Parity
 
-### Test Coverage: **81.8%** (parser), **72%** (generator), **30%** (handler)
+### Test Coverage
+
+Coverage varies by package. See `make coverage` for current numbers.
 
 **Smoke Tests Cover:**
 - ✅ Version endpoint
@@ -289,6 +288,6 @@ See [Development Guide](./GUIDE.md) for detailed contribution workflow.
 
 ---
 
-**Last Updated:** November 25, 2025  
-**Subconvergo Version:** Development (smoke branch)  
+**Last Updated:** February 2026  
+**Subconvergo Version:** 0.1.0  
 **C++ Subconverter Reference:** [README-cn.md](https://github.com/tindy2013/subconverter/blob/master/README-cn.md)

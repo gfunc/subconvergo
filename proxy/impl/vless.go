@@ -2,6 +2,7 @@ package impl
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 
@@ -159,10 +160,8 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		options["ip-version"] = p.IpVersion
 	}
 
-	if p.ClientFingerprint != "" {
-		options["client-fingerprint"] = p.ClientFingerprint
-	} else if p.Fingerprint != "" {
-		options["client-fingerprint"] = p.Fingerprint
+	if p.Fingerprint != "" {
+		options["fingerprint"] = p.Fingerprint
 	}
 
 	if p.EchEnable != nil || p.EchConfig != "" {
@@ -205,8 +204,12 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		}
 		options["reality-opts"] = realityOpts
 
-		if _, ok := options["client-fingerprint"]; !ok {
-			options["client-fingerprint"] = "chrome"
+		if p.ClientFingerprint != "" {
+			options["client-fingerprint"] = p.ClientFingerprint
+		} else if p.Fingerprint != "" {
+			options["client-fingerprint"] = p.Fingerprint
+		} else {
+			options["client-fingerprint"] = "random"
 		}
 	}
 
@@ -348,7 +351,114 @@ func (p *VLESSProxy) ToLoonConfig(ext *config.ProxySetting) (string, error) {
 }
 
 func (p *VLESSProxy) ToQuantumultXConfig(ext *config.ProxySetting) (string, error) {
-	return "", fmt.Errorf("VLESS not supported in Quantumult X")
+	// Format: vless = server:port, method=none, password=uuid, [obfs=...], [obfs-host=...], [obfs-uri=...], [reality-base64-pubkey=...], [reality-hex-shortid=...], [vless-flow=...], fast-open=true/false, udp-relay=true/false, tag=tag
+	method := "none"
+	parts := []string{fmt.Sprintf("vless=%s:%d", p.Server, p.Port), fmt.Sprintf("method=%s", method), fmt.Sprintf("password=%s", p.UUID)}
+
+	var tls13, udp, tfo *bool
+	tls13 = p.TLS13
+	udp = p.UDP
+	tfo = p.TFO
+
+	if ext != nil {
+		if udp == nil && ext.UDP != nil {
+			udp = ext.UDP
+		}
+		if tfo == nil && ext.TFO != nil {
+			tfo = ext.TFO
+		}
+		if tls13 == nil && ext.TLS13 != nil {
+			tls13 = ext.TLS13
+		}
+	}
+
+	if p.TLS && tls13 != nil {
+		if *tls13 {
+			parts = append(parts, "tls13=true")
+		} else {
+			parts = append(parts, "tls13=false")
+		}
+	}
+
+	switch p.Network {
+	case "ws":
+		if p.TLS {
+			parts = append(parts, "obfs=wss")
+		} else {
+			parts = append(parts, "obfs=ws")
+		}
+
+		if p.TLS && p.PublicKey != "" && p.SNI == "" {
+			log.Printf("Quantumult X vless reality: public key present but SNI missing; skipping reality output.")
+		}
+		if p.TLS && p.ShortID != "" && p.PublicKey == "" {
+			log.Printf("Quantumult X vless reality: shortid present but public key missing; skipping reality output.")
+		}
+
+		if p.TLS && p.PublicKey != "" && p.SNI != "" {
+			parts = append(parts, fmt.Sprintf("obfs-host=%s", p.SNI))
+		} else if p.Host != "" {
+			parts = append(parts, fmt.Sprintf("obfs-host=%s", p.Host))
+		}
+
+		if p.Path != "" {
+			parts = append(parts, fmt.Sprintf("obfs-uri=%s", p.Path))
+		}
+
+		if p.TLS && p.PublicKey != "" && p.SNI != "" {
+			parts = append(parts, fmt.Sprintf("reality-base64-pubkey=%s", p.PublicKey))
+			if p.ShortID != "" {
+				parts = append(parts, fmt.Sprintf("reality-hex-shortid=%s", p.ShortID))
+			}
+		}
+	case "http":
+		parts = append(parts, "obfs=http")
+		if p.Host != "" {
+			parts = append(parts, fmt.Sprintf("obfs-host=%s", p.Host))
+		}
+		if p.Path != "" {
+			parts = append(parts, fmt.Sprintf("obfs-uri=%s", p.Path))
+		}
+	case "tcp":
+		if p.TLS {
+			parts = append(parts, "obfs=over-tls")
+
+			if p.PublicKey != "" && p.SNI == "" {
+				log.Printf("Quantumult X vless reality: public key present but SNI missing; skipping reality output.")
+			}
+			if p.ShortID != "" && p.PublicKey == "" {
+				log.Printf("Quantumult X vless reality: shortid present but public key missing; skipping reality output.")
+			}
+
+			if p.PublicKey != "" && p.SNI != "" {
+				parts = append(parts, fmt.Sprintf("obfs-host=%s", p.SNI))
+				parts = append(parts, fmt.Sprintf("reality-base64-pubkey=%s", p.PublicKey))
+				if p.ShortID != "" {
+					parts = append(parts, fmt.Sprintf("reality-hex-shortid=%s", p.ShortID))
+				}
+				if p.Flow != "" {
+					parts = append(parts, fmt.Sprintf("vless-flow=%s", p.Flow))
+				}
+			}
+		}
+	default:
+		if p.TLS {
+			parts = append(parts, "obfs=over-tls")
+			if p.SNI != "" {
+				parts = append(parts, fmt.Sprintf("obfs-host=%s", p.SNI))
+			}
+		}
+	}
+
+	if tfo != nil && *tfo {
+		parts = append(parts, "fast-open=true")
+	}
+	if udp != nil && *udp {
+		parts = append(parts, "udp-relay=true")
+	}
+
+	parts = append(parts, fmt.Sprintf("tag=%s", p.Remark))
+	return strings.Join(parts, ", "), nil
 }
 
 func (p *VLESSProxy) ToSingboxConfig(ext *config.ProxySetting) (map[string]interface{}, error) {

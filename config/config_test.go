@@ -576,6 +576,44 @@ func TestINIProxyGroupParsing(t *testing.T) {
 				Import: "../base/snippets/groups.txt",
 			},
 		},
+		{
+			name:  "load-balance group without strategy",
+			value: "LB`load-balance`.*`http://www.gstatic.com/generate_204`300,5",
+			expected: ProxyGroupConfig{
+				Name:     "LB",
+				Type:     "load-balance",
+				Rule:     []string{".*"},
+				URL:      "http://www.gstatic.com/generate_204",
+				Interval: 300,
+				Timeout:  5,
+			},
+		},
+		{
+			name:  "load-balance group with consistent-hashing strategy",
+			value: "LB`load-balance`.*`consistent-hashing`http://www.gstatic.com/generate_204`300,5",
+			expected: ProxyGroupConfig{
+				Name:     "LB",
+				Type:     "load-balance",
+				Rule:     []string{".*"},
+				Strategy: "consistent-hashing",
+				URL:      "http://www.gstatic.com/generate_204",
+				Interval: 300,
+				Timeout:  5,
+			},
+		},
+		{
+			name:  "load-balance group with round-robin strategy",
+			value: "LB`load-balance`.*`round-robin`http://www.gstatic.com/generate_204`300,5",
+			expected: ProxyGroupConfig{
+				Name:     "LB",
+				Type:     "load-balance",
+				Rule:     []string{".*"},
+				Strategy: "round-robin",
+				URL:      "http://www.gstatic.com/generate_204",
+				Interval: 300,
+				Timeout:  5,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -608,6 +646,17 @@ func TestINIProxyGroupParsing(t *testing.T) {
 			}
 			if tt.expected.Interval > 0 && result.Interval != tt.expected.Interval {
 				t.Errorf("Expected Interval=%d, got %d", tt.expected.Interval, result.Interval)
+			}
+			if tt.expected.Strategy != "" && result.Strategy != tt.expected.Strategy {
+				t.Errorf("Expected Strategy=%s, got %s", tt.expected.Strategy, result.Strategy)
+			}
+			if tt.expected.Timeout > 0 && result.Timeout != tt.expected.Timeout {
+				t.Errorf("Expected Timeout=%d, got %d", tt.expected.Timeout, result.Timeout)
+			}
+			if len(tt.expected.Rule) > 0 {
+				if len(result.Rule) != len(tt.expected.Rule) {
+					t.Errorf("Expected %d rules, got %d: %v", len(tt.expected.Rule), len(result.Rule), result.Rule)
+				}
 			}
 		})
 	}

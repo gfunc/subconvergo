@@ -18,7 +18,7 @@
 
 ### Prerequisites
 
-- **Go 1.21+** - [Install Go](https://go.dev/doc/install)
+- **Go 1.25+** - [Install Go](https://go.dev/doc/install)
 - **Docker** - For containerized builds and testing (optional)
 - **Python 3.8+** - For smoke tests
 
@@ -57,19 +57,38 @@ subconvergo/
 ├── config/            # Configuration management
 │   └── config.go      # Load pref.yml/toml/ini
 ├── parser/            # Subscription & proxy parsing
-│   └── parser.go      # Protocol parsers via mihomo
+│   ├── parser.go      # Orchestrates parsing pipeline
+│   ├── core/          # Parser interfaces
+│   ├── proxy/         # Per-protocol parsers (SS, VMess, VLESS, etc.)
+│   ├── sub/           # Subscription format parsers (Clash, Surge, base64)
+│   └── utils/         # Parsing utilities
 ├── generator/         # Format conversion
-│   └── generator.go   # Generate Clash/Surge/etc configs
+│   ├── generator.go   # Generator orchestration
+│   ├── core/          # Generator interfaces
+│   ├── impl/          # Per-format generators (Clash, Surge, QuanX, etc.)
+│   ├── transformers/  # Proxy transformers (filter, rename, emoji, sort)
+│   └── utils/         # Generator utilities
+├── proxy/             # Proxy model definitions
+│   ├── core/          # Core proxy interface
+│   ├── impl/          # Per-protocol proxy implementations
+│   └── utils/         # Proxy utilities
 ├── handler/           # HTTP request handlers
-│   └── handler.go     # API endpoints
+│   ├── handler.go     # API endpoints
+│   └── useragent.go   # User-Agent detection for target=auto
+├── cache/             # File-based caching system
 ├── base/              # Configuration & templates
 │   ├── pref.toml      # Server configuration
 │   ├── base/          # Client templates
 │   ├── rules/         # Rule sets
 │   └── config/        # Preset configs
 └── tests/             # Testing infrastructure
-    ├── smoke.py       # Integration/API tests
-    ├── run-tests.sh   # Unit test runner
+    ├── smoke.py       # Test orchestrator (Docker Compose)
+    ├── test_standalone.py  # Core unit tests
+    ├── test_comparison.py  # Parity comparison tests
+    ├── test_external_config.py  # External config tests
+    ├── test_dedup_ignore.py  # Dedup & ignore_source tests
+    ├── test_flags.py  # Flag precedence tests
+    ├── test_config_isolation.py  # Config isolation tests
     └── mock-data/     # Test fixtures
 ```
 
@@ -77,7 +96,7 @@ subconvergo/
 
 #### Parser Layer (`parser/parser.go`)
 - Parses subscription URLs and single proxy links
-- Supports: SS, SSR, VMess, Trojan, VLESS, Hysteria, Hysteria2, TUIC, Clash YAML
+- Supports: SS, SSR, VMess, Trojan, VLESS, Hysteria, Hysteria2, TUIC, AnyTLS, Snell, WireGuard, SOCKS5, HTTP, Clash YAML
 - Uses [mihomo](https://github.com/metacubex/mihomo) for protocol validation
 - Auto-upgrades protocols via mihomo updates
 
@@ -170,11 +189,9 @@ make docker-run
 ```bash
 # Unit tests (fast, no Docker)
 make test-unit
-# Or: ./tests/run-tests.sh unit
 
 # Smoke tests (integration + API with Docker)
 make test
-# Or: python -m tests.smoke
 
 # All tests
 make test-all
@@ -192,16 +209,13 @@ make coverage-view  # Opens HTML report
 - Structural validation of YAML/JSON outputs
 - Comparison with subconverter (non-fatal)
 
-**Test scenarios:**
-- `version` - Version endpoint check
-- `sub` - Basic subscription conversion
-- `render` - Template rendering
-- `profile` - Profile handling
-- `ruleset_remote` - Remote ruleset fetch
-- `ruleset_compare` - Compare with subconverter
-- `filters_regex` - Regex filtering
-- `sub_with_external_config` - External config merging
-- `clash_only_config` - Generic protocol support check (e.g. SSH via mihomo)
+**Test files:**
+- `test_standalone.py` - Core tests: version, flags, sub, render, profile, rulesets, filtering, emoji, rename, relay migration
+- `test_comparison.py` - Parity comparison: e2e matrix, settings comparison with C++ subconverter
+- `test_external_config.py` - External config: overrides (YAML/TOML/INI), import keywords, template overrides
+- `test_dedup_ignore.py` - Dedup and ignore_source behavior
+- `test_flags.py` - Flag precedence: URL params, Clash/VMess/Trojan/Surge sources
+- `test_config_isolation.py` - Config isolation between requests
 
 **Run manually:**
 ```bash
@@ -350,7 +364,7 @@ export PORT=8080
 Convert subscription(s) to target format.
 
 **Parameters:**
-- `target` - Output format: `clash`, `surge`, `quanx`, `loon`, `singbox`, `ss`, `ssr`, `v2ray`, `trojan`
+- `target` - Output format: `clash`, `clashr`, `surge`, `quanx`, `loon`, `singbox`, `ss`, `ssr`, `v2ray`, `trojan`, `mixed`, `auto`
 - `url` - Subscription URL (pipe-separated for multiple)
 - `config` - External config URL or file path
 - `include` - Include filter (regex with `/...../`)
@@ -453,7 +467,7 @@ export PORT=8080
 - Pull images manually: `docker pull golang:alpine`
 
 **Unit tests fail:**
-- Check Go version: `go version` (requires 1.21+)
+- Check Go version: `go version` (requires 1.25+)
 - Clean cache: `go clean -testcache`
 
 ---

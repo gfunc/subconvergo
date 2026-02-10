@@ -27,12 +27,14 @@
 | **Hysteria** | `hysteria://` | ✅ Full | ~10.9µs | v1, bandwidth config |
 | **Hysteria2** | `hy2://`, `hysteria2://` | ✅ Full | ~10.9µs | v2, obfuscation |
 | **TUIC** | `tuic://` | ✅ Full | ~16.1µs | QUIC, BBR/Cubic |
+| **AnyTLS** | `anytls://` | ✅ Full | - | TLS-based proxy |
+| **Snell** | `snell://` | ✅ Full | - | Link, Surge, Clash format |
+| **WireGuard** | `wireguard://`, `wg://` | ✅ Full | - | Surge/Clash format (no standalone link) |
+| **SOCKS5** | `socks5://`, `socks://` | ✅ Full | - | Link, Surge, Telegram format |
+| **HTTP/HTTPS** | `http://`, `https://` | ✅ Full | - | Link, Surge, Telegram format |
 | **Clash YAML** | - | ✅ Full | - | Native parser |
-| **Snell** | `snell://` | ⚠️ Via mihomo | - | Auto-supported |
-| **WireGuard** | `wireguard://` | ⚠️ Via mihomo | - | Auto-supported |
 
-✅ = Explicitly implemented and tested  
-⚠️ = Automatically supported via mihomo (untested)
+✅ = Explicitly implemented and tested
 
 ### Protocol Details
 
@@ -588,7 +590,7 @@ common:
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `target` | string | Output format | `clash`, `surge`, `quanx`, `loon`, `singbox`, `ss`, `ssr`, `v2ray`, `trojan` |
+| `target` | string | Output format | `clash`, `clashr`, `surge`, `quanx`, `loon`, `singbox`, `ss`, `ssr`, `v2ray`, `trojan`, `mixed`, `auto` |
 | `url` | string | Subscription URL(s) | `https://example.com/sub` (pipe-separated for multiple) |
 | `config` | string | External config URL/path | `https://example.com/config.yml` |
 | `include` | string | Include filter | `HK` or `/^HK-/` |
@@ -596,11 +598,11 @@ common:
 | `udp` | bool | Enable UDP | `true`, `false` |
 | `tfo` | bool | Enable TCP Fast Open | `true`, `false` |
 | `scv` | bool | Skip certificate verification | `true`, `false` |
-| `tls13` | bool | Enable TLS 1.3 | `true`, `false` |
-| `emoji` | bool | Add emojis | `true`, `false` |
-| `list` | bool | Base64 encode result | `true`, `false` |
-| `append_type` | bool | Append proxy type | `true`, `false` |
-| `sort` | bool | Alphabetical sort | `true`, `false` |
+| `ignore_source` | bool | Ignore source proxy groups/rules | `true`, `false` |
+| `group` | string | Group name for SSD/SSR | - |
+| `ua` | string | Override User-Agent | - |
+| `new_name` | bool | Use new Clash field names | `true`, `false` |
+| `ver` | int | Surge version number | `3`, `4` |
 
 **Example:**
 ```bash

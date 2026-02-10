@@ -8,7 +8,7 @@ Welcome to the subconvergo documentation!
 Complete reference for all configuration options, proxy filtering, rulesets, protocols, and templates.
 
 **Contents:**
-- Protocol support (SS, SSR, VMess, Trojan, VLESS, Hysteria, Hysteria2, TUIC, Clash)
+- Protocol support (SS, SSR, VMess, Trojan, VLESS, Hysteria, Hysteria2, TUIC, AnyTLS, Snell, WireGuard, SOCKS5, HTTP, Clash)
 - Configuration file format (YAML/TOML/INI)
 - Proxy filtering (basic, regex, advanced matchers)
 - Rulesets configuration and formats
@@ -43,7 +43,7 @@ Complete guide for building, testing, and developing subconvergo.
 Comprehensive comparison with C++ subconverter - what's implemented, what's not, and migration guidance.
 
 **Contents:**
-- Feature coverage by category (80% overall)
+- Feature coverage by category (87% overall)
 - Implemented vs. not implemented features
 - Migration considerations and compatibility
 - Priority recommendations for future work
@@ -58,7 +58,7 @@ Comprehensive comparison with C++ subconverter - what's implemented, what's not,
 - **API Reference**: [API.md](./API.md)
 - **Development Guide**: [GUIDE.md](./GUIDE.md)
 - **Source Code**: [../parser/](../parser/), [../generator/](../generator/), [../handler/](../handler/)
-- **Tests**: [../tests/smoke.py](../tests/smoke.py), [../tests/run-tests.sh](../tests/run-tests.sh)
+- **Tests**: [../tests/](../tests/)
 
 ---
 
@@ -75,13 +75,11 @@ Comprehensive comparison with C++ subconverter - what's implemented, what's not,
 **Unit tests:**
 ```bash
 make test-unit
-# Or: ./tests/run-tests.sh unit
 ```
 
 **Smoke tests (integration/API with Docker):**
 ```bash
 make test
-# Or: python -m tests.smoke
 ```
 
 See [Development Guide - Testing](./GUIDE.md#testing) for details.

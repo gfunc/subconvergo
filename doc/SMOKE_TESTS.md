@@ -40,23 +40,58 @@ You can run specific tests or control the build process using flags:
 
 ## Test Cases
 
-The suite covers a wide range of functionality:
+The suite is organized across multiple test files:
+
+### `test_standalone.py` — Core Functionality
 
 1.  **`version`**: Verifies the `/version` endpoint returns the correct service name.
-2.  **`sub`**: Tests basic subscription conversion (e.g., SS to Clash) with flags like `udp` and `tfo`.
-3.  **`render`**: Validates the `/render` endpoint for template rendering.
-4.  **`profile`**: Tests loading preset profiles via `/getprofile`.
-5.  **`ruleset_remote`**: Checks fetching and formatting of remote rulesets.
-6.  **`ruleset_compare`**: Compares ruleset output directly against the C++ subconverter.
-7.  **`ignore_source`**: Verifies the `ignore_source` parameter behavior (default true).
-8.  **`dedup_proxies`**: Checks that duplicate proxy names are automatically handled.
-7.  **`filters_regex`**: Verifies `include`/`exclude` filters using regex.
-8.  **`emoji_rule`**: Tests emoji addition based on regex rules.
-9.  **`rename_node`**: Tests node renaming functionality.
-10. **`sub_with_external_config`**: Validates merging of external configuration files.
-11. **`clash_only_config`**: Tests parsing of local Clash config files as subscriptions.
-12. **`settings_comparison`**: Runs a matrix of settings (UDP, TFO, SCV, etc.) against both implementations to ensure identical behavior.
-13. **`e2e_matrix`**: A comprehensive end-to-end test matrix that converts every source format (SS, SSR, VMess, etc.) to every target format (Clash, Surge, sing-box, etc.) and compares the output with the C++ version.
+2.  **`default_flags`**: Tests default flag behavior (UDP, TFO, SCV).
+3.  **`explicit_flags`**: Tests explicitly set flag parameters.
+4.  **`sub`**: Tests basic subscription conversion (e.g., SS to Clash) with flags like `udp` and `tfo`.
+5.  **`surge2clash`**: Tests the `/surge2clash` endpoint alias.
+6.  **`render`**: Validates the `/render` endpoint for template rendering.
+7.  **`profile`**: Tests loading preset profiles via `/getprofile`.
+8.  **`ruleset_remote`**: Checks fetching and formatting of remote rulesets.
+9.  **`filters_regex`**: Verifies `include`/`exclude` filters using regex.
+10. **`exclude_remarks`**: Tests filtering via `exclude_remarks` config.
+11. **`include_remarks`**: Tests filtering via `include_remarks` config.
+12. **`emoji_rule`**: Tests emoji addition based on regex rules.
+13. **`rename_node`**: Tests node renaming functionality.
+14. **`userinfo`**: Tests subscription-userinfo header forwarding.
+15. **`relay_migration`**: Tests relay-to-dialer-proxy conversion.
+16. **`sub_with_external_config`**: Validates merging of external configuration files.
+17. **`clash_only_config`**: Tests parsing of local Clash config files as subscriptions.
+
+### `test_comparison.py` — Parity Comparison
+
+1.  **`ruleset_compare`**: Compares ruleset output directly against the C++ subconverter.
+2.  **`edge_cases`**: Tests edge case handling.
+3.  **`settings_comparison`**: Runs a matrix of settings (UDP, TFO, SCV, etc.) against both implementations.
+4.  **`e2e_matrix`**: Converts every source format to every target format and compares with C++ version.
+5.  **`e2e_matrix_exclude`**: E2E matrix with exclude filter.
+6.  **`e2e_matrix_include`**: E2E matrix with include filter.
+7.  **`e2e_matrix_emoji`**: E2E matrix with emoji enabled.
+8.  **`e2e_matrix_rename`**: E2E matrix with rename rules.
+9.  **`e2e_matrix_userinfo`**: E2E matrix with userinfo.
+
+### `test_external_config.py` — External Config
+
+Tests external config overrides via YAML, TOML, and INI formats, including `overwrite_original_rules`, import keywords, and template overrides.
+
+### `test_dedup_ignore.py` — Dedup & Ignore Source
+
+1.  **`ignore_source_default`**: Verifies default `ignore_source=true` behavior.
+2.  **`ignore_source_false`**: Tests `ignore_source=false`.
+3.  **`ignore_source_external_config`**: Tests ignore_source with external config.
+4.  **`dedup_proxies`**: Checks that duplicate proxy names are automatically handled.
+
+### `test_flags.py` — Flag Precedence
+
+Tests flag precedence across URL params, Clash sources, VMess/Trojan sources, and Surge/Loon/QuanX targets.
+
+### `test_config_isolation.py` — Config Isolation
+
+Tests that config changes from one request don't leak to subsequent requests.
 
 ## Parity Verification
 

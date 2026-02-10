@@ -104,7 +104,7 @@ Subconvergo supports parsing subscriptions in the following formats:
 |--------|-------------|
 | **Base64** | Base64 encoded list of proxy links (standard) |
 | **Plain Text** | Line-separated list of proxy links |
-| **Clash** | Clash YAML configuration file. **Note:** Subconvergo preserves `proxy-groups` and `rules` from the source. |
+| **Clash** | Clash YAML configuration file. **Note:** By default, Subconvergo **ignores** `proxy-groups` and `rules` from the source (i.e., `ignore_source=true`). Set `ignore_source=false` to preserve them. |
 | **SIP002** | Shadowsocks URI scheme (`ss://`) |
 | **SSR** | ShadowsocksR URI scheme (`ssr://`) |
 | **VMess** | V2Ray URI scheme (`vmess://`) |
@@ -113,6 +113,11 @@ Subconvergo supports parsing subscriptions in the following formats:
 | **Hysteria** | Hysteria URI scheme (`hysteria://`) |
 | **Hysteria2** | Hysteria2 URI scheme (`hy2://`, `hysteria2://`) |
 | **TUIC** | TUIC URI scheme (`tuic://`) |
+| **AnyTLS** | AnyTLS URI scheme (`anytls://`) |
+| **Snell** | Snell via Clash/Surge format |
+| **WireGuard** | WireGuard via Clash/Surge format |
+| **SOCKS5** | SOCKS5 URI scheme (`socks5://`, `socks://`, Telegram links) |
+| **HTTP/HTTPS** | HTTP proxy URI scheme (`http://`, `https://`, Telegram links) |
 | **SSD** | SSD URI scheme (`ssd://`) |
 | **Netch** | Netch URI scheme (`Netch://`) |
 
@@ -129,7 +134,7 @@ Subconvergo supports generating configurations in the following formats:
 | `clash` | Clash YAML configuration | Full support for all protocols via mihomo |
 | `clashr` | Alias for `clash` | - |
 | `surge` | Surge INI configuration | VLESS, Hysteria, TUIC may not be supported by standard Surge |
-| `quanx` | Quantumult X configuration | - |
+| `quanx` | Quantumult X configuration | Supports SS, SSR, VMess, VLESS, Trojan, HTTP |
 | `loon` | Loon configuration | - |
 | `singbox` | sing-box JSON configuration | - |
 | `ss` | Shadowsocks SIP002 links | Only SS proxies |
@@ -137,5 +142,6 @@ Subconvergo supports generating configurations in the following formats:
 | `v2ray` | VMess links | Only VMess/VLESS proxies |
 | `trojan` | Trojan links | Only Trojan proxies |
 | `mixed` | Mixed list of links | Returns original link format if available |
+| `auto` | Auto-detect from User-Agent | Resolves to a concrete target based on client app |
 
 **Note:** When converting to single link formats (`ss`, `ssr`, `v2ray`, `trojan`), only proxies of that specific type are included in the output. `mixed` target includes all proxies that can be converted to a link format.

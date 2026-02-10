@@ -294,10 +294,10 @@ func TestGenerators_SkipUnsupportedProxies(t *testing.T) {
 		gen := &gimpl.QuantumultXGenerator{}
 		output, err := gen.Generate(proxies, nil, nil, nil, opts)
 		assert.NoError(t, err)
-		// QX supports SSR
+		// QX supports SSR and VLESS
 		assert.Contains(t, output, "tag=ssr-proxy")
-		// QX does not support VLESS or WireGuard (in our implementation)
-		assert.NotContains(t, output, "tag=vless-proxy")
+		assert.Contains(t, output, "tag=vless-proxy")
+		// QX does not support WireGuard (in our implementation)
 		assert.NotContains(t, output, "tag=wg-proxy")
 	})
 

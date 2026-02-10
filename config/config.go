@@ -745,7 +745,19 @@ func parseINIProxyGroups(sec *ini.Section, keyName string) []ProxyGroupConfig {
 
 				// Parse URL test parameters if present
 				if g.Type == "url-test" || g.Type == "fallback" || g.Type == "load-balance" {
-					if len(parts) >= 4 {
+					if len(parts) >= 5 {
+						// For load-balance, check if there's an optional strategy field
+						// Format: ...`<rules>`[strategy`]<url>`<interval,timeout,tolerance>
+						hasStrategy := false
+						if g.Type == "load-balance" && len(parts) >= 6 {
+							maybeStrategy := parts[len(parts)-3]
+							switch maybeStrategy {
+							case "consistent-hashing", "round-robin":
+								g.Strategy = maybeStrategy
+								hasStrategy = true
+							}
+						}
+
 						g.URL = parts[len(parts)-2]
 						// Parse interval,timeout,tolerance from last part
 						lastPart := parts[len(parts)-1]
@@ -759,8 +771,12 @@ func parseINIProxyGroups(sec *ini.Section, keyName string) []ProxyGroupConfig {
 						if len(params) > 2 {
 							fmt.Sscanf(params[2], "%d", &g.Tolerance)
 						}
-						// Remove URL and params from rules
-						g.Rule = parts[2 : len(parts)-2]
+						// Remove URL, params, and optional strategy from rules
+						if hasStrategy {
+							g.Rule = parts[2 : len(parts)-3]
+						} else {
+							g.Rule = parts[2 : len(parts)-2]
+						}
 					}
 				}
 

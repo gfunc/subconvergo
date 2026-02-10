@@ -1,7 +1,7 @@
 # Subconvergo
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
-[![Test Coverage](https://img.shields.io/badge/coverage-81.8%25-brightgreen)](#-testing)
+[![Test Coverage](https://img.shields.io/badge/coverage-see%20report-brightgreen)](#-testing)
 [![mihomo](https://img.shields.io/badge/mihomo-v1.19.16+-blue)](https://github.com/metacubex/mihomo)
 
 A high-performance Go reimplementation of [subconverter](https://github.com/tindy2013/subconverter) using [mihomo](https://github.com/metacubex/mihomo) for automatic proxy protocol support.
@@ -32,8 +32,8 @@ curl http://localhost:25500/version
 
 ## ✨ Features
 
-- **8+ Proxy Protocols**: SS, SSR, VMess, Trojan, VLESS, Hysteria, Hysteria2, TUIC
-- **High Performance**: Sub-25µs parsing, 81.8% test coverage
+- **13 Proxy Protocols**: SS, SSR, VMess, VLESS, Trojan, Hysteria, Hysteria2, TUIC, AnyTLS, Snell, WireGuard, SOCKS5, HTTP
+- **High Performance**: Sub-25µs parsing, comprehensive test coverage
 - **Auto Protocol Updates**: New protocols supported via mihomo upgrades
 - **Full Compatibility**: Same API and config format as C++ version
 - **Production Ready**: 50+ tests, comprehensive benchmarks, Docker support
@@ -67,7 +67,7 @@ While Subconvergo aims for full compatibility with the C++ version, there are so
 
 ## 🧪 Testing
 
-**Coverage**: 81.8% (parser) | 72% (generator) | 30% (handler) | **Status**: ✅ All Passing
+**Coverage**: See `make coverage` for per-package numbers | **Status**: ✅ All Passing
 
 ### Quick Test
 
@@ -114,7 +114,7 @@ This Go implementation is a **drop-in replacement** for most use cases.
 - Same `base/` directory structure
 - Same configuration format (pref.ini/yml/toml)
 - Core API endpoints (`/sub`, `/version`, `/readconf`, `/getprofile`, `/getruleset`, `/render`)
-- All proxy protocols (SS, SSR, VMess, Trojan, VLESS, Hysteria, etc.)
+- All proxy protocols (SS, SSR, VMess, Trojan, VLESS, Hysteria, Hysteria2, TUIC, AnyTLS, Snell, WireGuard, etc.)
 
 ### ⚠️ **Not Implemented**
 - `list` parameter (Node List/Proxy Provider output)
