@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
+	_ "github.com/gfunc/subconvergo/generator/impl"
 	"github.com/gin-gonic/gin"
 )
 
@@ -34,13 +36,17 @@ func TestRenderTemplateWithContext(t *testing.T) {
 
 func TestLoadBaseConfig(t *testing.T) {
 	h := NewSubHandler()
-	dir := t.TempDir()
+	// Rule base files are resolved relative to the config directory (cwd in tests).
+	dir := filepath.Join(".", "test_tmp_"+t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
 	baseFile := filepath.Join(dir, "clash.tpl")
-	if err := os.WriteFile(baseFile, []byte("mode: {{ default .clash.mode \"rule\" }}"), 0644); err != nil {
+	if err := os.WriteFile(baseFile, []byte("mode: {{ default .clash.mode \"rule\" }}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	config.Global.Common.ClashRuleBase = baseFile
-	config.Global.Template.TemplatePath = dir
 
 	rendered, err := h.loadBaseConfig("clash", map[string]string{"target": "clash"}, config.Global)
 	if err != nil {
@@ -192,18 +198,15 @@ func TestLoadExternalConfig_LocalTOML(t *testing.T) {
 	cache.Init(dir) // Initialize cache for test
 
 	content := []byte(`
-		[proxy_groups]
-		[[proxy_groups.custom_groups]]
-		name = "Auto"
-		type = "select"
-		rule = [".*"]
+[[custom_groups]]
+name = "Auto"
+type = "select"
+rule = [".*"]
 
-		[rulesets]
-		enabled = true
-		[[rulesets.rulesets]]
-		ruleset = "rules/custom_test_rules.list"
-		group = "Auto"
-	`)
+[[rulesets]]
+group = "Auto"
+ruleset = "rules/custom_test_rules.list"
+`)
 	fp := filepath.Join(dir, "ext.toml")
 	if err := os.WriteFile(fp, content, 0o644); err != nil {
 		t.Fatal(err)
@@ -214,6 +217,9 @@ func TestLoadExternalConfig_LocalTOML(t *testing.T) {
 	}
 	if len(ecfg.ProxyGroups.CustomProxyGroups) == 0 || ecfg.ProxyGroups.CustomProxyGroups[0].Name != "Auto" {
 		t.Fatalf("toml groups not parsed: %#v", ecfg.ProxyGroups.CustomProxyGroups)
+	}
+	if len(ecfg.Rulesets.Rulesets) == 0 || ecfg.Rulesets.Rulesets[0].Group != "Auto" {
+		t.Fatalf("toml rulesets not parsed: %#v", ecfg.Rulesets.Rulesets)
 	}
 }
 
@@ -367,6 +373,61 @@ func TestHandleGetRuleset_LocalPath(t *testing.T) {
 	}
 }
 
+func TestHandleGetRuleset_AbsolutePathBlocked(t *testing.T) {
+	cache.Init(t.TempDir())
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	config.Global.Common.BasePath = t.TempDir()
+	// Set a secret token in the environment; /proc/self/environ would normally expose it.
+	t.Setenv("API_TOKEN", "super-secret-token-12345")
+
+	encoded := base64.URLEncoding.EncodeToString([]byte("/proc/self/environ"))
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash", nil)
+	c.Request = req
+
+	h.HandleGetRuleset(c)
+	if w.Code == http.StatusOK {
+		t.Fatalf("absolute path must not be served, got 200")
+	}
+	if strings.Contains(w.Body.String(), "super-secret-token-12345") {
+		t.Fatalf("leaked API_TOKEN via /proc/self/environ")
+	}
+}
+
+func TestHandleGetRuleset_TraversalBlocked(t *testing.T) {
+	cache.Init(t.TempDir())
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	// Create a file outside the base directory
+	dir := t.TempDir()
+	parent := filepath.Dir(dir)
+	secretPath := filepath.Join(parent, "secret_ruleset.txt")
+	if err := os.WriteFile(secretPath, []byte("SECRET DATA\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(secretPath) })
+
+	config.Global.Common.BasePath = dir
+
+	encoded := base64.URLEncoding.EncodeToString([]byte("../secret_ruleset.txt"))
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash", nil)
+	c.Request = req
+
+	h.HandleGetRuleset(c)
+	if w.Code == http.StatusOK {
+		t.Fatalf("directory traversal must not be served, got 200")
+	}
+	if strings.Contains(w.Body.String(), "SECRET DATA") {
+		t.Fatalf("leaked file outside base directory via traversal")
+	}
+}
+
 func TestHandleRenderWithTemplate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := NewSubHandler()
@@ -395,4 +456,109 @@ func TestHandleGetProfileWithName(t *testing.T) {
 	h.HandleGetProfile(c)
 	// Will likely fail without actual profile files, but exercises the code
 	t.Logf("HandleGetProfile with name returned: %d", w.Code)
+}
+
+func TestProcessSubRequest_ExternalConfigRuleBaseLeakBlocked(t *testing.T) {
+	cache.Init(t.TempDir())
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	// Create a file outside the intended config directory
+	dir := t.TempDir()
+	parent := filepath.Dir(dir)
+	secretPath := filepath.Join(parent, "secret_base.txt")
+	if err := os.WriteFile(secretPath, []byte("LEAK123\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(secretPath) })
+
+	// External config overrides clash_rule_base to point at the secret file
+	extCfg := filepath.Join(dir, "ext.yml")
+	content := []byte(fmt.Sprintf("common:\n  clash_rule_base: %s\n", secretPath))
+	if err := os.WriteFile(extCfg, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	config.Global.Common.APIMode = true
+	config.Global.Common.APIAccessToken = ""
+	config.Global.Common.ClashRuleBase = ""
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/sub", nil)
+
+	h.processSubRequest(c, &RequestParams{
+		Target: "clash",
+		URL:    "ss://YWVzLTEyOC1nY206dGVzdA==@1.2.3.4:8388#test",
+		Config: extCfg,
+	})
+
+	if w.Code == http.StatusOK {
+		t.Fatalf("external config must not be able to read arbitrary rule base, got 200")
+	}
+	if strings.Contains(w.Body.String(), "LEAK123") {
+		t.Fatalf("leaked arbitrary file content via clash_rule_base: %s", w.Body.String())
+	}
+}
+
+func TestHandleRender_TraversalBlocked(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	baseDir := t.TempDir()
+	tplDir := filepath.Join(baseDir, "tpl")
+	if err := os.MkdirAll(tplDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Secret file is outside the base directory entirely
+	parent := filepath.Dir(baseDir)
+	secretPath := filepath.Join(parent, "secret_template.txt")
+	if err := os.WriteFile(secretPath, []byte("SECRET_TEMPLATE_DATA"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(secretPath) })
+
+	config.Global.Common.APIAccessToken = "token123"
+	config.Global.Common.BasePath = baseDir
+	config.Global.Template.TemplatePath = "tpl"
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/render?path=../../secret_template.txt&token=token123", nil)
+
+	h.HandleRender(c)
+	if w.Code == http.StatusOK {
+		t.Fatalf("template traversal must not be served, got 200")
+	}
+	if strings.Contains(w.Body.String(), "SECRET_TEMPLATE_DATA") {
+		t.Fatalf("leaked template outside template directory via traversal")
+	}
+}
+
+func TestHandleGetProfile_AbsolutePathBlocked(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	dir := t.TempDir()
+	parent := filepath.Dir(dir)
+	secretPath := filepath.Join(parent, "secret_profile")
+	if err := os.WriteFile(secretPath, []byte("SECRET_PROFILE_DATA"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(secretPath) })
+
+	config.Global.Common.APIAccessToken = "token123"
+	config.Global.Common.BasePath = dir
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/getprofile?name="+secretPath+"&token=token123", nil)
+
+	h.HandleGetProfile(c)
+	if w.Code == http.StatusOK {
+		t.Fatalf("absolute profile path must not be served, got 200")
+	}
+	if strings.Contains(w.Body.String(), "SECRET_PROFILE_DATA") {
+		t.Fatalf("leaked profile outside profiles directory via absolute path")
+	}
 }

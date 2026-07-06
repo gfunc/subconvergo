@@ -1356,6 +1356,21 @@ func GetBasePath() string {
 	return filepath.Join(cwd, Global.Common.BasePath)
 }
 
+// GetConfigDir returns the directory of the currently loaded configuration file.
+// If no configuration file has been loaded, it falls back to the current working directory.
+func GetConfigDir() string {
+	if currentConfigPath == "" {
+		cwd, _ := os.Getwd()
+		return cwd
+	}
+	dir := filepath.Dir(currentConfigPath)
+	if !filepath.IsAbs(dir) {
+		cwd, _ := os.Getwd()
+		return filepath.Join(cwd, dir)
+	}
+	return dir
+}
+
 func isRuleType(t string) bool {
 	switch t {
 	case "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-SET",
@@ -1400,9 +1415,11 @@ func (s *Settings) Merge(other *Settings) {
 	if other.Common.SingBoxRuleBase != "" {
 		s.Common.SingBoxRuleBase = other.Common.SingBoxRuleBase
 	}
-	if other.Common.BasePath != "" {
-		s.Common.BasePath = other.Common.BasePath
-	}
+	// Do not allow external/request-scoped configs to change the base directory,
+	// otherwise an attacker could redefine the sandbox root and escape it.
+	// if other.Common.BasePath != "" {
+	// 	s.Common.BasePath = other.Common.BasePath
+	// }
 	if other.Common.IgnoreSource != nil {
 		s.Common.IgnoreSource = other.Common.IgnoreSource
 	}

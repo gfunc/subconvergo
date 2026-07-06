@@ -422,12 +422,14 @@ func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]stri
 		return "", nil
 	}
 
-	// Resolve path relative to base directory
-	// if !filepath.IsAbs(basePath) {
-	// 	basePath = filepath.Join(config.GetBasePath(), basePath)
-	// }
+	// Resolve path relative to the configuration directory and forbid escapes.
+	root := config.GetConfigDir()
+	resolved, err := resolvePathUnderRoot(basePath, root)
+	if err != nil {
+		return "", fmt.Errorf("invalid rule base path %q: %w", basePath, err)
+	}
 
-	data, err := os.ReadFile(basePath)
+	data, err := os.ReadFile(resolved)
 	if err != nil {
 		return "", err
 	}
@@ -688,7 +690,7 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 // HandleVersion processes /version endpoint
 func (h *SubHandler) HandleVersion(c *gin.Context) {
 	log.Printf("[handler.HandleVersion] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
-	c.String(http.StatusOK, "subconvergo v0.1.0 backend\n")
+	c.String(http.StatusOK, "subconvergo v0.1.1 backend\n")
 }
 
 // HandleReadConf processes /readconf endpoint
@@ -798,26 +800,18 @@ func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 			}
 		}
 	} else {
-		// Local path resolution attempts
-		candidates := []string{
-			target,
-			filepath.Join(config.GetBasePath(), target),
-			filepath.Join(config.GetBasePath(), "rules", target),
-		}
-		var readErr error
-		for _, p := range candidates {
-			if data, err := os.ReadFile(p); err == nil {
-				content = data
-				readErr = nil
-				break
-			} else {
-				readErr = err
-			}
-		}
-		if content == nil {
-			c.String(http.StatusNotFound, fmt.Sprintf("Ruleset not found: %v", readErr))
+		// Local path resolution attempts (restricted to base path)
+		p, err := resolveRulesetLocalPath(target)
+		if err != nil {
+			c.String(http.StatusBadRequest, fmt.Sprintf("Ruleset not found: %v", err))
 			return
 		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			c.String(http.StatusNotFound, fmt.Sprintf("Ruleset not found: %v", err))
+			return
+		}
+		content = data
 	}
 
 	// For now, return content as-is for supported types
@@ -845,13 +839,27 @@ func (h *SubHandler) HandleRender(c *gin.Context) {
 		return
 	}
 
-	// Resolve template path
-	if !filepath.IsAbs(templatePath) {
-		templatePath = filepath.Join(config.GetBasePath(), config.Global.Template.TemplatePath, templatePath)
+	// Resolve template root under base_path.
+	basePath := config.GetBasePath()
+	templateRoot := basePath
+	if config.Global.Template.TemplatePath != "" {
+		root, err := resolvePathUnderRoot(config.Global.Template.TemplatePath, basePath)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Invalid template configuration\n")
+			return
+		}
+		templateRoot = root
+	}
+
+	// Resolve and validate user-supplied template path.
+	resolved, err := resolvePathUnderRoot(templatePath, templateRoot)
+	if err != nil {
+		c.String(http.StatusBadRequest, fmt.Sprintf("Invalid template path: %v\n", err))
+		return
 	}
 
 	// Read template file
-	data, err := os.ReadFile(templatePath)
+	data, err := os.ReadFile(resolved)
 	if err != nil {
 		c.String(http.StatusNotFound, fmt.Sprintf("Template not found: %v\n", err))
 		return
@@ -888,34 +896,22 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 		return
 	}
 
-	// Load first profile
-	firstProfile := profiles[0]
-
-	// Try multiple path resolutions
-	var profilePath string
+	// Resolve the first profile under base_path/profiles.
 	basePath := config.GetBasePath()
+	profilesDir := filepath.Join(basePath, "profiles")
 
-	// Try different path combinations
-	pathsToTry := []string{
-		firstProfile,
-		filepath.Join(basePath, firstProfile),
-		filepath.Join("base", firstProfile),
-		filepath.Join(basePath, "profiles", firstProfile+".ini"),
-		filepath.Join("base", "profiles", firstProfile+".ini"),
-		filepath.Join("profiles", firstProfile+".ini"),
+	firstProfile, err := resolveProfilePath(profiles[0], profilesDir)
+	if err != nil {
+		c.String(http.StatusBadRequest, fmt.Sprintf("Invalid profile name: %v", err))
+		return
 	}
-
-	for _, path := range pathsToTry {
-		if fileExists(path) {
-			profilePath = path
-			break
-		}
-	}
-
-	if profilePath == "" {
+	if firstProfile == "" {
 		c.String(http.StatusNotFound, "Profile not found")
 		return
-	} // Parse first profile
+	}
+	profilePath := firstProfile
+
+	// Parse first profile
 	// Load INI with custom options to preserve # in URLs
 	cfg, err := ini.LoadSources(ini.LoadOptions{
 		IgnoreInlineComment: true, // Don't treat # as inline comment
@@ -969,17 +965,10 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 	// If multiple profiles, merge them
 	if len(profiles) > 1 {
 		for i := 1; i < len(profiles); i++ {
-			var additionalPath string
 			profileName := profiles[i]
 
-			// Try multiple path resolutions
-			if fileExists(profileName) {
-				additionalPath = profileName
-			} else if fileExists(filepath.Join("base", profileName)) {
-				additionalPath = filepath.Join("base", profileName)
-			} else if fileExists(filepath.Join(config.GetBasePath(), profileName)) {
-				additionalPath = filepath.Join(config.GetBasePath(), profileName)
-			} else {
+			additionalPath, err := resolveProfilePath(profileName, profilesDir)
+			if err != nil || additionalPath == "" {
 				continue
 			}
 
@@ -1175,6 +1164,116 @@ func (h *SubHandler) HandleFlushCache(c *gin.Context) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// resolvePathUnderRoot validates that target is a relative path without ".."
+// components and resolves it under root. It returns an error if target is
+// absolute, contains traversal, or resolves outside root.
+func resolvePathUnderRoot(target string, root string) (string, error) {
+	if target == "" {
+		return "", fmt.Errorf("empty path")
+	}
+	if filepath.IsAbs(target) {
+		return "", fmt.Errorf("absolute paths are not allowed")
+	}
+	for _, part := range strings.Split(filepath.ToSlash(target), "/") {
+		if part == ".." {
+			return "", fmt.Errorf("path traversal is not allowed")
+		}
+	}
+
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve root: %w", err)
+	}
+	resolvedAbs, err := filepath.Abs(filepath.Join(rootAbs, target))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path: %w", err)
+	}
+
+	rel, err := filepath.Rel(rootAbs, resolvedAbs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes root directory")
+	}
+
+	return resolvedAbs, nil
+}
+
+// resolveRulesetLocalPath validates a local ruleset target and returns a safe
+// path inside the configured base directory. It rejects absolute paths and
+// directory-traversal attempts, and only resolves files that actually exist.
+func resolveRulesetLocalPath(target string) (string, error) {
+	if target == "" {
+		return "", fmt.Errorf("empty local path")
+	}
+	if filepath.IsAbs(target) {
+		return "", fmt.Errorf("absolute paths are not allowed")
+	}
+
+	// Reject any ".." path component to prevent directory traversal.
+	for _, part := range strings.Split(filepath.ToSlash(target), "/") {
+		if part == ".." {
+			return "", fmt.Errorf("path traversal is not allowed")
+		}
+	}
+
+	base := config.GetBasePath()
+	candidates := []string{
+		filepath.Join(base, target),
+		filepath.Join(base, "rules", target),
+	}
+
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve base path: %w", err)
+	}
+
+	for _, p := range candidates {
+		fi, err := os.Stat(p)
+		if err != nil || fi.IsDir() {
+			continue
+		}
+
+		// Defence in depth: the resolved real path must still be under base.
+		absP, err := filepath.Abs(p)
+		if err != nil {
+			continue
+		}
+		realP, err := filepath.EvalSymlinks(absP)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(baseAbs, realP)
+		if err != nil {
+			continue
+		}
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+
+		return p, nil
+	}
+
+	return "", fmt.Errorf("ruleset not found")
+}
+
+// resolveProfilePath validates a profile name and returns the path to
+// <profilesDir>/<name>.ini if it exists and stays inside profilesDir.
+func resolveProfilePath(name string, profilesDir string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("empty profile name")
+	}
+	// Strip a redundant .ini suffix if provided; we always append it ourselves.
+	name = strings.TrimSuffix(name, ".ini")
+
+	resolved, err := resolvePathUnderRoot(name+".ini", profilesDir)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(resolved); err != nil {
+		return "", nil // not found, but not an error
+	}
+	return resolved, nil
 }
 
 // applyFilters applies include/exclude filters to proxies

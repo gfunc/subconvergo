@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	version    = "0.1.0"
+	version    = "0.1.1"
 	configFile = flag.String("f", "", "Path to configuration file")
 	genMode    = flag.Bool("g", false, "Generator mode")
 	artifact   = flag.String("artifact", "", "Profile name for generator mode")
