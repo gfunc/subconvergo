@@ -19,7 +19,7 @@ BASE_URL = "http://127.0.0.1:25500"
 SUBCONVERTER_URL = "http://127.0.0.1:25550"
 MOCK_BASE = "http://mock-subscription"
 TOKEN = "password"
-TEMPLATE_PATH = "/base/base/test_template.tpl"
+TEMPLATE_PATH = "test_template.tpl"
 
 ORIGINAL_PREF_EXISTS = PREF_PATH.exists()
 ORIGINAL_PREF = PREF_PATH.read_text() if ORIGINAL_PREF_EXISTS else ""
@@ -76,7 +76,7 @@ def base_pref() -> dict:
             ]
         },
         "template": {
-            "template_path": "base",
+            "template_path": "",
             "globals": [
                 {"key": "clash.http_port", "value": 7890},
                 {"key": "clash.socks_port", "value": 7891},

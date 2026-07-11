@@ -562,3 +562,77 @@ func TestHandleGetProfile_AbsolutePathBlocked(t *testing.T) {
 		t.Fatalf("leaked profile outside profiles directory via absolute path")
 	}
 }
+
+func TestResolveProfilePath_FallsBackToConfigDir(t *testing.T) {
+	// Regression: profiles live under the pref directory (e.g. base/profiles/),
+	// not under base_path/profiles/. When base_path points to a nested "base"
+	// directory, resolveProfilePath must fall back to the config directory.
+	dir := t.TempDir()
+	profilesDir := filepath.Join(dir, "profiles")
+	if err := os.MkdirAll(profilesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profilePath := filepath.Join(profilesDir, "example.ini")
+	if err := os.WriteFile(profilePath, []byte("[Profile]\ntarget=clash\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	baseDir := filepath.Join(dir, "nested_base")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := resolveProfilePath("example", []string{baseDir, dir})
+	if err != nil {
+		t.Fatalf("resolveProfilePath error: %v", err)
+	}
+	if resolved != profilePath {
+		t.Fatalf("expected profile at %s, got %s", profilePath, resolved)
+	}
+}
+
+func TestResolveProfilePath_RelativePath(t *testing.T) {
+	// Users may pass the full relative path to a profile file, e.g.
+	// name=profiles/gfunc.ini. It must be resolved under the candidate roots.
+	dir := t.TempDir()
+	profilePath := filepath.Join(dir, "profiles", "gfunc.ini")
+	if err := os.MkdirAll(filepath.Dir(profilePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profilePath, []byte("[Profile]\ntarget=clash\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := resolveProfilePath("profiles/gfunc.ini", []string{dir})
+	if err != nil {
+		t.Fatalf("resolveProfilePath error: %v", err)
+	}
+	if resolved != profilePath {
+		t.Fatalf("expected profile at %s, got %s", profilePath, resolved)
+	}
+}
+
+func TestResolveProfilePath_RelativePathUnderBasePath(t *testing.T) {
+	// When base_path differs from config_dir, a relative profile path should be
+	// found under the base_path root as well.
+	dir := t.TempDir()
+	baseDir := filepath.Join(dir, "base")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profilePath := filepath.Join(baseDir, "profiles", "gfunc.ini")
+	if err := os.MkdirAll(filepath.Dir(profilePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profilePath, []byte("[Profile]\ntarget=clash\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := resolveProfilePath("profiles/gfunc.ini", []string{baseDir, dir})
+	if err != nil {
+		t.Fatalf("resolveProfilePath error: %v", err)
+	}
+	if resolved != profilePath {
+		t.Fatalf("expected profile at %s, got %s", profilePath, resolved)
+	}
+}

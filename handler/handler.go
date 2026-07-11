@@ -896,11 +896,16 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 		return
 	}
 
-	// Resolve the first profile under base_path/profiles.
-	basePath := config.GetBasePath()
-	profilesDir := filepath.Join(basePath, "profiles")
+	// Resolve the first profile under the configured profile roots.
+	// A bare profile name is resolved to <root>/profiles/<name>.ini. A relative
+	// path (e.g. profiles/gfunc.ini) is resolved directly under the root.
+	// base_path is tried first for backward compatibility, then the pref directory.
+	profileRoots := []string{
+		config.GetBasePath(),
+		config.GetConfigDir(),
+	}
 
-	firstProfile, err := resolveProfilePath(profiles[0], profilesDir)
+	firstProfile, err := resolveProfilePath(profiles[0], profileRoots)
 	if err != nil {
 		c.String(http.StatusBadRequest, fmt.Sprintf("Invalid profile name: %v", err))
 		return
@@ -967,7 +972,7 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 		for i := 1; i < len(profiles); i++ {
 			profileName := profiles[i]
 
-			additionalPath, err := resolveProfilePath(profileName, profilesDir)
+			additionalPath, err := resolveProfilePath(profileName, profileRoots)
 			if err != nil || additionalPath == "" {
 				continue
 			}
@@ -1012,17 +1017,10 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 	// Merge from additional profiles
 	if len(profiles) > 1 {
 		for i := 1; i < len(profiles); i++ {
-			var additionalPath string
 			profileName := profiles[i]
 
-			// Try multiple path resolutions
-			if fileExists(profileName) {
-				additionalPath = profileName
-			} else if fileExists(filepath.Join("base", profileName)) {
-				additionalPath = filepath.Join("base", profileName)
-			} else if fileExists(filepath.Join(config.GetBasePath(), profileName)) {
-				additionalPath = filepath.Join(config.GetBasePath(), profileName)
-			} else {
+			additionalPath, err := resolveProfilePath(profileName, profileRoots)
+			if err != nil || additionalPath == "" {
 				continue
 			}
 
@@ -1257,23 +1255,46 @@ func resolveRulesetLocalPath(target string) (string, error) {
 	return "", fmt.Errorf("ruleset not found")
 }
 
-// resolveProfilePath validates a profile name and returns the path to
-// <profilesDir>/<name>.ini if it exists and stays inside profilesDir.
-func resolveProfilePath(name string, profilesDir string) (string, error) {
+// resolveProfilePath validates a profile name and returns the path to the
+// profile file under one of the candidate roots.
+//
+// If name contains a path separator it is treated as a relative path and
+// resolved directly under each root (with an optional .ini suffix). Otherwise
+// it is treated as a bare profile name and resolved to <root>/profiles/<name>.ini.
+func resolveProfilePath(name string, candidateRoots []string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("empty profile name")
 	}
-	// Strip a redundant .ini suffix if provided; we always append it ourselves.
-	name = strings.TrimSuffix(name, ".ini")
 
-	resolved, err := resolvePathUnderRoot(name+".ini", profilesDir)
-	if err != nil {
-		return "", err
-	}
-	if _, err := os.Stat(resolved); err != nil {
+	// Relative profile path (e.g. "profiles/gfunc.ini").
+	if strings.ContainsRune(name, '/') || strings.ContainsRune(name, '\\') {
+		for _, root := range candidateRoots {
+			for _, tryName := range []string{name, name + ".ini"} {
+				resolved, err := resolvePathUnderRoot(tryName, root)
+				if err != nil {
+					continue
+				}
+				if _, err := os.Stat(resolved); err == nil {
+					return resolved, nil
+				}
+			}
+		}
 		return "", nil // not found, but not an error
 	}
-	return resolved, nil
+
+	// Bare profile name: look in <root>/profiles/<name>.ini.
+	name = strings.TrimSuffix(name, ".ini")
+	for _, root := range candidateRoots {
+		profilesDir := filepath.Join(root, "profiles")
+		resolved, err := resolvePathUnderRoot(name+".ini", profilesDir)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(resolved); err == nil {
+			return resolved, nil
+		}
+	}
+	return "", nil // not found, but not an error
 }
 
 // applyFilters applies include/exclude filters to proxies
