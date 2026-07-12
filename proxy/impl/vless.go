@@ -49,6 +49,37 @@ type VLESSProxy struct {
 	V2rayHttpUpgradeFastOpen *bool  `yaml:"v2ray_http_upgrade_fast_open" json:"v2ray_http_upgrade_fast_open"`
 }
 
+// isCertFingerprint reports whether s looks like a SHA-256 certificate pin
+// (64 hex digits, optionally colon-separated). In Mihomo the "fingerprint"
+// field is used for certificate pinning, while browser fingerprints belong in
+// "client-fingerprint".
+func isCertFingerprint(s string) bool {
+	s = strings.ReplaceAll(s, ":", "")
+	s = strings.ReplaceAll(s, " ", "")
+	if len(s) != 64 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// vlessClientFingerprint returns the browser/client fingerprint value that
+// should be exported for this proxy. Certificate pins are not client
+// fingerprints.
+func (p *VLESSProxy) vlessClientFingerprint() string {
+	if p.ClientFingerprint != "" {
+		return p.ClientFingerprint
+	}
+	if p.Fingerprint != "" && !isCertFingerprint(p.Fingerprint) {
+		return p.Fingerprint
+	}
+	return ""
+}
+
 func (p *VLESSProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 	// Format: vless://uuid@server:port?params#remark
 	link := fmt.Sprintf("vless://%s@%s:%d", p.UUID, p.Server, p.Port)
@@ -61,8 +92,8 @@ func (p *VLESSProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 		if p.ShortID != "" {
 			params = append(params, fmt.Sprintf("sid=%s", p.ShortID))
 		}
-		if p.Fingerprint != "" {
-			params = append(params, fmt.Sprintf("fp=%s", p.Fingerprint))
+		if fp := p.vlessClientFingerprint(); fp != "" {
+			params = append(params, fmt.Sprintf("fp=%s", fp))
 		}
 		if p.SNI != "" {
 			params = append(params, fmt.Sprintf("sni=%s", p.SNI))
@@ -78,8 +109,8 @@ func (p *VLESSProxy) ToSingleConfig(ext *config.ProxySetting) (string, error) {
 		if len(p.Alpn) > 0 {
 			params = append(params, fmt.Sprintf("alpn=%s", strings.Join(p.Alpn, ",")))
 		}
-		if p.Fingerprint != "" {
-			params = append(params, fmt.Sprintf("fp=%s", p.Fingerprint))
+		if fp := p.vlessClientFingerprint(); fp != "" {
+			params = append(params, fmt.Sprintf("fp=%s", fp))
 		}
 		if p.Flow != "" {
 			params = append(params, fmt.Sprintf("flow=%s", p.Flow))
@@ -160,7 +191,9 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 		options["ip-version"] = p.IpVersion
 	}
 
-	if p.Fingerprint != "" {
+	// "fingerprint" in Mihomo is for TLS certificate pinning (SHA-256 of the
+	// leaf certificate). Only emit it when the value actually looks like a pin.
+	if p.Fingerprint != "" && isCertFingerprint(p.Fingerprint) {
 		options["fingerprint"] = p.Fingerprint
 	}
 
@@ -203,13 +236,18 @@ func (p *VLESSProxy) ToClashConfig(ext *config.ProxySetting) (map[string]interfa
 			realityOpts["short-id"] = p.ShortID
 		}
 		options["reality-opts"] = realityOpts
+	}
 
-		if p.ClientFingerprint != "" {
-			options["client-fingerprint"] = p.ClientFingerprint
-		} else if p.Fingerprint != "" {
-			options["client-fingerprint"] = p.Fingerprint
-		} else {
-			options["client-fingerprint"] = "random"
+	// client-fingerprint is the uTLS/browser fingerprint. It applies to any TLS
+	// VLESS connection, not only REALITY. For REALITY, Mihomo requires a value,
+	// so fall back to "random" when nothing else is available.
+	if p.TLS {
+		clientFP := p.vlessClientFingerprint()
+		if clientFP == "" && (p.PublicKey != "" || p.ShortID != "") {
+			clientFP = "random"
+		}
+		if clientFP != "" {
+			options["client-fingerprint"] = clientFP
 		}
 	}
 

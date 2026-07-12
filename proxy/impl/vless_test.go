@@ -272,8 +272,8 @@ func TestVLESSProxy_ToClashConfig_MihomoParams(t *testing.T) {
 	assert.Equal(t, true, config["xudp"])
 	assert.Equal(t, true, config["packet-addr"])
 	assert.Equal(t, "ipv4", config["ip-version"])
-	// client-fingerprint is only set when REALITY opts (PublicKey/ShortID) are present
-	assert.Nil(t, config["client-fingerprint"])
+	// client-fingerprint is set for any TLS VLESS connection
+	assert.Equal(t, "chrome", config["client-fingerprint"])
 
 	echOpts, ok := config["ech-opts"].(map[string]interface{})
 	assert.True(t, ok)
@@ -327,7 +327,7 @@ func TestVLESSProxy_ToClashConfig_RealityClientFingerprint(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "firefox", config["client-fingerprint"])
 
-	// When no REALITY, client-fingerprint should NOT be set
+	// When no REALITY but TLS is enabled, client-fingerprint should still be set
 	proxyNoReality := &VLESSProxy{
 		BaseProxy: core.BaseProxy{
 			Type:   "vless",
@@ -342,7 +342,7 @@ func TestVLESSProxy_ToClashConfig_RealityClientFingerprint(t *testing.T) {
 	}
 	config, err = proxyNoReality.ToClashConfig(nil)
 	assert.NoError(t, err)
-	assert.Nil(t, config["client-fingerprint"])
+	assert.Equal(t, "chrome", config["client-fingerprint"])
 }
 
 func TestVLESSProxy_ToQuantumultXConfig_WS(t *testing.T) {
