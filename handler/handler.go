@@ -690,7 +690,7 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 // HandleVersion processes /version endpoint
 func (h *SubHandler) HandleVersion(c *gin.Context) {
 	log.Printf("[handler.HandleVersion] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
-	c.String(http.StatusOK, "subconvergo v0.1.1 backend\n")
+	c.String(http.StatusOK, "subconvergo v0.1.2 backend\n")
 }
 
 // HandleReadConf processes /readconf endpoint
