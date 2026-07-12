@@ -24,6 +24,7 @@ import (
 	"github.com/gfunc/subconvergo/generator/core"
 	"github.com/gfunc/subconvergo/generator/transformers"
 	"github.com/gfunc/subconvergo/parser"
+	"github.com/gfunc/subconvergo/version"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
@@ -690,7 +691,7 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 // HandleVersion processes /version endpoint
 func (h *SubHandler) HandleVersion(c *gin.Context) {
 	log.Printf("[handler.HandleVersion] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
-	c.String(http.StatusOK, "subconvergo v0.1.2 backend\n")
+	c.String(http.StatusOK, fmt.Sprintf("subconvergo v%s backend\n", version.Version))
 }
 
 // HandleReadConf processes /readconf endpoint

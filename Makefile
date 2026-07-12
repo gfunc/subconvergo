@@ -1,6 +1,6 @@
 # Makefile for subconvergo
 
-.PHONY: help build test test-unit test-integration test-all test-docker clean coverage lint run dev install deps docker-build docker-test docker-run
+.PHONY: help build test test-unit test-integration test-all test-docker clean coverage lint run dev install deps docker-build docker-push docker-run version
 
 # Variables
 BINARY_NAME=subconvergo
@@ -13,10 +13,11 @@ DOCKER_COMPOSE=docker-compose
 DOCKER_HUB_REPO=georgefu12/subconvergo
 
 # Build variables
-VERSION?=dev
+VERSION_FILE=version/version.go
+VERSION?=$(shell grep -E 'Version\s*=' $(VERSION_FILE) | sed -E 's/.*"([^"]+)".*/\1/')
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
+LDFLAGS=-ldflags "-X github.com/gfunc/subconvergo/version.Version=$(VERSION) -X github.com/gfunc/subconvergo/version.BuildTime=$(BUILD_TIME) -X github.com/gfunc/subconvergo/version.GitCommit=$(GIT_COMMIT)"
 
 # Default target
 help: ## Show this help message
@@ -124,7 +125,9 @@ docker-run: docker-build ## Run Docker container
 
 docker-push: docker-build ## Push Docker image to Docker Hub
 	@echo "Pushing Docker image to Docker Hub..."
+	$(DOCKER) tag $(BINARY_NAME):$(VERSION) $(DOCKER_HUB_REPO):$(VERSION)
 	$(DOCKER) tag $(BINARY_NAME):latest $(DOCKER_HUB_REPO):latest
+	$(DOCKER) push $(DOCKER_HUB_REPO):$(VERSION)
 	$(DOCKER) push $(DOCKER_HUB_REPO):latest
 
 # Benchmark

@@ -12,11 +12,11 @@ import (
 	"github.com/gfunc/subconvergo/config"
 	_ "github.com/gfunc/subconvergo/generator/impl"
 	"github.com/gfunc/subconvergo/handler"
+	"github.com/gfunc/subconvergo/version"
 	"github.com/gin-gonic/gin"
 )
 
 var (
-	version    = "0.1.2"
 	configFile = flag.String("f", "", "Path to configuration file")
 	genMode    = flag.Bool("g", false, "Generator mode")
 	artifact   = flag.String("artifact", "", "Profile name for generator mode")
@@ -36,7 +36,7 @@ func main() {
 		log.SetOutput(f)
 	}
 
-	log.Printf("subconvergo %s starting up...", version)
+	log.Printf("subconvergo %s starting up...", version.Version)
 	log.Printf("Command line flags: configFile=%s", *configFile)
 
 	// Change to config directory
