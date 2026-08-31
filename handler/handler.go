@@ -995,6 +995,11 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 		}
 	}
 
+	// Merge URLs passed via query parameter with profile URLs
+	if queryURL := c.Query("url"); queryURL != "" {
+		allURLs = append(allURLs, strings.Split(queryURL, "|")...)
+	}
+
 	// Update URL in contents
 	if len(allURLs) > 0 {
 		contents["url"] = strings.Join(allURLs, "|")
@@ -1069,9 +1074,10 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 	profileDataURL := config.Global.ManagedConfig.ManagedConfigPrefix + "/getprofile?" + c.Request.URL.RawQuery
 	contents["profile_data"] = base64.StdEncoding.EncodeToString([]byte(profileDataURL))
 
-	// Copy all original query parameters (query params override profile params)
+	// Copy all original query parameters (query params override profile params,
+	// except "url" which was merged into the profile URLs above)
 	for key, values := range c.Request.URL.Query() {
-		if len(values) > 0 && key != "name" {
+		if len(values) > 0 && key != "name" && key != "url" {
 			contents[key] = values[0]
 		}
 	}

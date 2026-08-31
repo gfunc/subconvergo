@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -634,5 +635,58 @@ func TestResolveProfilePath_RelativePathUnderBasePath(t *testing.T) {
 	}
 	if resolved != profilePath {
 		t.Fatalf("expected profile at %s, got %s", profilePath, resolved)
+	}
+}
+
+func TestHandleGetProfile_QueryURLMergedWithProfileURL(t *testing.T) {
+	cache.Init(t.TempDir())
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	// Two subscription endpoints with distinct node names
+	subA := base64.StdEncoding.EncodeToString([]byte("ss://YWVzLTEyOC1nY206dGVzdA@a.example.com:8388#PROFILE-NODE-AAA"))
+	subB := base64.StdEncoding.EncodeToString([]byte("ss://YWVzLTEyOC1nY206dGVzdA@b.example.com:8388#QUERY-NODE-BBB"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/a" {
+			_, _ = io.WriteString(w, subA)
+		} else {
+			_, _ = io.WriteString(w, subB)
+		}
+	}))
+	defer srv.Close()
+
+	// Profile pointing at subscription A
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "profiles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profileContent := "[Profile]\ntarget=clash\nurl=" + srv.URL + "/a\n"
+	if err := os.WriteFile(filepath.Join(dir, "profiles", "merge.ini"), []byte(profileContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	config.Global.Common.APIMode = true
+	config.Global.Common.APIAccessToken = "token123"
+	config.Global.Common.BasePath = dir
+	config.Global.Common.ClashRuleBase = ""
+	config.Global.ManagedConfig.WriteManagedConfig = false
+
+	// Pass subscription B via the url query parameter; it must be merged with
+	// the profile's URL instead of replacing it.
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet,
+		"/getprofile?name=merge&token=token123&url="+url.QueryEscape(srv.URL+"/b"), nil)
+	h.HandleGetProfile(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "PROFILE-NODE-AAA") {
+		t.Errorf("profile URL node missing from merged output:\n%s", body)
+	}
+	if !strings.Contains(body, "QUERY-NODE-BBB") {
+		t.Errorf("query URL node missing from merged output:\n%s", body)
 	}
 }

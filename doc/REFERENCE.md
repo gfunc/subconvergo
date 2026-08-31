@@ -566,7 +566,7 @@ exclude=expired
 curl "http://localhost:25500/getprofile?name=my_profile&token=password"
 ```
 
-Merges profile settings with query parameters.
+Query parameters override profile settings, except `url`: subscription URLs passed via `&url=` are **merged** with (appended to) the profile's URLs instead of replacing them. Multiple profiles can be combined with `name=a|b`, which merges their `url`, `rename`, `include`, and `exclude` values.
 
 ### API Security
 

@@ -69,8 +69,10 @@ Load preset configuration from `base/profiles/<name>.ini`.
 **Parameters:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `name` | string | Profile name (without .ini extension) |
+| `name` | string | Profile name (without .ini extension). Use `a|b` to merge multiple profiles |
 | `token` | string | API Access Token (if configured) |
+
+Other `/sub` parameters may be passed as query parameters and override the profile's settings. Exception: `url` is merged with the profile's URLs (appended, pipe-separated) rather than replacing them.
 
 ### `/getruleset`
 Fetch and format ruleset.
