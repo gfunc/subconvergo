@@ -169,7 +169,8 @@ CASES = [
         name="ruleset_remote",
         query=lambda: infra.api_get_subconvergo("/getruleset", params={
             "url": base64.urlsafe_b64encode(f"{infra.MOCK_BASE}/test_rules.list".encode()).decode(),
-            "type": "clash"
+            "type": "clash",
+            "token": infra.TOKEN,
         }),
         validate=lambda resp: (
             lambda body=resp.text.strip(): (

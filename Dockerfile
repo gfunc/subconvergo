@@ -1,4 +1,13 @@
-FROM golang:1.25-alpine AS builder
+# Pin the builder to an explicit patched Go patch release (not a floating
+# minor tag): go1.26.7 includes the stdlib security fixes flagged by
+# govulncheck (net/url, crypto/tls, net/http, encoding/asn1; see
+# .scratch/security-hardening/issues/07). Keep in sync with the go directive
+# in go.mod.
+FROM golang:1.26.7-alpine AS builder
+# proxy.golang.org is unreachable from the networks where this image is
+# usually built (the apk mirror below is already tuna for the same reason).
+# goproxy.cn proxies both module zips and the sum.golang.org checksum
+# database, so go.sum verification (default GOSUMDB) still applies.
 ENV GOPROXY=https://goproxy.cn
 
 WORKDIR /app

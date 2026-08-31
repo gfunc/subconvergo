@@ -90,10 +90,10 @@ func TestHandleVersion(t *testing.T) {
 func TestHandleReadConf(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := NewSubHandler()
-	config.Global.Common.APIAccessToken = ""
+	config.Global.Common.APIAccessToken = "test-token"
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/readconf", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/readconf?token=test-token", nil)
 	h.HandleReadConf(c)
 	// May return 500 if config files not present
 	if w.Code != http.StatusOK && w.Code != http.StatusInternalServerError {
@@ -165,6 +165,7 @@ func TestLoadExternalConfigFunc(t *testing.T) {
 
 func TestLoadExternalConfig_YAMLRemote(t *testing.T) {
 	cache.Init(t.TempDir())
+	allowLoopbackFetch(t)
 	h := NewSubHandler()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, ""+
@@ -227,9 +228,10 @@ ruleset = "rules/custom_test_rules.list"
 func TestHandleGetRuleset(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := NewSubHandler()
+	config.Global.Common.APIAccessToken = "test-token"
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/getruleset", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/getruleset?token=test-token", nil)
 
 	h.HandleGetRuleset(c)
 	if w.Code != http.StatusBadRequest {
@@ -318,7 +320,9 @@ func TestHandleGetRulesetWithParams(t *testing.T) {
 
 func TestHandleGetRuleset_RemoteFetch(t *testing.T) {
 	cache.Init(t.TempDir())
+	allowLoopbackFetch(t)
 	gin.SetMode(gin.TestMode)
+	config.Global.Common.APIAccessToken = "test-token"
 	h := NewSubHandler()
 
 	// Start a test HTTP server serving a simple ruleset
@@ -330,7 +334,7 @@ func TestHandleGetRuleset_RemoteFetch(t *testing.T) {
 	encoded := base64.URLEncoding.EncodeToString([]byte(ts.URL))
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash", nil)
+	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash&token=test-token", nil)
 	c.Request = req
 
 	h.HandleGetRuleset(c)
@@ -358,11 +362,12 @@ func TestHandleGetRuleset_LocalPath(t *testing.T) {
 	}
 	// Point base path to temp dir
 	config.Global.Common.BasePath = dir
+	config.Global.Common.APIAccessToken = "test-token"
 
 	encoded := base64.URLEncoding.EncodeToString([]byte("local_test.list"))
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash", nil)
+	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash&token=test-token", nil)
 	c.Request = req
 
 	h.HandleGetRuleset(c)
@@ -380,13 +385,16 @@ func TestHandleGetRuleset_AbsolutePathBlocked(t *testing.T) {
 	h := NewSubHandler()
 
 	config.Global.Common.BasePath = t.TempDir()
+	// A valid token keeps this test on the path guard (fail-closed token
+	// checks would otherwise refuse the request before it).
+	config.Global.Common.APIAccessToken = "test-token"
 	// Set a secret token in the environment; /proc/self/environ would normally expose it.
 	t.Setenv("API_TOKEN", "super-secret-token-12345")
 
 	encoded := base64.URLEncoding.EncodeToString([]byte("/proc/self/environ"))
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash", nil)
+	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash&token=test-token", nil)
 	c.Request = req
 
 	h.HandleGetRuleset(c)
@@ -413,11 +421,12 @@ func TestHandleGetRuleset_TraversalBlocked(t *testing.T) {
 	t.Cleanup(func() { os.Remove(secretPath) })
 
 	config.Global.Common.BasePath = dir
+	config.Global.Common.APIAccessToken = "test-token"
 
 	encoded := base64.URLEncoding.EncodeToString([]byte("../secret_ruleset.txt"))
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash", nil)
+	req := httptest.NewRequest(http.MethodGet, "/getruleset?url="+encoded+"&type=clash&token=test-token", nil)
 	c.Request = req
 
 	h.HandleGetRuleset(c)
@@ -640,6 +649,7 @@ func TestResolveProfilePath_RelativePathUnderBasePath(t *testing.T) {
 
 func TestHandleSub_SubURLKeepsPercentEncoding(t *testing.T) {
 	cache.Init(t.TempDir())
+	allowLoopbackFetch(t)
 	gin.SetMode(gin.TestMode)
 	h := NewSubHandler()
 
@@ -682,6 +692,7 @@ func TestHandleSub_SubURLKeepsPercentEncoding(t *testing.T) {
 
 func TestHandleGetProfile_QueryURLMergedWithProfileURL(t *testing.T) {
 	cache.Init(t.TempDir())
+	allowLoopbackFetch(t)
 	gin.SetMode(gin.TestMode)
 	h := NewSubHandler()
 

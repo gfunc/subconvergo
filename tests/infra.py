@@ -18,7 +18,10 @@ COMPOSE_FILE = TESTS_DIR / "docker-compose.test.yml"
 BASE_URL = "http://127.0.0.1:25500"
 SUBCONVERTER_URL = "http://127.0.0.1:25550"
 MOCK_BASE = "http://mock-subscription"
-TOKEN = "password"
+# Real token required since the auth hardening: an empty token fails closed on
+# all protected endpoints, and the literal legacy default "password" makes a
+# non-loopback bind refuse to start (the stack listens on 0.0.0.0).
+TOKEN = "smoke-test-token-2026"
 TEMPLATE_PATH = "test_template.tpl"
 
 ORIGINAL_PREF_EXISTS = PREF_PATH.exists()

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -19,10 +18,13 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
+	"github.com/gfunc/subconvergo/fetcher"
 	"github.com/gfunc/subconvergo/generator"
 	"github.com/gfunc/subconvergo/generator/core"
 	"github.com/gfunc/subconvergo/generator/transformers"
 	"github.com/gfunc/subconvergo/parser"
+	parserutils "github.com/gfunc/subconvergo/parser/utils"
+	"github.com/gfunc/subconvergo/utils"
 	"github.com/gfunc/subconvergo/version"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/ini.v1"
@@ -31,6 +33,13 @@ import (
 
 // SubHandler handles subscription conversion requests
 type SubHandler struct{}
+
+const (
+	// maxSubSourceURLs caps the number of |-separated source URLs per /sub request.
+	maxSubSourceURLs = 32
+	// maxSubSourceURLLength bounds each source URL's length in bytes.
+	maxSubSourceURLLength = 2048
+)
 
 // NewSubHandler creates a new subscription handler
 func NewSubHandler() *SubHandler {
@@ -71,7 +80,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	configParam := params.Config
 	uaParam := params.UserAgent
 
-	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s ua=%s client=%s headers=%v", target, urlParam, configParam, uaParam, c.ClientIP(), c.Request.Header)
+	log.Printf("[handler.HandleSub] Request received: target=%s url=%s config=%s ua=%s client=%s %s", target, utils.RedactURL(urlParam), utils.RedactURLOrPath(configParam), uaParam, c.ClientIP(), utils.HeaderSummary(c.Request.Header))
 
 	// Handle auto target detection
 	var clashNewName *bool
@@ -114,6 +123,19 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		return
 	}
 
+	// Bound the number and size of |-separated source URLs before any fetch.
+	sourceURLs := strings.Split(urlParam, "|")
+	if len(sourceURLs) > maxSubSourceURLs {
+		c.String(http.StatusBadRequest, fmt.Sprintf("Too many source URLs (max %d)", maxSubSourceURLs))
+		return
+	}
+	for _, u := range sourceURLs {
+		if len(u) > maxSubSourceURLLength {
+			c.String(http.StatusBadRequest, fmt.Sprintf("Source URL exceeds max length of %d", maxSubSourceURLLength))
+			return
+		}
+	}
+
 	// Note: gin has already URL-decoded the query parameters once. Do NOT
 	// unescape urlParam again here — a second decode turns percent-encoded
 	// bytes inside the subscription URL (e.g. name=%E4%BD%8F...) into raw
@@ -135,7 +157,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	}
 
 	// Add main URLs
-	urlsToProcess = append(urlsToProcess, strings.Split(urlParam, "|")...)
+	urlsToProcess = append(urlsToProcess, sourceURLs...)
 
 	// Append insert URLs if needed
 	if config.Global.Common.EnableInsert && len(config.Global.Common.InsertURL) > 0 {
@@ -143,7 +165,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 			urlsToProcess = append(urlsToProcess, config.Global.Common.InsertURL...)
 		}
 	}
-	log.Printf("[handler.HandleSub] target=%s urls=%d urlLen=%d config=%s client=%s", target, len(urlsToProcess), len(urlParam), configParam, c.ClientIP())
+	log.Printf("[handler.HandleSub] target=%s urls=%d urlLen=%d config=%s client=%s", target, len(urlsToProcess), len(urlParam), utils.RedactURLOrPath(configParam), c.ClientIP())
 
 	// Create request-scoped config initialized with global settings
 	reqConfig := *config.Global
@@ -153,9 +175,9 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		// Load external config (can be URL or file path)
 		extConfig, err := h.loadExternalConfig(configParam)
 		if err != nil {
-			log.Printf("[handler.HandleSub] failed to load external config %s: %v", configParam, err)
+			log.Printf("[handler.HandleSub] failed to load external config %s: %v", utils.RedactURLOrPath(configParam), err)
 		} else if extConfig != nil {
-			log.Printf("[handler.HandleSub] loaded external config %s", configParam)
+			log.Printf("[handler.HandleSub] loaded external config %s", utils.RedactURLOrPath(configParam))
 			// Merge external config into request config
 			reqConfig.Merge(extConfig)
 		}
@@ -186,7 +208,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		}
 		custom, err := sp.Parse()
 		if err == nil {
-			log.Printf("[handler.HandleSub] Parsed URL %s: %d proxies, %d groups, %d rules", url, len(custom.Proxies), len(custom.Groups), len(custom.RawRules))
+			log.Printf("[handler.HandleSub] Parsed URL %s: %d proxies, %d groups, %d rules", utils.RedactURL(url), len(custom.Proxies), len(custom.Groups), len(custom.RawRules))
 			allProxies = append(allProxies, custom.Proxies...)
 			if !ignoreSource {
 				otherProxyGroups = append(otherProxyGroups, custom.Groups...)
@@ -197,7 +219,7 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 			c.String(http.StatusBadRequest, fmt.Sprintf("Failed to parse subscription (%s): %v", url, err))
 			return
 		} else {
-			log.Printf("[handler.HandleSub] failed to parse subscription (index=%d url=%s): %v", index, url, err)
+			log.Printf("[handler.HandleSub] failed to parse subscription (index=%d url=%s): %v", index, utils.RedactURL(url), err)
 		}
 	}
 
@@ -209,10 +231,12 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		return
 	}
 
-	// Check custom group name override
+	// Check custom group name override. The query param bypasses the parse
+	// boundary, so it goes through the same scalar sanitizer here.
 	if params.Group != "" {
+		group := parserutils.SanitizeScalarField(params.Group)
 		for _, p := range allProxies {
-			p.SetGroup(params.Group)
+			p.SetGroup(group)
 		}
 	}
 
@@ -262,10 +286,11 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 	proxyGroups = uniqueGroups
 
 	// Prepare generator options
+	rulesets, rawRules := enforceAdvancedCaps(reqConfig.Rulesets.Rulesets, rawRules)
 	opts := core.GeneratorOptions{
 		Target:                 target,
 		ProxyGroups:            proxyGroups,
-		Rulesets:               reqConfig.Rulesets.Rulesets,
+		Rulesets:               rulesets,
 		RawRules:               rawRules,
 		AppendProxyType:        reqConfig.Common.AppendProxyType,
 		EnableRuleGen:          reqConfig.Rulesets.Enabled,
@@ -422,7 +447,7 @@ func (h *SubHandler) loadBaseConfig(target string, requestParams map[string]stri
 
 	// Resolve path relative to the configuration directory and forbid escapes.
 	root := config.GetConfigDir()
-	resolved, err := resolvePathUnderRoot(basePath, root)
+	resolved, err := utils.ResolveUnderRoot(basePath, root)
 	if err != nil {
 		return "", fmt.Errorf("invalid rule base path %q: %w", basePath, err)
 	}
@@ -559,26 +584,31 @@ func setNestedValue(data map[string]interface{}, key string, value string) {
 func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 	var data []byte
 
+	// Remote configs come from request-controlled URLs and are untrusted:
+	// they must not gain filesystem capabilities (local file imports).
+	// Local configs are admin-controlled and trusted to use !!import:.
+	isRemote := strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://")
+
 	// Determine source: http(s) or local file
-	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+	if isRemote {
 		// Check cache first
 		cacheKey := ""
 		if config.Global.Advanced.EnableCache {
 			cacheKey = cache.GlobalManager.GetKey(path)
 			if cachedData, ok := cache.GlobalManager.Get(cacheKey, config.Global.Advanced.CacheConfig); ok {
-				log.Printf("[handler.loadExternalConfig] path=%s served from cache", path)
+				log.Printf("[handler.loadExternalConfig] path=%s served from cache", utils.RedactURL(path))
 				data = cachedData
 			}
 		}
 
 		if data == nil {
-			resp, err := http.Get(path)
+			body, err := fetcher.ForConfig(config.Global.Advanced.MaxAllowedDownloadSize, "").Get(path, nil)
 			if err != nil {
-				log.Printf("[handler.loadExternalConfig] http fetch failed path=%s err=%v", path, err)
+				log.Printf("[handler.loadExternalConfig] http fetch failed path=%s err=%v", utils.RedactURL(path), err)
 				// Try stale cache
 				if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
 					if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
-						log.Printf("[handler.loadExternalConfig] path=%s served from stale cache", path)
+						log.Printf("[handler.loadExternalConfig] path=%s served from stale cache", utils.RedactURL(path))
 						data = cachedData
 					} else {
 						return nil, err
@@ -587,31 +617,11 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 					return nil, err
 				}
 			} else {
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					log.Printf("[handler.loadExternalConfig] http fetch path=%s status=%d", path, resp.StatusCode)
-					// Try stale cache
-					if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
-						if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
-							log.Printf("[handler.loadExternalConfig] path=%s served from stale cache", path)
-							data = cachedData
-						} else {
-							return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
-						}
-					} else {
-						return nil, fmt.Errorf("fetch external config status %d", resp.StatusCode)
-					}
-				} else {
-					data, err = io.ReadAll(resp.Body)
-					if err != nil {
-						log.Printf("[handler.loadExternalConfig] http read failed path=%s err=%v", path, err)
-						return nil, err
-					}
-					// Save to cache
-					if config.Global.Advanced.EnableCache {
-						if err := cache.GlobalManager.Set(cacheKey, data); err != nil {
-							log.Printf("[handler.loadExternalConfig] failed to save cache: %v", err)
-						}
+				data = body
+				// Save to cache
+				if config.Global.Advanced.EnableCache {
+					if err := cache.GlobalManager.Set(cacheKey, data); err != nil {
+						log.Printf("[handler.loadExternalConfig] failed to save cache: %v", err)
 					}
 				}
 			}
@@ -643,14 +653,18 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 	// Try YAML -> TOML -> INI using the Settings struct to leverage existing tags
 	var extSettings config.Settings
 	if err := yaml.Unmarshal(data, &extSettings); err == nil {
-		if err := extSettings.ProcessImports(); err != nil {
+		if isRemote {
+			mergeExternalConfigCollections(&extSettings)
+		} else if err := extSettings.ProcessImports(); err != nil {
 			log.Printf("[handler.loadExternalConfig] failed to process imports in YAML: %v", err)
 		}
 		return &extSettings, nil
 	}
 
 	if _, err := toml.Decode(string(data), &extSettings); err == nil {
-		if err := extSettings.ProcessImports(); err != nil {
+		if isRemote {
+			mergeExternalConfigCollections(&extSettings)
+		} else if err := extSettings.ProcessImports(); err != nil {
 			log.Printf("[handler.loadExternalConfig] failed to process imports in TOML: %v", err)
 		}
 		return &extSettings, nil
@@ -662,11 +676,11 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 			// (e.g. due to struct tags or section name mismatches)
 
 			if len(extSettings.CustomGroups) == 0 {
-				extSettings.CustomGroups = parseINICustomGroups(cfg)
+				extSettings.CustomGroups = parseINICustomGroups(cfg, !isRemote)
 			}
 
 			if len(extSettings.CustomRulesets) == 0 {
-				extSettings.CustomRulesets = parseINIRulesets(cfg)
+				extSettings.CustomRulesets = parseINIRulesets(cfg, !isRemote)
 			}
 
 			// Check for overwrite_original_rules in rulesets section manually
@@ -685,23 +699,52 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 	return &config.Settings{}, nil
 }
 
+// mergeExternalConfigCollections applies only the in-memory collection merges
+// of ProcessImports for remote (untrusted) external configs, skipping every
+// filesystem import directive. Import fields are left in place but never
+// processed, so a remote config cannot read local files.
+func mergeExternalConfigCollections(s *config.Settings) {
+	if len(s.CustomGroups) > 0 {
+		s.ProxyGroups.CustomProxyGroups = append(s.ProxyGroups.CustomProxyGroups, s.CustomGroups...)
+		s.CustomGroups = nil
+	}
+	if len(s.CustomRulesets) > 0 {
+		s.Rulesets.Rulesets = append(s.Rulesets.Rulesets, s.CustomRulesets...)
+		s.CustomRulesets = nil
+	}
+}
+
+// enforceAdvancedCaps applies the advanced max_allowed_rulesets /
+// max_allowed_rules limits (0 or negative = unlimited) by truncation: excess
+// entries are dropped and logged rather than failing the request. This is the
+// single funnel where request- and config-supplied rulesets/rules enter
+// generation; note max_allowed_rules caps the inline rule list (ruleset file
+// contents are fetched later inside the generators and are not counted here).
+func enforceAdvancedCaps(rulesets []config.RulesetConfig, rawRules []string) ([]config.RulesetConfig, []string) {
+	if max := config.Global.Advanced.MaxAllowedRulesets; max > 0 && len(rulesets) > max {
+		log.Printf("[handler.enforceAdvancedCaps] truncating %d rulesets to max_allowed_rulesets=%d", len(rulesets), max)
+		rulesets = rulesets[:max]
+	}
+	if max := config.Global.Advanced.MaxAllowedRules; max > 0 && len(rawRules) > max {
+		log.Printf("[handler.enforceAdvancedCaps] truncating %d raw rules to max_allowed_rules=%d", len(rawRules), max)
+		rawRules = rawRules[:max]
+	}
+	return rulesets, rawRules
+}
+
 // HandleVersion processes /version endpoint
 func (h *SubHandler) HandleVersion(c *gin.Context) {
-	log.Printf("[handler.HandleVersion] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
+	log.Printf("[handler.HandleVersion] Request received client=%s %s", c.ClientIP(), utils.HeaderSummary(c.Request.Header))
 	c.String(http.StatusOK, fmt.Sprintf("subconvergo v%s backend\n", version.Version))
 }
 
 // HandleReadConf processes /readconf endpoint
 func (h *SubHandler) HandleReadConf(c *gin.Context) {
-	log.Printf("[handler.HandleReadConf] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
+	log.Printf("[handler.HandleReadConf] Request received client=%s %s", c.ClientIP(), utils.HeaderSummary(c.Request.Header))
 
-	// Check token
-	if config.Global.Common.APIAccessToken != "" {
-		token := c.Query("token")
-		if token != config.Global.Common.APIAccessToken {
-			c.String(http.StatusForbidden, "Forbidden\n")
-			return
-		}
+	// Token gate: fails closed when no token is configured.
+	if !requireAPIToken(c) {
+		return
 	}
 
 	// Reload configuration
@@ -720,7 +763,13 @@ func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 	urlParam := c.Query("url")
 	rulesetType := c.Query("type")
 
-	log.Printf("[handler.HandleGetRuleset] Request received: url=%s type=%s client=%s headers=%v", urlParam, rulesetType, c.ClientIP(), c.Request.Header)
+	log.Printf("[handler.HandleGetRuleset] Request received: url=%s type=%s client=%s %s", utils.RedactURL(urlParam), rulesetType, c.ClientIP(), utils.HeaderSummary(c.Request.Header))
+
+	// Token gate (consistent with other protected endpoints): fails closed
+	// when no token is configured.
+	if !requireAPIToken(c) {
+		return
+	}
 
 	if urlParam == "" || rulesetType == "" {
 		c.String(http.StatusBadRequest, "Invalid request!")
@@ -744,18 +793,19 @@ func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 		if config.Global.Advanced.EnableCache {
 			cacheKey = cache.GlobalManager.GetKey(target)
 			if cachedData, ok := cache.GlobalManager.Get(cacheKey, config.Global.Advanced.CacheRuleset); ok {
-				log.Printf("[handler.HandleGetRuleset] url=%s served from cache", target)
+				log.Printf("[handler.HandleGetRuleset] url=%s served from cache", utils.RedactURL(target))
 				content = cachedData
 			}
 		}
 
 		if content == nil {
-			resp, err := http.Get(target)
+			body, err := fetcher.ForConfig(config.Global.Advanced.MaxAllowedDownloadSize, "").Get(target, nil)
 			if err != nil {
+				log.Printf("[handler.HandleGetRuleset] fetch failed url=%s err=%v", utils.RedactURL(target), err)
 				// Try stale cache
 				if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
 					if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
-						log.Printf("[handler.HandleGetRuleset] url=%s served from stale cache", target)
+						log.Printf("[handler.HandleGetRuleset] url=%s served from stale cache", utils.RedactURL(target))
 						content = cachedData
 					} else {
 						c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: %v", err))
@@ -766,40 +816,18 @@ func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 					return
 				}
 			} else {
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					// Try stale cache
-					if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
-						if cachedData, ok := cache.GlobalManager.GetStale(cacheKey); ok {
-							log.Printf("[handler.HandleGetRuleset] url=%s served from stale cache", target)
-							content = cachedData
-						} else {
-							c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: status %d", resp.StatusCode))
-							return
-						}
-					} else {
-						c.String(http.StatusBadRequest, fmt.Sprintf("Failed to fetch ruleset: status %d", resp.StatusCode))
-						return
-					}
-				} else {
-					body, err := io.ReadAll(resp.Body)
-					if err != nil {
-						c.String(http.StatusInternalServerError, fmt.Sprintf("Failed to read ruleset: %v", err))
-						return
-					}
-					content = body
-					// Save to cache
-					if config.Global.Advanced.EnableCache {
-						if err := cache.GlobalManager.Set(cacheKey, content); err != nil {
-							log.Printf("[handler.HandleGetRuleset] failed to save cache: %v", err)
-						}
+				content = body
+				// Save to cache
+				if config.Global.Advanced.EnableCache {
+					if err := cache.GlobalManager.Set(cacheKey, content); err != nil {
+						log.Printf("[handler.HandleGetRuleset] failed to save cache: %v", err)
 					}
 				}
 			}
 		}
 	} else {
 		// Local path resolution attempts (restricted to base path)
-		p, err := resolveRulesetLocalPath(target)
+		p, err := utils.ResolveRulesetPath(target)
 		if err != nil {
 			c.String(http.StatusBadRequest, fmt.Sprintf("Ruleset not found: %v", err))
 			return
@@ -819,18 +847,14 @@ func (h *SubHandler) HandleGetRuleset(c *gin.Context) {
 
 // HandleRender processes /render endpoint for template rendering
 func (h *SubHandler) HandleRender(c *gin.Context) {
-	// Check token if required
-	if config.Global.Common.APIAccessToken != "" {
-		token := c.Query("token")
-		if token != config.Global.Common.APIAccessToken {
-			c.String(http.StatusForbidden, "Forbidden\n")
-			return
-		}
+	// Token gate: fails closed when no token is configured.
+	if !requireAPIToken(c) {
+		return
 	}
 
 	// Get template path from query
 	templatePath := c.Query("path")
-	log.Printf("[handler.HandleRender] Request received: path=%s client=%s headers=%v", templatePath, c.ClientIP(), c.Request.Header)
+	log.Printf("[handler.HandleRender] Request received: path=%s client=%s %s", templatePath, c.ClientIP(), utils.HeaderSummary(c.Request.Header))
 
 	if templatePath == "" {
 		c.String(http.StatusBadRequest, "Missing template path\n")
@@ -841,7 +865,7 @@ func (h *SubHandler) HandleRender(c *gin.Context) {
 	basePath := config.GetBasePath()
 	templateRoot := basePath
 	if config.Global.Template.TemplatePath != "" {
-		root, err := resolvePathUnderRoot(config.Global.Template.TemplatePath, basePath)
+		root, err := utils.ResolveUnderRoot(config.Global.Template.TemplatePath, basePath)
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Invalid template configuration\n")
 			return
@@ -850,7 +874,7 @@ func (h *SubHandler) HandleRender(c *gin.Context) {
 	}
 
 	// Resolve and validate user-supplied template path.
-	resolved, err := resolvePathUnderRoot(templatePath, templateRoot)
+	resolved, err := utils.ResolveUnderRoot(templatePath, templateRoot)
 	if err != nil {
 		c.String(http.StatusBadRequest, fmt.Sprintf("Invalid template path: %v\n", err))
 		return
@@ -879,7 +903,7 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 	name := c.Query("name")
 	token := c.Query("token")
 
-	log.Printf("[handler.HandleGetProfile] Request received: name=%s client=%s headers=%v", name, c.ClientIP(), c.Request.Header)
+	log.Printf("[handler.HandleGetProfile] Request received: name=%s client=%s %s", name, c.ClientIP(), utils.HeaderSummary(c.Request.Header))
 
 	// Validate required parameters
 	if token == "" || name == "" {
@@ -942,18 +966,18 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 		contents[key.Name()] = key.String()
 	}
 
-	// Validate token
+	// Validate token (constant-time; empty configured tokens never match)
 	profileToken, hasProfileToken := contents["profile_token"]
 	if len(profiles) == 1 && hasProfileToken {
 		// Single profile with its own token
-		if token != profileToken {
+		if !tokenEqual(token, profileToken) {
 			c.String(http.StatusForbidden, "Forbidden")
 			return
 		}
 		token = config.Global.Common.APIAccessToken
 	} else {
 		// Multiple profiles or no profile token - use global token
-		if token != config.Global.Common.APIAccessToken {
+		if !tokenEqual(token, config.Global.Common.APIAccessToken) {
 			c.String(http.StatusForbidden, "Forbidden")
 			return
 		}
@@ -1131,7 +1155,7 @@ func (h *SubHandler) HandleGetProfile(c *gin.Context) {
 
 // HandleSurge2Clash processes /surge2clash endpoint
 func (h *SubHandler) HandleSurge2Clash(c *gin.Context) {
-	log.Printf("[handler.HandleSurge2Clash] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
+	log.Printf("[handler.HandleSurge2Clash] Request received client=%s %s", c.ClientIP(), utils.HeaderSummary(c.Request.Header))
 	var params RequestParams
 	if err := c.ShouldBindQuery(&params); err != nil {
 		c.String(http.StatusBadRequest, "Invalid parameters: "+err.Error())
@@ -1144,14 +1168,10 @@ func (h *SubHandler) HandleSurge2Clash(c *gin.Context) {
 
 // HandleFlushCache processes /flushcache endpoint
 func (h *SubHandler) HandleFlushCache(c *gin.Context) {
-	log.Printf("[handler.HandleFlushCache] Request received client=%s headers=%v", c.ClientIP(), c.Request.Header)
-	// Check token
-	if config.Global.Common.APIAccessToken != "" {
-		token := c.Query("token")
-		if token != config.Global.Common.APIAccessToken {
-			c.String(http.StatusForbidden, "Forbidden\n")
-			return
-		}
+	log.Printf("[handler.HandleFlushCache] Request received client=%s %s", c.ClientIP(), utils.HeaderSummary(c.Request.Header))
+	// Token gate: fails closed when no token is configured.
+	if !requireAPIToken(c) {
+		return
 	}
 
 	if err := cache.GlobalManager.Flush(); err != nil {
@@ -1166,97 +1186,6 @@ func (h *SubHandler) HandleFlushCache(c *gin.Context) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
-}
-
-// resolvePathUnderRoot validates that target is a relative path without ".."
-// components and resolves it under root. It returns an error if target is
-// absolute, contains traversal, or resolves outside root.
-func resolvePathUnderRoot(target string, root string) (string, error) {
-	if target == "" {
-		return "", fmt.Errorf("empty path")
-	}
-	if filepath.IsAbs(target) {
-		return "", fmt.Errorf("absolute paths are not allowed")
-	}
-	for _, part := range strings.Split(filepath.ToSlash(target), "/") {
-		if part == ".." {
-			return "", fmt.Errorf("path traversal is not allowed")
-		}
-	}
-
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve root: %w", err)
-	}
-	resolvedAbs, err := filepath.Abs(filepath.Join(rootAbs, target))
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve path: %w", err)
-	}
-
-	rel, err := filepath.Rel(rootAbs, resolvedAbs)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path escapes root directory")
-	}
-
-	return resolvedAbs, nil
-}
-
-// resolveRulesetLocalPath validates a local ruleset target and returns a safe
-// path inside the configured base directory. It rejects absolute paths and
-// directory-traversal attempts, and only resolves files that actually exist.
-func resolveRulesetLocalPath(target string) (string, error) {
-	if target == "" {
-		return "", fmt.Errorf("empty local path")
-	}
-	if filepath.IsAbs(target) {
-		return "", fmt.Errorf("absolute paths are not allowed")
-	}
-
-	// Reject any ".." path component to prevent directory traversal.
-	for _, part := range strings.Split(filepath.ToSlash(target), "/") {
-		if part == ".." {
-			return "", fmt.Errorf("path traversal is not allowed")
-		}
-	}
-
-	base := config.GetBasePath()
-	candidates := []string{
-		filepath.Join(base, target),
-		filepath.Join(base, "rules", target),
-	}
-
-	baseAbs, err := filepath.Abs(base)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve base path: %w", err)
-	}
-
-	for _, p := range candidates {
-		fi, err := os.Stat(p)
-		if err != nil || fi.IsDir() {
-			continue
-		}
-
-		// Defence in depth: the resolved real path must still be under base.
-		absP, err := filepath.Abs(p)
-		if err != nil {
-			continue
-		}
-		realP, err := filepath.EvalSymlinks(absP)
-		if err != nil {
-			continue
-		}
-		rel, err := filepath.Rel(baseAbs, realP)
-		if err != nil {
-			continue
-		}
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			continue
-		}
-
-		return p, nil
-	}
-
-	return "", fmt.Errorf("ruleset not found")
 }
 
 // resolveProfilePath validates a profile name and returns the path to the
@@ -1274,7 +1203,7 @@ func resolveProfilePath(name string, candidateRoots []string) (string, error) {
 	if strings.ContainsRune(name, '/') || strings.ContainsRune(name, '\\') {
 		for _, root := range candidateRoots {
 			for _, tryName := range []string{name, name + ".ini"} {
-				resolved, err := resolvePathUnderRoot(tryName, root)
+				resolved, err := utils.ResolveUnderRoot(tryName, root)
 				if err != nil {
 					continue
 				}
@@ -1290,7 +1219,7 @@ func resolveProfilePath(name string, candidateRoots []string) (string, error) {
 	name = strings.TrimSuffix(name, ".ini")
 	for _, root := range candidateRoots {
 		profilesDir := filepath.Join(root, "profiles")
-		resolved, err := resolvePathUnderRoot(name+".ini", profilesDir)
+		resolved, err := utils.ResolveUnderRoot(name+".ini", profilesDir)
 		if err != nil {
 			continue
 		}
@@ -1303,7 +1232,33 @@ func resolveProfilePath(name string, candidateRoots []string) (string, error) {
 
 // applyFilters applies include/exclude filters to proxies
 
-func parseINICustomGroups(cfg *ini.File) []config.ProxyGroupConfig {
+// importINILines loads a !!import: target from a local (trusted) INI config:
+// the path is confined to the configured base directory via the shared
+// canonical resolver (no CWD fallback) and the file's lines are returned.
+// Remote-fetched configs are untrusted — with allowImport=false the import is
+// refused and nil is returned. logTag identifies the calling parser in logs.
+func importINILines(path string, allowImport bool, logTag string) []string {
+	if !allowImport {
+		log.Printf("[%s] refused local import from remote config: %s", logTag, path)
+		return nil
+	}
+
+	fullPath, err := utils.ResolveUnderRoot(path, config.GetBasePath())
+	if err != nil {
+		log.Printf("[%s] refused import path %s: %v", logTag, path, err)
+		return nil
+	}
+
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		log.Printf("[%s] failed to import %s: %v", logTag, fullPath, err)
+		return nil
+	}
+
+	return strings.Split(string(content), "\n")
+}
+
+func parseINICustomGroups(cfg *ini.File, allowImport bool) []config.ProxyGroupConfig {
 	var groups []config.ProxyGroupConfig
 
 	// Helper to parse a single line
@@ -1316,24 +1271,7 @@ func parseINICustomGroups(cfg *ini.File) []config.ProxyGroupConfig {
 
 		if strings.HasPrefix(value, "!!import:") {
 			path := strings.TrimPrefix(value, "!!import:")
-			fullPath := path
-			if !filepath.IsAbs(path) {
-				candidate := filepath.Join(config.Global.Common.BasePath, path)
-				if fileExists(candidate) {
-					fullPath = candidate
-				} else {
-					fullPath = path
-				}
-			}
-
-			content, err := os.ReadFile(fullPath)
-			if err != nil {
-				log.Printf("[parseINICustomGroups] failed to import %s: %v", fullPath, err)
-				return
-			}
-
-			lines := strings.Split(string(content), "\n")
-			for _, line := range lines {
+			for _, line := range importINILines(path, allowImport, "parseINICustomGroups") {
 				parseLine(line)
 			}
 			return
@@ -1399,7 +1337,7 @@ func parseINICustomGroups(cfg *ini.File) []config.ProxyGroupConfig {
 	return groups
 }
 
-func parseINIRulesets(cfg *ini.File) []config.RulesetConfig {
+func parseINIRulesets(cfg *ini.File, allowImport bool) []config.RulesetConfig {
 	var rulesets []config.RulesetConfig
 
 	var parseLine func(value string)
@@ -1411,26 +1349,7 @@ func parseINIRulesets(cfg *ini.File) []config.RulesetConfig {
 
 		if strings.HasPrefix(value, "!!import:") {
 			path := strings.TrimPrefix(value, "!!import:")
-			fullPath := path
-			if !filepath.IsAbs(path) {
-				// Try resolving relative to BasePath
-				candidate := filepath.Join(config.Global.Common.BasePath, path)
-				if fileExists(candidate) {
-					fullPath = candidate
-				} else {
-					// Fallback to relative to CWD
-					fullPath = path
-				}
-			}
-
-			content, err := os.ReadFile(fullPath)
-			if err != nil {
-				log.Printf("[parseINIRulesets] failed to import %s: %v", fullPath, err)
-				return
-			}
-
-			lines := strings.Split(string(content), "\n")
-			for _, line := range lines {
+			for _, line := range importINILines(path, allowImport, "parseINIRulesets") {
 				parseLine(line)
 			}
 			return

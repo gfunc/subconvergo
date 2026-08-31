@@ -1,6 +1,6 @@
 common:
   api_mode: false
-  api_access_token: password
+  api_access_token: "" # protected endpoints stay disabled until a token is set; public binds are refused without one
   default_url: []
   enable_insert: true
   insert_url: []

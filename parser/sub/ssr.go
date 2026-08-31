@@ -102,7 +102,7 @@ func parseSSRNode(cfg map[string]interface{}) proxyCore.ProxyInterface {
 			pluginOpts = utils.ParsePluginOpts(pluginOptsStr)
 		}
 
-		return &impl.ShadowsocksProxy{
+		p := &impl.ShadowsocksProxy{
 			BaseProxy: proxyCore.BaseProxy{
 				Type:   "ss",
 				Remark: remarks,
@@ -115,9 +115,13 @@ func parseSSRNode(cfg map[string]interface{}) proxyCore.ProxyInterface {
 			Plugin:        plugin,
 			PluginOpts:    pluginOpts,
 		}
+		// This constructor bypasses the ToMihomoProxy funnel; sanitize
+		// subscription-controlled fields here.
+		utils.SanitizeProxy(p)
+		return p
 	}
 
-	return &impl.ShadowsocksRProxy{
+	p := &impl.ShadowsocksRProxy{
 		BaseProxy: proxyCore.BaseProxy{
 			Type:   "ssr",
 			Remark: remarks,
@@ -132,4 +136,6 @@ func parseSSRNode(cfg map[string]interface{}) proxyCore.ProxyInterface {
 		Obfs:          obfs,
 		ObfsParam:     obfsParam,
 	}
+	utils.SanitizeProxy(p) // see above
+	return p
 }

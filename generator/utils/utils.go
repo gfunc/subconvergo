@@ -2,8 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,7 +10,9 @@ import (
 	"strings"
 
 	"github.com/gfunc/subconvergo/config"
+	"github.com/gfunc/subconvergo/fetcher"
 	"github.com/gfunc/subconvergo/proxy/core"
+	pathutil "github.com/gfunc/subconvergo/utils"
 )
 
 // GetFieldTag gets the tag value of a struct field
@@ -35,51 +35,30 @@ func GetFieldTag(tagType, tagName string, s interface{}, defaultTag string) stri
 func FetchRuleset(path string) (string, error) {
 	// Check if it's a URL
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		resp, err := http.Get(path)
-		if err != nil {
-			return "", err
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
+		body, err := fetcher.ForConfig(config.Global.Advanced.MaxAllowedDownloadSize, "").Get(path, nil)
 		if err != nil {
 			return "", err
 		}
 		return string(body), nil
 	}
 
-	// Check local file
-	// Try absolute path first
-	if _, err := os.Stat(path); err == nil {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return "", err
-		}
-		return string(content), nil
+	// Check local file. Local rulesets are confined to the configured base
+	// directory: absolute paths and ".." traversal are rejected, and the
+	// symlink-resolved target must stay under the resolved root. The remote
+	// branch above is unaffected by this confinement.
+	if filepath.IsAbs(path) {
+		return "", fmt.Errorf("absolute ruleset paths are not allowed: %s", path)
 	}
 
-	// Try relative to base path
-	basePath := config.Global.Common.BasePath
-	fullPath := filepath.Join(basePath, path)
-	if _, err := os.Stat(fullPath); err == nil {
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			return "", err
-		}
-		return string(content), nil
+	resolved, err := pathutil.ResolveRulesetPath(path)
+	if err != nil {
+		return "", err
 	}
-
-	// Try relative to base/rules
-	fullPath = filepath.Join(basePath, "rules", path)
-	if _, err := os.Stat(fullPath); err == nil {
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			return "", err
-		}
-		return string(content), nil
+	content, err := os.ReadFile(resolved)
+	if err != nil {
+		return "", err
 	}
-
-	return "", fmt.Errorf("ruleset not found: %s", path)
+	return string(content), nil
 }
 
 // FilterProxiesByRules filters proxies based on rule patterns

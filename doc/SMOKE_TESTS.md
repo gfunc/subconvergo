@@ -93,6 +93,25 @@ Tests flag precedence across URL params, Clash sources, VMess/Trojan sources, an
 
 Tests that config changes from one request don't leak to subsequent requests.
 
+### `test_security.py` — Security Regression
+
+Black-box HTTP cases pinning the landed security hardening (see `.scratch/security-hardening/issues/`):
+
+1.  **`security_getruleset_requires_token`**: `/getruleset` refuses requests without/with a wrong token (401/403) and works with the valid token.
+2.  **`security_getruleset_blocks_metadata_ip`**: with a valid token, a ruleset URL pointing at `169.254.169.254` (cloud metadata) is refused — the metadata body never leaks.
+3.  **`security_sub_rejects_file_url`**: with `api_mode=true`, `file://` subscription URLs are rejected and no local file content (e.g. the API token in `pref.yml`) leaks.
+4.  **`security_sub_blocks_loopback`**: a subscription URL pointing at loopback (self-fetch SSRF) is refused.
+5.  **`security_quanx_newline_injection`**: a subscription whose node remark contains CR/LF (`%0A[rewrite_local]%0A^https://evil`, served from `tests/mock-data/ss-newline-injection.txt`) produces no injected lines in Quantumult X output.
+6.  **`security_protected_endpoints_fail_closed`**: `/flushcache`, `/readconf`, `/render`, `/getprofile`, `/getruleset` all refuse tokenless requests; `/flushcache` with the valid token succeeds.
+
+### Auth token requirement
+
+Since the auth hardening, the suite's pref sets a real `api_access_token` (see `TOKEN` in `tests/infra.py`): an empty token fails closed on all protected endpoints, and the legacy default `password` makes the public `0.0.0.0` bind refuse to start.
+
+### Test network addressing (TEST-NET-3)
+
+The hardened outbound fetcher refuses loopback/private/link-local destinations, which would block fetches to `mock-subscription` on a default RFC1918 docker subnet. The compose network is therefore numbered from TEST-NET-3 (`203.0.113.0/24`, RFC 5737 — unrouted documentation space), keeping legitimate subscription-fetch coverage end-to-end without weakening the default blocking; loopback/metadata refusal is pinned by `test_security.py`.
+
 ## Parity Verification
 
 A unique feature of this test suite is the direct comparison with the C++ `subconverter`.

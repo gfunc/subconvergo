@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
@@ -28,7 +30,7 @@ func main() {
 
 	// Set up logging
 	if *logFile != "" {
-		f, err := os.OpenFile(*logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		f, err := openLogFile(*logFile)
 		if err != nil {
 			log.Fatalf("Failed to open log file: %v", err)
 		}
@@ -58,6 +60,12 @@ func main() {
 		log.Printf("Configuration loaded from: %s", configFile)
 	}
 
+	// Refuse an insecure public bind (tokenless or legacy-default token on a
+	// non-loopback listen address).
+	if err := config.Global.ValidateStartupSecurity(); err != nil {
+		log.Fatalf("Insecure configuration: %v", err)
+	}
+
 	// Initialize cache
 	cache.Init(config.GetBasePath())
 
@@ -71,11 +79,24 @@ func main() {
 	startServer()
 }
 
+// openLogFile opens the -l log file owner-only (0600): log lines carry
+// request metadata (client IPs, redacted URLs, sizes) that must not be
+// world-readable.
+func openLogFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+}
+
 func startServer() {
 	// Set gin mode
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.Default()
+
+	// Enforce the advanced concurrency/pending limits on every route.
+	router.Use(concurrencyLimitMiddleware(
+		config.Global.Advanced.MaxConcurrentThreads,
+		config.Global.Advanced.MaxPendingConnections,
+	))
 
 	// Create handler
 	h := handler.NewSubHandler()
@@ -122,7 +143,64 @@ func startServer() {
 	log.Printf("Startup completed. Serving HTTP @ http://%s", addr)
 	log.Printf("Loaded %d alias(es)", len(config.Global.Aliases))
 
-	if err := router.Run(addr); err != nil {
+	srv := buildHTTPServer(addr, router)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("Failed to start server: %v", err)
+	}
+}
+
+// buildHTTPServer builds the HTTP server with finite timeouts; bare
+// router.Run leaves all of these unlimited (slowloris / stuck-connection DoS).
+func buildHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:    addr,
+		Handler: handler,
+		// WriteTimeout must exceed the fetcher's overall timeout (30s) so
+		// responses that wait on upstream fetches are not cut mid-flight.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+}
+
+// concurrencyLimitMiddleware enforces the advanced limits:
+// max_concurrent_threads bounds in-flight requests and
+// max_pending_connections bounds requests queued waiting for a slot; anything
+// beyond that gets 503 instead of queueing unboundedly. A non-positive
+// maxInFlight disables the limit entirely.
+func concurrencyLimitMiddleware(maxInFlight, maxPending int) gin.HandlerFunc {
+	if maxInFlight <= 0 {
+		return func(c *gin.Context) { c.Next() }
+	}
+	if maxPending < 0 {
+		maxPending = 0
+	}
+	slots := make(chan struct{}, maxInFlight)
+	queue := make(chan struct{}, maxPending)
+	return func(c *gin.Context) {
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+			c.Next()
+			return
+		default:
+		}
+
+		select {
+		case queue <- struct{}{}:
+			defer func() { <-queue }()
+		default:
+			c.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
+
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+			c.Next()
+		case <-c.Request.Context().Done():
+			c.AbortWithStatus(http.StatusServiceUnavailable)
+		}
 	}
 }

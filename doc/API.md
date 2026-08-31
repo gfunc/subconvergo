@@ -59,7 +59,7 @@ Reload configuration.
 **Parameters:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `token` | string | API Access Token (if configured) |
+| `token` | string | API Access Token. Required: the endpoint fails closed — when `api_access_token` is not configured, every request is refused (403) |
 
 ### `/getprofile`
 Load preset configuration from `base/profiles/<name>.ini`.
@@ -70,7 +70,7 @@ Load preset configuration from `base/profiles/<name>.ini`.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `name` | string | Profile name (without .ini extension). Use `a|b` to merge multiple profiles |
-| `token` | string | API Access Token (if configured) |
+| `token` | string | API Access Token, or the profile's own `profile_token` for single-profile requests. When neither is configured the endpoint fails closed |
 
 Other `/sub` parameters may be passed as query parameters and override the profile's settings. Exception: `url` is merged with the profile's URLs (appended, pipe-separated) rather than replacing them.
 
@@ -84,6 +84,7 @@ Fetch and format ruleset.
 |-----------|------|-------------|
 | `url` | string | Base64 encoded ruleset URL |
 | `type` | string | Ruleset type (`clash` or `surge`) |
+| `token` | string | API Access Token. Required: the endpoint fails closed — when `api_access_token` is not configured, every request is refused (403) |
 
 ### `/render`
 Render Go template with current config.
@@ -94,7 +95,7 @@ Render Go template with current config.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `path` | string | Path to template file (relative to base_path) |
-| `token` | string | API Access Token (if configured) |
+| `token` | string | API Access Token. Required: the endpoint fails closed — when `api_access_token` is not configured, every request is refused (403) |
 
 ---
 

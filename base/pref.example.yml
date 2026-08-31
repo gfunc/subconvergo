@@ -1,6 +1,10 @@
 common:
   api_mode: false
-  api_access_token: password
+  # Access token required for the protected endpoints (/readconf, /getruleset,
+  # /render, /getprofile, /flushcache). Leave empty to keep those endpoints
+  # DISABLED — they fail closed and refuse every request. Note: with an empty
+  # token, binding to a non-loopback listen address is refused at startup.
+  api_access_token: ""
   default_url: []
   enable_insert: true
   insert_url: []
@@ -145,10 +149,13 @@ server:
 advanced:
   log_level: info
   print_debug_info: false
+  # Max requests queued waiting for a processing slot; excess gets HTTP 503
   max_pending_connections: 10240
-  max_concurrent_threads: 2
+  # Max requests processed concurrently (in-flight limit); 0 = no limit
+  max_concurrent_threads: 64
   max_allowed_rulesets: 0
   max_allowed_rules: 0
+  # Max bytes per remote download (subscription/config/ruleset); 0 = built-in default of 32MiB
   max_allowed_download_size: 0
   enable_cache: false
   cache_subscription: 60

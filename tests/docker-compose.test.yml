@@ -60,4 +60,17 @@ services:
 networks:
   subconvergo-network:
     driver: bridge
+    # SECURITY-HARDENING NOTE: subconvergo's outbound fetcher refuses
+    # loopback/private/link-local destinations (SSRF protection), so
+    # mock-subscription on a default RFC1918 docker subnet is unreachable
+    # ("blocked address 172.x"). The Go fetcher has no config-level allowlist
+    # knob. To keep legitimate subscription-fetch coverage end-to-end, this
+    # TEST network is numbered from TEST-NET-3 (203.0.113.0/24, RFC 5737
+    # documentation range: unrouted, and not classified as internal by the
+    # fetcher). This does NOT weaken the default blocking — loopback,
+    # link-local/metadata, and RFC1918 refusal is pinned by
+    # tests/test_security.py against the running container.
+    ipam:
+      config:
+        - subnet: 203.0.113.0/24
 

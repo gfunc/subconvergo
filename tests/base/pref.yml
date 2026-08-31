@@ -1,6 +1,6 @@
 common:
   api_mode: true
-  api_access_token: password
+  api_access_token: smoke-test-token-2026
   default_url:
   - http://mock-subscription/ss-subscription.txt
   base_path: base

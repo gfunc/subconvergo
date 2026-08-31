@@ -70,7 +70,7 @@ Auto-copies from `pref.example.*` on first run.
 # Common Settings
 common:
   api_mode: true                          # Enable API mode
-  api_access_token: "password"            # API token for protected endpoints
+  api_access_token: ""                      # Token for protected endpoints; empty = those endpoints disabled (fail closed)
   default_url: []                         # Default subscription URLs
   base_path: "base"                       # Base directory for templates/rules
   
@@ -102,11 +102,11 @@ common:
 advanced:
   log_level: "info"                       # Log level (debug, info, warn, error)
   print_debug_info: false                 # Print debug info to stdout
-  max_pending_connections: 10240          # Max pending connections
-  max_concurrent_threads: 2               # Max concurrent threads
-  max_allowed_rulesets: 64                # Max allowed rulesets
-  max_allowed_rules: 0                    # Max allowed rules (0 = unlimited)
-  max_allowed_download_size: 0            # Max allowed download size (0 = unlimited)
+  max_pending_connections: 10240          # Max requests queued for a slot (excess gets HTTP 503)
+  max_concurrent_threads: 64              # Max in-flight requests (0 = no limit)
+  max_allowed_rulesets: 64                # Max rulesets per request, excess dropped (0 = unlimited)
+  max_allowed_rules: 0                    # Max inline rules per request, excess dropped (0 = unlimited)
+  max_allowed_download_size: 0            # Max bytes per remote download (0 = built-in default 32MiB)
   
   # Caching
   enable_cache: false                     # Enable file-based caching
@@ -408,7 +408,9 @@ GEOIP,CN
 
 ### Fetching Rulesets
 
-Endpoint: `GET /getruleset?url=<base64_url>&type=<clash|surge>`
+Endpoint: `GET /getruleset?url=<base64_url>&type=<clash|surge>&token=<token>`
+
+Requires the API access token; like the other protected endpoints it fails closed when no token is configured.
 
 **Example:**
 ```bash
@@ -416,7 +418,7 @@ Endpoint: `GET /getruleset?url=<base64_url>&type=<clash|surge>`
 URL_BASE64=$(echo -n "https://example.com/rules.list" | base64)
 
 # Fetch ruleset
-curl "http://localhost:25500/getruleset?url=$URL_BASE64&type=clash"
+curl "http://localhost:25500/getruleset?url=$URL_BASE64&type=clash&token=<your-token>"
 ```
 
 ---
@@ -456,7 +458,7 @@ template:
 
 **Render endpoint:**
 ```bash
-curl "http://localhost:25500/render?path=/base/base/my_template.tpl&token=password"
+curl "http://localhost:25500/render?path=/base/base/my_template.tpl&token=<your-token>"
 ```
 
 ### Available Template Variables
@@ -563,14 +565,14 @@ exclude=expired
 
 **Usage:**
 ```bash
-curl "http://localhost:25500/getprofile?name=my_profile&token=password"
+curl "http://localhost:25500/getprofile?name=my_profile&token=<your-token>"
 ```
 
 Query parameters override profile settings, except `url`: subscription URLs passed via `&url=` are **merged** with (appended to) the profile's URLs instead of replacing them. Multiple profiles can be combined with `name=a|b`, which merges their `url`, `rename`, `include`, and `exclude` values.
 
 ### API Security
 
-Protect endpoints with token:
+Protected endpoints require a token:
 
 ```yaml
 common:
@@ -580,7 +582,11 @@ common:
 **Protected endpoints:**
 - `/readconf?token=<token>` - Reload config
 - `/render?path=...&token=<token>` - Render template
-- `/getprofile?name=...&token=<token>` - Load profile
+- `/getprofile?name=...&token=<token>` - Load profile (a single profile's own `profile_token` is also accepted)
+- `/getruleset?url=...&type=...&token=<token>` - Fetch ruleset
+- `/flushcache?token=<token>` - Flush cache
+
+Token behavior is fail closed: when `api_access_token` is empty, every protected endpoint refuses all requests (403). Token comparison is constant-time. Additionally, startup is refused when `server.listen` is a non-loopback address and the token is empty or still the legacy shipped default (`password`) — bind to `127.0.0.1` or set a strong token (env override: `API_TOKEN`).
 
 ---
 
@@ -670,7 +676,7 @@ curl "http://localhost:25500/sub?target=clash&url=https://example.com/sub&includ
 3. **Validate config:**
    ```bash
    # Reload and check logs
-   curl "http://localhost:25500/readconf?token=password"
+   curl "http://localhost:25500/readconf?token=<your-token>"
    ```
 
 ---

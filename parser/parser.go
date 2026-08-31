@@ -20,20 +20,20 @@ package parser
 
 import (
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/gfunc/subconvergo/cache"
 	"github.com/gfunc/subconvergo/config"
+	"github.com/gfunc/subconvergo/fetcher"
 	"github.com/gfunc/subconvergo/parser/core"
 	"github.com/gfunc/subconvergo/parser/proxy"
 	"github.com/gfunc/subconvergo/parser/sub"
+	parserutils "github.com/gfunc/subconvergo/parser/utils"
 	proxyCore "github.com/gfunc/subconvergo/proxy/core"
+	"github.com/gfunc/subconvergo/utils"
 )
 
 type SubParser struct {
@@ -79,6 +79,14 @@ func (sp *SubParser) Parse() (*core.SubContent, error) {
 		if _, err := os.Stat(sp.URL); err == nil {
 			isFile = true
 		}
+	}
+
+	// In API mode (public deployment) request-controlled URLs must never
+	// resolve to local files: reject file:// URLs and bare local paths
+	// before any read happens. Non-API mode keeps local files as an
+	// explicit opt-in for trusted deployments.
+	if isFile && config.Global.Common.APIMode {
+		return nil, fmt.Errorf("local file subscriptions are not allowed in api_mode")
 	}
 
 	if strings.HasPrefix(sp.URL, "https://t.me/") || strings.HasPrefix(sp.URL, "tg://") {
@@ -148,7 +156,7 @@ func (sp *SubParser) Parse() (*core.SubContent, error) {
 		}
 		sc.Proxies = append(sc.Proxies, parserProxy)
 	}
-	log.Printf("[parser.SubParser.Parse] index=%d url=%s proxies=%d", sp.Index, sp.URL, len(sc.Proxies))
+	log.Printf("[parser.SubParser.Parse] index=%d url=%s proxies=%d", sp.Index, utils.RedactURL(sp.URL), len(sc.Proxies))
 	return sc, nil
 }
 
@@ -158,7 +166,7 @@ func (sp *SubParser) parseURL() {
 	if err != nil {
 		return
 	}
-	sp.Tag = u.Fragment
+	sp.Tag = parserutils.SanitizeScalarField(u.Fragment)
 
 	// remove tag from sp.URL
 	if idx := strings.Index(sp.URL, "#"); idx != -1 {
@@ -179,7 +187,7 @@ func (sp *SubParser) ParseSubscription() (*core.SubContent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subscription: %w", err)
 	}
-	log.Printf("[parser.ParseSubscription] index=%d url=%s parsed=%d proxies", sp.Index, sp.URL, len(custom.Proxies))
+	log.Printf("[parser.ParseSubscription] index=%d url=%s parsed=%d proxies", sp.Index, utils.RedactURL(sp.URL), len(custom.Proxies))
 	return custom, nil
 }
 
@@ -208,22 +216,8 @@ func (sp *SubParser) fetchSubscription() (string, error) {
 	if config.Global.Advanced.EnableCache {
 		cacheKey = cache.GlobalManager.GetKey(sp.URL)
 		if data, ok := cache.GlobalManager.Get(cacheKey, config.Global.Advanced.CacheSubscription); ok {
-			log.Printf("[parser.fetchSubscription] index=%d url=%s served from cache", sp.Index, sp.URL)
+			log.Printf("[parser.fetchSubscription] index=%d url=%s served from cache", sp.Index, utils.RedactURL(sp.URL))
 			return string(data), nil
-		}
-	}
-
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	// Configure proxy if specified
-	if sp.Proxy != "" && sp.Proxy != "NONE" {
-		proxyURL, err := url.Parse(sp.Proxy)
-		if err == nil {
-			client.Transport = &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
-			}
 		}
 	}
 
@@ -232,48 +226,23 @@ func (sp *SubParser) fetchSubscription() (string, error) {
 		targetURL = "http://" + strings.TrimPrefix(targetURL, "Netch://")
 	}
 
-	req, err := http.NewRequest("GET", targetURL, nil)
-	if err != nil {
-		log.Printf("[parser.fetchSubscription] index=%d url=%s create request error=%v", sp.Index, sp.URL, err)
-		return "", err
-	}
-
 	ua := sp.UserAgent
 	if ua == "" {
 		ua = "subconverter/0.7.2 subconvergo/0.1.0"
 	}
-	req.Header.Set("User-Agent", ua)
 
-	resp, err := client.Do(req)
+	body, err := fetcher.ForConfig(config.Global.Advanced.MaxAllowedDownloadSize, sp.Proxy).Get(targetURL, map[string]string{
+		"User-Agent": ua,
+	})
 	if err != nil {
-		log.Printf("[parser.fetchSubscription] index=%d url=%s error=%v", sp.Index, sp.URL, err)
+		log.Printf("[parser.fetchSubscription] index=%d url=%s error=%v", sp.Index, utils.RedactURL(sp.URL), err)
 		// Try stale cache if enabled
 		if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
 			if data, ok := cache.GlobalManager.GetStale(cacheKey); ok {
-				log.Printf("[parser.fetchSubscription] index=%d url=%s served from stale cache", sp.Index, sp.URL)
+				log.Printf("[parser.fetchSubscription] index=%d url=%s served from stale cache", sp.Index, utils.RedactURL(sp.URL))
 				return string(data), nil
 			}
 		}
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		statusErr := fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-		log.Printf("[parser.fetchSubscription] index=%d url=%s status=%d statusText=%s", sp.Index, sp.URL, resp.StatusCode, resp.Status)
-		// Try stale cache if enabled
-		if config.Global.Advanced.EnableCache && config.Global.Advanced.ServeCacheOnFetchFail {
-			if data, ok := cache.GlobalManager.GetStale(cacheKey); ok {
-				log.Printf("[parser.fetchSubscription] index=%d url=%s served from stale cache", sp.Index, sp.URL)
-				return string(data), nil
-			}
-		}
-		return "", statusErr
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("[parser.fetchSubscription] index=%d url=%s read error=%v", sp.Index, sp.URL, err)
 		return "", err
 	}
 
@@ -284,7 +253,7 @@ func (sp *SubParser) fetchSubscription() (string, error) {
 		}
 	}
 
-	log.Printf("[parser.fetchSubscription] index=%d url=%s size=%d", sp.Index, sp.URL, len(body))
+	log.Printf("[parser.fetchSubscription] index=%d url=%s size=%d", sp.Index, utils.RedactURL(sp.URL), len(body))
 	return string(body), nil
 }
 
@@ -314,6 +283,7 @@ func ParseProxy(line string) (proxyCore.ParsableProxy, error) {
 		return nil, fmt.Errorf("invalid proxy link format")
 	}
 	protocol := line[:idx]
-	log.Printf("[parser.ParseProxy] unsupported native proxy protocol=%s line=%s", protocol, line)
+	// The line embeds proxy credentials; log only scheme + correlation hash.
+	log.Printf("[parser.ParseProxy] unsupported native proxy protocol=%s line=%s", protocol, utils.RedactURL(line))
 	return sub.ParseMihomoProxy(protocol, line[idx:])
 }

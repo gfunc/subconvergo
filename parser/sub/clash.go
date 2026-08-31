@@ -121,6 +121,10 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 	}
 	custom.Groups = make([]config.ProxyGroupConfig, 0)
 	for _, groupMap := range clashConfig.ProxyGroup {
+		if len(custom.Groups) >= utils.MaxSourceProxyGroups {
+			log.Printf("[ParseMihomoConfig] source contributes more than %d proxy-groups, dropping the rest", utils.MaxSourceProxyGroups)
+			break
+		}
 		groupBytes, err := json.Marshal(groupMap)
 		if err != nil {
 			log.Printf("failed to marshal proxy group: %v", err)
@@ -131,12 +135,43 @@ func ParseMihomoConfig(content string) (*core.SubContent, error) {
 			log.Printf("failed to unmarshal proxy group: %v", err)
 			continue
 		}
+
+		// Sanitize source-controlled group scalars.
+		proxyGroup.Name = utils.SanitizeScalarField(proxyGroup.Name)
+		proxyGroup.URL = utils.SanitizeScalarField(proxyGroup.URL)
+
 		if len(proxyGroup.Proxies) > 0 {
 			proxyGroup.Rule = make([]string, len(proxyGroup.Proxies))
 			for i, p := range proxyGroup.Proxies {
-				proxyGroup.Rule[i] = fmt.Sprintf("[]%s", p)
+				proxyGroup.Rule[i] = fmt.Sprintf("[]%s", utils.SanitizeScalarField(p))
+			}
+		} else if len(proxyGroup.Rule) > 0 {
+			// A source clash group legitimately has no "rule" key (that is
+			// subconvergo pref syntax): keep only safe forms.
+			validated := make([]string, 0, len(proxyGroup.Rule))
+			for _, rule := range proxyGroup.Rule {
+				rule = utils.SanitizeScalarField(rule)
+				if strings.HasPrefix(rule, "[]") || utils.IsSafeGroupFilter(rule) {
+					validated = append(validated, rule)
+				} else {
+					log.Printf("[ParseMihomoConfig] dropping unsafe rule %q from source group %q", rule, proxyGroup.Name)
+				}
+			}
+			proxyGroup.Rule = validated
+		}
+
+		// Validate the source-provided filter before honoring it.
+		// A safe filter is kept as a group rule (membership is expanded
+		// server-side under RE2; the regex text never reaches the client);
+		// anything else is stripped and the group preserved in a safe form.
+		if filter, ok := groupMap["filter"].(string); ok && filter != "" {
+			if utils.IsSafeGroupFilter(filter) {
+				proxyGroup.Rule = append(proxyGroup.Rule, filter)
+			} else {
+				log.Printf("[ParseMihomoConfig] dropping unsafe filter %q from source group %q", filter, proxyGroup.Name)
 			}
 		}
+
 		custom.Groups = append(custom.Groups, proxyGroup)
 	}
 
@@ -180,7 +215,7 @@ func parseMihomoProxy(options map[string]any) (*impl.MihomoProxy, error) {
 		remark = utils.GetStringField(options, "name")
 	}
 
-	return &impl.MihomoProxy{
+	mp := &impl.MihomoProxy{
 		ProxyInterface: &proxyCore.BaseProxy{
 			Type:   utils.GetStringField(options, "type"),
 			Remark: remark,
@@ -189,5 +224,12 @@ func parseMihomoProxy(options map[string]any) (*impl.MihomoProxy, error) {
 		},
 		Clash:   mihomoProxy,
 		Options: options,
-	}, nil
+	}
+	// Sanitize the wrapped BaseProxy fields and the preserved raw options
+	// map. This construction bypasses the ToMihomoProxy funnel, and the
+	// exported ParseMihomoProxy callers (single-line subscription fallback,
+	// parser.ParseProxy fallback) consume the result without any downstream
+	// sanitization — this call is load-bearing.
+	utils.SanitizeProxy(mp)
+	return mp, nil
 }

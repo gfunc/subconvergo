@@ -2,6 +2,7 @@ package impl
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gfunc/subconvergo/config"
@@ -182,11 +183,18 @@ func TestClashGenerator_Generate_WithGroupsAndRules(t *testing.T) {
 }
 
 func TestClashGenerator_Generate_WithRulesets(t *testing.T) {
-	// Create temporary ruleset file
+	// Create temporary ruleset file under the configured base path (local
+	// rulesets are confined to base_path/rules).
+	base := t.TempDir()
+	rulesDir := filepath.Join(base, "rules")
+	assert.NoError(t, os.MkdirAll(rulesDir, 0o755))
 	rulesContent := "DOMAIN-SUFFIX,example.com\nIP-CIDR,1.2.3.4/32,no-resolve"
-	err := os.WriteFile("test_rules.list", []byte(rulesContent), 0644)
+	err := os.WriteFile(filepath.Join(rulesDir, "test_rules.list"), []byte(rulesContent), 0644)
 	assert.NoError(t, err)
-	defer os.Remove("test_rules.list")
+
+	savedBase := config.Global.Common.BasePath
+	config.Global.Common.BasePath = base
+	defer func() { config.Global.Common.BasePath = savedBase }()
 
 	gen := &ClashGenerator{}
 	proxies := getTestProxies()

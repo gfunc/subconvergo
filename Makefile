@@ -1,6 +1,6 @@
 # Makefile for subconvergo
 
-.PHONY: help build test test-unit test-integration test-all test-docker clean coverage lint run dev install deps docker-build docker-push docker-run version
+.PHONY: help build test test-unit test-integration test-all test-docker clean coverage lint run dev install deps docker-build docker-push docker-run version vulncheck
 
 # Variables
 BINARY_NAME=subconvergo
@@ -118,9 +118,10 @@ docker-build: ## Build Docker image
 
 docker-run: docker-build ## Run Docker container
 	@echo "Running Docker container..."
+	@test -f pref.toml || (echo "pref.toml not found in $(PWD); create one (see base/pref.example.toml) with a real api_access_token"; exit 1)
 	$(DOCKER) run --rm -p 25500:25500 \
-		-v $(PWD)/base:/app/base \
-		-v $(PWD)/pref.toml:/app/pref.toml:ro \
+		-v $(PWD)/base:/base \
+		-v $(PWD)/pref.toml:/base/pref.toml:ro \
 		$(BINARY_NAME):latest
 
 docker-push: docker-build ## Push Docker image to Docker Hub
@@ -145,6 +146,10 @@ security-scan: ## Run security scan
 vulnerability-check: ## Check for vulnerabilities
 	@echo "Checking for vulnerabilities..."
 	$(GO) list -json -m all | nancy sleuth
+
+vulncheck: ## Run govulncheck; fails (exit 3) on reachable vulnerabilities
+	@echo "Running govulncheck..."
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 # Clean
 clean: ## Clean build artifacts

@@ -3,12 +3,14 @@ package config
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/BurntSushi/toml"
+	"github.com/gfunc/subconvergo/fetcher"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
 )
@@ -276,8 +278,13 @@ func (s *Settings) init() {
 
 	s.Advanced.LogLevel = "info"
 	s.Advanced.MaxPendingConnections = 10240
-	s.Advanced.MaxConcurrentThreads = 2
+	// 0/unset disables the in-flight request cap entirely; a small positive
+	// default would silently throttle the whole service.
+	s.Advanced.MaxConcurrentThreads = 0
 	s.Advanced.MaxAllowedRulesets = 64
+	// Finite default for the outbound download cap; the fetcher also maps
+	// non-positive values from config files to this default.
+	s.Advanced.MaxAllowedDownloadSize = int(fetcher.DefaultMaxBodyBytes)
 	s.Advanced.CacheSubscription = 60
 	s.Advanced.CacheConfig = 300
 	s.Advanced.CacheRuleset = 21600
@@ -386,6 +393,49 @@ func (s *Settings) ApplyEnvOverrides() {
 // ReloadConfig reloads the configuration from the last loaded file
 func ReloadConfig() (string, error) {
 	return LoadConfig(currentConfigPath)
+}
+
+// ValidateStartupSecurity enforces the bind/token hardening rule.
+//
+// The token gate on the protected endpoints fails closed, so an empty
+// api_access_token does not expose them — but a tokenless instance on a
+// public bind is still an open proxy-fetching/conversion service, and the
+// historical shipped default token ("password") is public knowledge. Both
+// are therefore treated as insecure:
+//
+//   - non-loopback listen + empty-or-legacy-default token → error (startup
+//     refused; main log.Fatal's it);
+//   - loopback listen + empty token → allowed, with a loud warning that the
+//     protected endpoints stay disabled until a token is set.
+func (s *Settings) ValidateStartupSecurity() error {
+	if !isInsecureToken(s.Common.APIAccessToken) {
+		return nil
+	}
+	if isLoopbackListen(s.Server.Listen) {
+		log.Printf("SECURITY WARNING: common.api_access_token is empty; protected endpoints " +
+			"(/readconf, /getruleset, /render, /getprofile, /flushcache) are DISABLED until a token is set")
+		return nil
+	}
+	return fmt.Errorf("refusing to start: server.listen=%q is not a loopback address and "+
+		"common.api_access_token is empty or the legacy default; set a strong token (or API_TOKEN) "+
+		"or bind to 127.0.0.1", s.Server.Listen)
+}
+
+// isInsecureToken reports whether the configured token is empty or the
+// legacy shipped default ("password", long bundled with the example configs).
+func isInsecureToken(token string) bool {
+	return token == "" || token == "password"
+}
+
+// isLoopbackListen reports whether the listen address is loopback-only.
+// An empty or wildcard address (":" / "0.0.0.0" / "::") binds every
+// interface and is NOT loopback.
+func isLoopbackListen(listen string) bool {
+	if strings.EqualFold(listen, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(listen)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (setting *Settings) loadYAMLConfig(path string) error {

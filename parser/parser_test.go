@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gfunc/subconvergo/fetcher"
 	"github.com/gfunc/subconvergo/parser/sub"
 	P "github.com/gfunc/subconvergo/proxy/impl"
 	"github.com/stretchr/testify/assert"
@@ -480,6 +481,11 @@ func TestSubParser_Parse_TagAndTelegram(t *testing.T) {
 }
 
 func TestSubParser_UserAgent(t *testing.T) {
+	// The safe fetcher refuses loopback by default; allow it for this
+	// httptest-based test (simulated public destination).
+	fetcher.SetGlobal(fetcher.New(fetcher.DefaultLimits(), fetcher.WithAllowedHosts("127.0.0.1", "::1")))
+	t.Cleanup(func() { fetcher.SetGlobal(nil) })
+
 	expectedUA := "MyCustomUserAgent/1.0"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ua := r.Header.Get("User-Agent")

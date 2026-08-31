@@ -26,7 +26,7 @@ def setup_ruleset_compare(pref):
 def fetch_ruleset_subconvergo() -> Tuple[str, int]:
     url_plain = f"{infra.MOCK_BASE}/test_rules.list"
     encoded = base64.urlsafe_b64encode(url_plain.encode()).decode()
-    r = requests.get(f"{infra.BASE_URL}/getruleset", params={"url": encoded, "type": "clash"}, timeout=30)
+    r = requests.get(f"{infra.BASE_URL}/getruleset", params={"url": encoded, "type": "clash", "token": infra.TOKEN}, timeout=30)
     return r.text, r.status_code
 
 def fetch_ruleset_subconverter() -> Tuple[str, int]:
