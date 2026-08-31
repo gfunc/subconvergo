@@ -638,6 +638,48 @@ func TestResolveProfilePath_RelativePathUnderBasePath(t *testing.T) {
 	}
 }
 
+func TestHandleSub_SubURLKeepsPercentEncoding(t *testing.T) {
+	cache.Init(t.TempDir())
+	gin.SetMode(gin.TestMode)
+	h := NewSubHandler()
+
+	// Regression: the subscription URL must be fetched with its percent-encoded
+	// query bytes intact (e.g. name=%E4%BD%8E...). An extra URL-decode after
+	// gin's query parsing turns them into raw UTF-8, which strict frontends
+	// (Cloudflare) reject with 400.
+	var gotRawQuery string
+	sub := base64.StdEncoding.EncodeToString([]byte("ss://YWVzLTEyOC1nY206dGVzdA@c.example.com:8388#ENCODED-NODE"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRawQuery = r.URL.RawQuery
+		if strings.Contains(r.URL.EscapedPath()+r.URL.RawQuery, "低调机场") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_, _ = io.WriteString(w, sub)
+	}))
+	defer srv.Close()
+
+	config.Global.Common.APIMode = true
+	config.Global.Common.ClashRuleBase = ""
+
+	inner := srv.URL + "/subscribe?token=abc&name=%E4%BD%8E%E8%B0%83%E6%9C%BA%E5%9C%BA"
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet,
+		"/sub?target=clash&url="+url.QueryEscape(inner), nil)
+	h.HandleSub(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "ENCODED-NODE") {
+		t.Errorf("expected node from subscription, got:\n%s", w.Body.String())
+	}
+	if gotRawQuery != "token=abc&name=%E4%BD%8E%E8%B0%83%E6%9C%BA%E5%9C%BA" {
+		t.Errorf("upstream saw mangled query: %q", gotRawQuery)
+	}
+}
+
 func TestHandleGetProfile_QueryURLMergedWithProfileURL(t *testing.T) {
 	cache.Init(t.TempDir())
 	gin.SetMode(gin.TestMode)

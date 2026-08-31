@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -115,12 +114,10 @@ func (h *SubHandler) processSubRequest(c *gin.Context, params *RequestParams) {
 		return
 	}
 
-	// URL decode
-	urlParam, err := url.QueryUnescape(urlParam)
-	if err != nil {
-		c.String(http.StatusBadRequest, "Invalid URL encoding")
-		return
-	}
+	// Note: gin has already URL-decoded the query parameters once. Do NOT
+	// unescape urlParam again here — a second decode turns percent-encoded
+	// bytes inside the subscription URL (e.g. name=%E4%BD%8F...) into raw
+	// UTF-8 on the wire, which strict frontends like Cloudflare reject.
 
 	// Reload config on request if enabled
 	if config.Global.Common.ReloadConfOnRequest {

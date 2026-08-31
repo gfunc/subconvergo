@@ -138,7 +138,7 @@ FLAG_TEST_CASES = [
         name="flags_url_params_override",
         query=lambda: infra.api_get_subconvergo("/sub", params={
             "target": "clash",
-            "url": "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388%23Example",
+            "url": "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388#Example",
             "udp": "true",
             "tfo": "true",
             "scv": "true",
@@ -168,7 +168,7 @@ FLAG_TEST_CASES = [
         name="flags_trojan_source",
         query=lambda: infra.api_get_subconvergo("/sub", params={
             "target": "clash",
-            "url": "trojan://password@127.0.0.1:443?sni=example.com%23TrojanTest",
+            "url": "trojan://password@127.0.0.1:443?sni=example.com#TrojanTest",
         }),
         validate=validate_explicit_flags,
         pref_modifier=setup_explicit_flags
@@ -177,7 +177,7 @@ FLAG_TEST_CASES = [
         name="flags_surge_target",
         query=lambda: infra.api_get_subconvergo("/sub", params={
             "target": "surge",
-            "url": "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388%23Example",
+            "url": "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388#Example",
             "ver": "4",
         }),
         validate=validate_surge_format_flags,
@@ -187,7 +187,7 @@ FLAG_TEST_CASES = [
         name="flags_loon_target",
         query=lambda: infra.api_get_subconvergo("/sub", params={
             "target": "loon",
-            "url": "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388%23Example",
+            "url": "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388#Example",
         }),
         validate=validate_loon_format_flags,
         pref_modifier=setup_explicit_flags
@@ -196,7 +196,7 @@ FLAG_TEST_CASES = [
         name="flags_quanx_target",
         query=lambda: infra.api_get_subconvergo("/sub", params={
             "target": "quan",
-            "url": "trojan://password@127.0.0.1:443?sni=example.com%23TrojanTest",
+            "url": "trojan://password@127.0.0.1:443?sni=example.com#TrojanTest",
         }),
         validate=validate_quanx_format_flags,
         pref_modifier=setup_explicit_flags
@@ -206,9 +206,9 @@ FLAG_TEST_CASES = [
         query=lambda: infra.api_get_subconvergo("/sub", params={
             "target": "clash",
             "url": "|".join([
-                "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388%23SS-Test",
+                "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@127.0.0.1:8388#SS-Test",
                 "vmess://eyJ2IjogIjIiLCAicHMiOiAiVk1lc3NUZXN0IiwgImFkZCI6ICIxMjcuMC4wLjEiLCAicG9ydCI6ICI4MCIsICJpZCI6ICIxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODkwYWIiLCAiYWlkIjogIjAiLCAibmV0IjogIndzIiwgInR5cGUiOiAibm9uZSIsICJob3N0IjogIiIsICJwYXRoIjogIi8iLCAidGxzIjogIiJ9",
-                "trojan://password@127.0.0.1:443?sni=example.com%23Trojan-Test",
+                "trojan://password@127.0.0.1:443?sni=example.com#Trojan-Test",
             ]),
         }),
         validate=lambda resp: (
