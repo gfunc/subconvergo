@@ -121,7 +121,7 @@ func (p *VLESSParser) ParseSingle(line string) (core.ParsableProxy, error) {
 	}
 
 	uuid = matches[1]
-	server = matches[2]
+	server = utils.TrimIPv6Brackets(matches[2])
 	port = matches[3]
 
 	portNum, err := strconv.Atoi(port)

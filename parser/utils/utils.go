@@ -102,6 +102,15 @@ func UrlDecode(s string) string {
 	return decoded
 }
 
+// TrimIPv6Brackets strips RFC 3986 square brackets around an IPv6 literal,
+// e.g. "[2001:db8::1]" -> "2001:db8::1". Non-bracketed input is returned as-is.
+func TrimIPv6Brackets(s string) string {
+	if len(s) >= 2 && s[0] == '[' && s[len(s)-1] == ']' && strings.Count(s, ":") >= 2 && !strings.Contains(s[1:len(s)-1], "]") {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
 func UrlSafeBase64Decode(s string) string {
 	s = strings.ReplaceAll(s, "-", "+")
 	s = strings.ReplaceAll(s, "_", "/")

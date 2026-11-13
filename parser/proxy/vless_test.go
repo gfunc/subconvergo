@@ -77,6 +77,15 @@ func TestVLESSParser_Parse(t *testing.T) {
 			},
 		},
 		{
+			name:  "VLESS IPv6 bracketed host",
+			input: "vless://48a4352d-71f4-47ce-8122-e539fe7794fb@[2a09:7:1:60::f4d0:7b95]:38773?encryption=none&security=reality&flow=xtls-rprx-vision&type=tcp&sni=dash.cloudflare.com&pbk=testpbk&fp=chrome#iij-v6",
+			check: func(t *testing.T, p *impl.VLESSProxy) {
+				assert.Equal(t, "2a09:7:1:60::f4d0:7b95", p.Server)
+				assert.Equal(t, 38773, p.Port)
+				assert.Equal(t, "iij-v6", p.Remark)
+			},
+		},
+		{
 			name:  "VLESS No TLS",
 			input: "vless://uuid@example.com:80?security=none&type=tcp",
 			check: func(t *testing.T, p *impl.VLESSProxy) {
