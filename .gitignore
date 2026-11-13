@@ -10,6 +10,9 @@ coverage
 tests/docker-test-logs.txt
 tests/results
 
+# Local deployment backups (may contain secrets: .env, api_access_token, proxy passwords)
+.dist
+
 subconvergo
 **__pycache__
 **cache

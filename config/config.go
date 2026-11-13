@@ -157,19 +157,20 @@ type ProxyGroupSection struct {
 
 // ProxyGroupConfig represents a proxy group configuration
 type ProxyGroupConfig struct {
-	Name       string   `yaml:"name,omitempty" toml:"name" ini:"name"`
-	Type       string   `yaml:"type,omitempty" toml:"type" ini:"type"`
-	Rule       []string `yaml:"rule,omitempty" toml:"rule" ini:"rule"`
-	URL        string   `yaml:"url,omitempty" toml:"url" ini:"url"`
-	Interval   int      `yaml:"interval,omitempty" toml:"interval" ini:"interval"`
-	Tolerance  int      `yaml:"tolerance,omitempty" toml:"tolerance" ini:"tolerance"`
-	Timeout    int      `yaml:"timeout,omitempty" toml:"timeout" ini:"timeout"`
-	Strategy   string   `yaml:"strategy,omitempty" toml:"strategy" ini:"strategy"`
-	Lazy       *bool    `yaml:"lazy,omitempty" toml:"lazy" ini:"lazy"`
-	DisableUDP *bool    `yaml:"disable_udp,omitempty" toml:"disable_udp" ini:"disable_udp"`
-	Import     string   `yaml:"import,omitempty" toml:"import" ini:"import"`
-	Script     string   `yaml:"script,omitempty" toml:"script" ini:"script"`
-	Proxies    []string `yaml:"-" toml:"-" ini:"-" json:"proxies"` // helper fileld for mihomo clash meta config convertion
+	Name        string   `yaml:"name,omitempty" toml:"name" ini:"name"`
+	Type        string   `yaml:"type,omitempty" toml:"type" ini:"type"`
+	Rule        []string `yaml:"rule,omitempty" toml:"rule" ini:"rule"`
+	URL         string   `yaml:"url,omitempty" toml:"url" ini:"url"`
+	Interval    int      `yaml:"interval,omitempty" toml:"interval" ini:"interval"`
+	Tolerance   int      `yaml:"tolerance,omitempty" toml:"tolerance" ini:"tolerance"`
+	Timeout     int      `yaml:"timeout,omitempty" toml:"timeout" ini:"timeout"`
+	Strategy    string   `yaml:"strategy,omitempty" toml:"strategy" ini:"strategy"`
+	Lazy        *bool    `yaml:"lazy,omitempty" toml:"lazy" ini:"lazy"`
+	DisableUDP  *bool    `yaml:"disable_udp,omitempty" toml:"disable_udp" ini:"disable_udp"`
+	OmitIfEmpty bool     `yaml:"omit_if_empty,omitempty" toml:"omit_if_empty" ini:"omit_if_empty"`
+	Import      string   `yaml:"import,omitempty" toml:"import" ini:"import"`
+	Script      string   `yaml:"script,omitempty" toml:"script" ini:"script"`
+	Proxies     []string `yaml:"-" toml:"-" ini:"-" json:"proxies"` // helper fileld for mihomo clash meta config convertion
 }
 
 // TemplateConfig represents the [template] section

@@ -51,15 +51,27 @@ func ResolveUnderRoot(target, root string) (string, error) {
 	return resolved, nil
 }
 
-// ResolveRulesetPath resolves a local ruleset target against the candidate
-// roots (<base> and <base>/rules) with the symlink-safe confinement of
-// ResolveUnderRoot and returns the first match. Absolute paths, ".."
-// traversal, and symlink escapes are rejected; a target that exists under
-// neither root yields "ruleset not found".
+// ResolveRulesetPath resolves a local ruleset target to a file inside the
+// rules root with the symlink-safe confinement of ResolveUnderRoot and returns
+// the first match. Absolute paths, ".." traversal, and symlink escapes are
+// rejected; a target that exists under no rules root yields "ruleset not
+// found".
+//
+// A target is written relative to the directory that holds the rules
+// directory ("rules/custom.list"), so the leading "rules/" is optional and the
+// remainder is resolved against the rules directory of each candidate root.
+// Resolution is confined to that directory: a target naming a file beside it
+// — the config file, say — never resolves.
+//
+// Two roots are tried because the two supported layouts place the rules
+// differently. A checkout running from the repository root keeps them under
+// base_path/rules, while the container image copies the repository's base
+// directory to /base, leaving them at <config-dir>/rules with base_path
+// pointing one level deeper, at <config-dir>/base.
 func ResolveRulesetPath(target string) (string, error) {
-	basePath := config.GetBasePath()
-	for _, root := range []string{basePath, filepath.Join(basePath, "rules")} {
-		resolved, err := ResolveUnderRoot(target, root)
+	rel := strings.TrimPrefix(filepath.ToSlash(target), "rules/")
+	for _, root := range []string{config.GetBasePath(), config.GetConfigDir()} {
+		resolved, err := ResolveUnderRoot(rel, filepath.Join(root, "rules"))
 		if err != nil {
 			continue
 		}

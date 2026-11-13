@@ -254,6 +254,36 @@ func TestFetcher_CustomDialContextSimulatesPublic(t *testing.T) {
 	}
 }
 
+func TestFetcher_ConfiguredProxyHostBypassesBlockedAddress(t *testing.T) {
+	var dialed []string
+	dialer := func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialed = append(dialed, address)
+		return nil, fmt.Errorf("injected dialer reached")
+	}
+
+	f := New(DefaultLimits(), WithProxy("socks5://127.0.0.1:3128"), WithDialContext(dialer))
+	_, err := f.safeDialContext(context.Background(), "tcp", "127.0.0.1:3128")
+	if err == nil || !strings.Contains(err.Error(), "injected dialer reached") {
+		t.Fatalf("expected injected dialer to run for the configured proxy host, got %v", err)
+	}
+	if len(dialed) != 1 || dialed[0] != "127.0.0.1:3128" {
+		t.Fatalf("unexpected dial log: %v", dialed)
+	}
+
+	var be *BlockedAddressError
+	if _, err := f.safeDialContext(context.Background(), "tcp", "127.0.0.1:9999"); !errors.As(err, &be) {
+		t.Fatalf("expected *BlockedAddressError for a non-proxy loopback address, got %v", err)
+	}
+	if len(dialed) != 1 {
+		t.Fatalf("injected dialer ran for a blocked address: %v", dialed)
+	}
+
+	g := New(DefaultLimits(), WithDialContext(dialer))
+	if _, err := g.safeDialContext(context.Background(), "tcp", "127.0.0.1:3128"); !errors.As(err, &be) {
+		t.Fatalf("expected *BlockedAddressError without a configured proxy, got %v", err)
+	}
+}
+
 func TestFetcher_HeadersForwarded(t *testing.T) {
 	var gotUA string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

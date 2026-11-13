@@ -1,0 +1,17 @@
+# Build context excludes: the image only needs the Go sources and base/.
+.git
+.dist
+coverage
+.codegraph
+.kimi-code
+.idea
+.vscode
+.scratch
+.pytest_cache
+**/__pycache__
+
+# Compiled binary from `make build`
+subconvergo
+
+# Python smoke-test harness (not needed to build the image)
+tests

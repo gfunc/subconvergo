@@ -68,6 +68,11 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 	// Generate proxy groups
 	var proxyGroups []map[string]interface{}
 	if len(groups) > 0 {
+		for _, group := range groups {
+			if group.OmitIfEmpty && strings.EqualFold(group.Type, "relay") {
+				return "", fmt.Errorf("omit_if_empty is not supported for relay group %q", group.Name)
+			}
+		}
 		proxyGroups = generateClashProxyGroups(validProxies, groups)
 	}
 
@@ -220,6 +225,8 @@ func (g *ClashGenerator) Generate(proxies []pc.ProxyInterface, groups []config.P
 		}
 	}
 
+	proxyGroups = pruneEmptyClashGroups(validProxies, groups, proxyGroups)
+
 	if len(proxyGroups) > 0 {
 		clash.ProxyGroup = proxyGroups
 		base[utils.GetFieldTag("yaml", "ProxyGroup", clash, "proxy-groups")] = proxyGroups
@@ -335,6 +342,67 @@ func generateClashProxyGroups(proxies []pc.ProxyInterface, groups []config.Proxy
 		result = append(result, clashGroup)
 	}
 
+	return result
+}
+
+func pruneEmptyClashGroups(proxies []pc.ProxyInterface, groups []config.ProxyGroupConfig, generated []map[string]interface{}) []map[string]interface{} {
+	omitted := make(map[string]bool)
+	for {
+		changed := false
+		for _, group := range groups {
+			if !group.OmitIfEmpty || omitted[group.Name] {
+				continue
+			}
+			hasMember := false
+			for _, member := range utils.FilterProxiesByRules(proxies, group.Rule) {
+				if !omitted[member] {
+					hasMember = true
+					break
+				}
+			}
+			if !hasMember {
+				omitted[group.Name] = true
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+	if len(omitted) == 0 {
+		return generated
+	}
+
+	optIn := make(map[string]bool)
+	for _, group := range groups {
+		optIn[group.Name] = group.OmitIfEmpty
+	}
+	result := make([]map[string]interface{}, 0, len(generated))
+	for _, group := range generated {
+		name, _ := group["name"].(string)
+		if omitted[name] {
+			continue
+		}
+		for _, field := range []string{"proxies", "use"} {
+			members, ok := group[field].([]string)
+			if !ok {
+				continue
+			}
+			filtered := make([]string, 0, len(members))
+			for _, member := range members {
+				if !omitted[member] {
+					filtered = append(filtered, member)
+				}
+			}
+			group[field] = filtered
+		}
+		if !optIn[name] {
+			if members, ok := group["proxies"].([]string); ok && len(members) == 0 {
+				group["proxies"] = []string{"DIRECT"}
+			}
+		}
+		result = append(result, group)
+	}
 	return result
 }
 

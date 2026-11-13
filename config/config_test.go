@@ -842,3 +842,28 @@ func TestIgnoreSourceDefault(t *testing.T) {
 		t.Error("Expected IgnoreSource to default to true")
 	}
 }
+
+func TestLoadTOMLConfigOmitIfEmpty(t *testing.T) {
+	setting := Settings{}
+	setting.init()
+	configPath := filepath.Join(t.TempDir(), "groups.toml")
+	content := `
+[[custom_groups]]
+name = "Other"
+type = "fallback"
+rule = ["[]DIRECT"]
+omit_if_empty = true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+	if err := setting.loadTOMLConfig(configPath); err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	if len(setting.ProxyGroups.CustomProxyGroups) != 1 {
+		t.Fatalf("Expected one custom group, got %d", len(setting.ProxyGroups.CustomProxyGroups))
+	}
+	if !setting.ProxyGroups.CustomProxyGroups[0].OmitIfEmpty {
+		t.Error("Expected OmitIfEmpty=true")
+	}
+}

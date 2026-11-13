@@ -132,6 +132,8 @@ type Fetcher struct {
 	allowHosts  map[string]struct{}
 	dialContext DialContextFunc // injected dialer (test seam); nil uses the system resolver
 	proxyFunc   func(*http.Request) (*url.URL, error)
+	proxyHost   string // host of the explicitly configured proxy (trusted operator input)
+	proxyPort   string // port of the explicitly configured proxy
 	dialer      *net.Dialer
 	client      *http.Client
 }
@@ -172,6 +174,8 @@ func WithProxy(proxy string) Option {
 		default:
 			if u, err := url.Parse(proxy); err == nil && u.Scheme != "" {
 				f.proxyFunc = http.ProxyURL(u)
+				f.proxyHost = u.Hostname()
+				f.proxyPort = u.Port()
 			}
 		}
 	}
@@ -274,6 +278,16 @@ func (f *Fetcher) safeDialContext(ctx context.Context, network, address string) 
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
+	}
+
+	// The proxy address comes from operator configuration (pref.toml), not
+	// from a user-supplied URL, so it is trusted even when it is a loopback or
+	// private address (e.g. a local socks forwarder).
+	if f.proxyHost != "" && strings.EqualFold(host, f.proxyHost) && port == f.proxyPort {
+		if f.dialContext != nil {
+			return f.dialContext(ctx, network, address)
+		}
+		return f.dialer.DialContext(ctx, network, address)
 	}
 
 	if _, err := netip.ParseAddr(host); err == nil {
