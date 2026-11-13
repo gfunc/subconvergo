@@ -57,8 +57,11 @@ func (t *EmojiTransformer) Transform(proxies []proxyCore.ProxyInterface, global 
 					}
 				}
 
-				// Add emoji and break (only first matching rule)
-				proxies[i].SetRemark(rule.Emoji + " " + proxies[i].GetRemark())
+				// Add emoji and break (only first matching rule).
+				// Skip when the remark already starts with this emoji.
+				if !strings.HasPrefix(proxies[i].GetRemark(), rule.Emoji) {
+					proxies[i].SetRemark(rule.Emoji + " " + proxies[i].GetRemark())
+				}
 				break
 			}
 		}

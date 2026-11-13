@@ -122,6 +122,9 @@ type EmojiConfig struct {
 	AddEmoji       bool              `yaml:"add_emoji" toml:"add_emoji" ini:"add_emoji"`
 	RemoveOldEmoji bool              `yaml:"remove_old_emoji" toml:"remove_old_emoji" ini:"remove_old_emoji"`
 	Rules          []EmojiRuleConfig `yaml:"rules" toml:"emoji" ini:"rule,,,allowshadow"`
+
+	AddEmojiSet       bool `yaml:"-" toml:"-" ini:"-"`
+	RemoveOldEmojiSet bool `yaml:"-" toml:"-" ini:"-"`
 }
 
 // EmojiRuleConfig represents an emoji rule
@@ -1514,5 +1517,23 @@ func (s *Settings) Merge(other *Settings) {
 	// Merge Emojis
 	if len(other.Emojis.Rules) > 0 {
 		s.Emojis.Rules = other.Emojis.Rules
+	}
+	if other.Emojis.AddEmojiSet {
+		s.Emojis.AddEmoji = other.Emojis.AddEmoji
+	}
+	if other.Emojis.RemoveOldEmojiSet {
+		s.Emojis.RemoveOldEmoji = other.Emojis.RemoveOldEmoji
+	}
+}
+
+// MarkEmojiOverrides records whether the external config text explicitly sets
+// the emoji toggles, so Merge can honor explicit false over global defaults.
+func (s *Settings) MarkEmojiOverrides(data []byte, format string) {
+	lower := strings.ToLower(string(data))
+	if strings.Contains(lower, "add_emoji") {
+		s.Emojis.AddEmojiSet = true
+	}
+	if strings.Contains(lower, "remove_old_emoji") {
+		s.Emojis.RemoveOldEmojiSet = true
 	}
 }

@@ -653,6 +653,7 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 	// Try YAML -> TOML -> INI using the Settings struct to leverage existing tags
 	var extSettings config.Settings
 	if err := yaml.Unmarshal(data, &extSettings); err == nil {
+		extSettings.MarkEmojiOverrides(data, "yaml")
 		if isRemote {
 			mergeExternalConfigCollections(&extSettings)
 		} else if err := extSettings.ProcessImports(); err != nil {
@@ -662,6 +663,7 @@ func (h *SubHandler) loadExternalConfig(path string) (*config.Settings, error) {
 	}
 
 	if _, err := toml.Decode(string(data), &extSettings); err == nil {
+		extSettings.MarkEmojiOverrides(data, "toml")
 		if isRemote {
 			mergeExternalConfigCollections(&extSettings)
 		} else if err := extSettings.ProcessImports(); err != nil {
